@@ -297,14 +297,20 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
         click.echo(f"🔍 Expected: {project_dir}/ci.py or {project_dir}/{operation}.py")
         sys.exit(1)
 
-    # Prepare command
-    cmd = [sys.executable, str(ci_script)] + list(args)
+    # Convert underscores to hyphens in args for Click compatibility
+    click_args = [arg.replace('_', '-') for arg in args]
+
+    # Prepare command - don't pass operation as it's just the script name
+    cmd = [sys.executable, str(ci_script)] + click_args
 
     if verbose or dry_run:
         click.echo(f"\n🔧 Execution Details:")
         click.echo(f"   Command: {' '.join(cmd)}")
         click.echo(f"   Working Directory: {project_dir}")
         click.echo(f"   Script: {ci_script}")
+        if any('_' in arg for arg in args):
+            converted_args = [f"'{arg}' -> '{arg.replace('_', '-')}'" for arg in args if '_' in arg]
+            click.echo(f"   Note: Converted underscores to hyphens: {', '.join(converted_args)}")
 
     if dry_run:
         click.echo(f"\n🧪 DRY RUN: Would execute the above command")
