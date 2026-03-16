@@ -11,8 +11,12 @@ import sys
 import logging
 import yaml
 import threading
+import time
+import subprocess
+import glob
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -218,3 +222,89 @@ def prepare(verbose: bool = False) -> bool:
     except Exception as e:
         logger.error(f"CI preparation failed: {e}")
         return False
+
+
+def format_duration(duration_seconds: int) -> str:
+    """Format duration in seconds to human readable format."""
+    hours = duration_seconds // 3600
+    minutes = (duration_seconds % 3600) // 60
+    seconds = duration_seconds % 60
+    return f"after {hours:02d} hours {minutes:02d} minutes {seconds:02d} seconds"
+
+
+def check_cluster_reachable() -> bool:
+    """Check if cluster is reachable via oc command."""
+    try:
+        result = subprocess.run(
+            ["oc", "version"],
+            capture_output=True,
+            timeout=10
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def postchecks(project: str, operation: str, start_time: Optional[float], success: str) -> str:
+    """
+    Post-execution checks and status reporting.
+
+    Args:
+        project: Project name that was executed
+        operation: Operation that was executed
+        start_time: Unix timestamp when execution started (None if unknown)
+        success: False for failure, "True" for normal completion
+
+    Returns:
+        Status message string
+    """
+    artifact_dir = os.environ.get('ARTIFACT_DIR')
+
+    if not artifact_dir:
+        # No artifact dir, just return simple status
+        return f"✅ {project} {operation} completed successfully" if success \
+            else f"❌ {project} {operation} failed"
+
+    artifact_path = Path(artifact_dir)
+    if success:
+        pass
+    elif not success:
+        # Find all FAILURE files and consolidate them
+        failure_files = list(artifact_path.glob("**/FAILURE"))
+        failures_file = artifact_path / "FAILURES"
+
+        with failures_file.open("w") as f:
+            for failure_file in sorted(failure_files):
+                try:
+                    f.write(f"{failure_file} | ")
+                    f.write(failure_file.read_text().strip())
+                    f.write("\n")
+                except Exception as e:
+                    f.write(f"{failure_file} | Error reading file: {e}\n")
+
+    else:
+        # placeholder for future exist status (eg, performance regression, flake, ...)
+        logger.warning(f"postchecks: unhandled exit reason: {reason}")
+
+    # Normal exit handling
+    duration_str = ""
+    if start_time:
+        end_time = time.time()
+        duration_seconds = int(end_time - start_time)
+        duration_str = f" {format_duration(duration_seconds)}"
+    else:
+        duration_str = " (duration unknown)"
+
+    # Check if there were failures
+    failures_file = artifact_path / "FAILURES"
+    if not success or (failures_file.exists() and failures_file.stat().st_size > 0):
+        status = f"❌ Test of '{project} {operation}' failed{duration_str}."
+    else:
+        status = f"✅ Test of '{project} {operation}' succeeded{duration_str}."
+
+    # Write status to FINISHED file
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    finished_content = f"{timestamp} {status}"
+    (artifact_path / "FINISHED").write_text(finished_content + "\n")
+
+    return status

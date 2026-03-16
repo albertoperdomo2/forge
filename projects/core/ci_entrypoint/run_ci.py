@@ -22,6 +22,7 @@ import os
 import sys
 import subprocess
 import logging
+import time
 from pathlib import Path
 from typing import List, Optional
 
@@ -112,7 +113,7 @@ try:
 
 except ImportError as e:
     logger.warning(f"CI preparation module not available: {e}")
-    prepare = None
+    prepare_ci = None
 
 
 def find_project_directory(project_name: str) -> Optional[Path]:
@@ -370,24 +371,28 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
     click.echo(f"▶️  Executing {project} {operation} {' '.join(args)}")
 
     try:
+        # Track start time for duration calculation
+        start_time = time.time()
+
         result = subprocess.run(
             cmd,
             cwd=project_dir,
             check=False  # Don't raise exception on non-zero exit
         )
 
-        if result.returncode == 0:
-            click.echo(
-                click.style(f"✅ {project} {operation} completed successfully", fg='green')
-            )
+        success = result.returncode == 0
+
+        # Post-execution checks and status reporting
+        if prepare_ci:
+            status_message = prepare_ci.postchecks(project, operation, start_time, success)
+
+            msg = click.style(status_message, fg='green' if success else 'red')
         else:
-            click.echo(
-                click.style(
-                    f"❌ {project} {operation} failed with exit code {result.returncode}",
-                    fg='red'
-                ),
-                err=True
-            )
+            # Fallback to simple messages if prepare_ci not available
+            msg = click.style(f"✅ {project} {operation} completed successfully", fg='green') if success \
+                else  click.style(f"❌ {project} {operation} failed with exit code {result.returncode}", fg='red')
+
+        click.echo(msg, err=not success)
 
         sys.exit(result.returncode)
 
