@@ -74,17 +74,17 @@ setup_signal_handlers()
 try:
     import click
 except ImportError:
-    print("📦 Installing click package...")
+    print("📦 Installing click/requests package...")
 
     # Try uv first with no-cache to avoid permission issues
     install_success = False
     try:
         subprocess.run(
-            ["uv", "pip", "install", "--no-cache", "click"],
+            ["uv", "pip", "install", "--no-cache", "click", "requests"],
             check=True,
             capture_output=True
         )
-        print("✅ Click package installed successfully with uv")
+        print("✅ Click/requests package installed successfully with uv")
         install_success = True
     except (FileNotFoundError, subprocess.CalledProcessError):
         # Fallback to pip with user installation
