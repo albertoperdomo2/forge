@@ -22,11 +22,37 @@ import os
 import sys
 import subprocess
 import logging
+import signal
 import time
 from pathlib import Path
 from typing import List, Optional
 
 TOPSAIL_HOME = Path(__file__).resolve().parent.parent.parent.parent
+
+
+def signal_handler_sigint(sig, frame):
+    """Handle SIGINT (Ctrl+C) gracefully."""
+    print(f"\n🚫 Received SIGINT (Ctrl+C) - Interrupting CI operation...")
+    sys.exit(130)  # Standard exit code for SIGINT
+
+
+def signal_handler_sigterm(sig, frame):
+    """Handle SIGTERM gracefully."""
+    print(f"\n🛑 Received SIGTERM - Terminating CI operation...")
+    sys.exit(143)  # Standard exit code for SIGTERM
+
+
+def setup_signal_handlers():
+    """Set up signal handlers for graceful interruption."""
+    try:
+        signal.signal(signal.SIGINT, signal_handler_sigint)
+        signal.signal(signal.SIGTERM, signal_handler_sigterm)
+        # SIGPIPE handling for broken pipes
+        if hasattr(signal, 'SIGPIPE'):
+            signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    except Exception:
+        # Signal handling might not be available on all platforms
+        pass
 
 
 def setup_logging():
@@ -40,6 +66,9 @@ def setup_logging():
 # Set up logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
+# Set up signal handlers for graceful interruption
+setup_signal_handlers()
 
 # Install click package using uv (as non-root user)
 try:
