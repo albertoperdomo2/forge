@@ -494,7 +494,7 @@ def postchecks(project: str, operation: str, start_time: Optional[float], succes
 
     else:
         # placeholder for future exist status (eg, performance regression, flake, ...)
-        logger.warning(f"postchecks: unhandled exit reason: {reason}")
+        logger.warning(f"postchecks: unhandled exit reason: {success}")
 
     # Normal exit handling
     duration_str = ""
