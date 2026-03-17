@@ -414,6 +414,7 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
             cwd=project_dir,
             check=False  # Don't raise exception on non-zero exit
         )
+        click.echo(f"▶️  Executing {project} {operation} {' '.join(args)} --> {result.returncode}")
 
         finish_reason = prepare_ci.FinishReason.SUCCESS if result.returncode == 0 \
             else prepare_ci.FinishReason.ERROR
@@ -436,15 +437,11 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
 
         sys.exit(result.returncode)
 
-    except FileNotFoundError as e:
-        click.echo(
-            click.style(f"❌ ERROR: Failed to execute CI script: {e}", fg='red'),
-            err=True
-        )
-        sys.exit(1)
     except Exception as e:
+        logging.exception("Unexpected exception")
+
         click.echo(
-            click.style(f"❌ ERROR: Unexpected error during execution: {e}", fg='red'),
+            click.style(f"❌ ERROR: Unexpected error during execution", fg='red'),
             err=True
         )
         sys.exit(1)
