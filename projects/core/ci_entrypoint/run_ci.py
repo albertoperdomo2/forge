@@ -33,12 +33,28 @@ TOPSAIL_HOME = Path(__file__).resolve().parent.parent.parent.parent
 def signal_handler_sigint(sig, frame):
     """Handle SIGINT (Ctrl+C) gracefully."""
     print(f"\n🚫 Received SIGINT (Ctrl+C) - Interrupting CI operation...")
+
+    # Emergency cleanup of dual output
+    if prepare_ci:
+        try:
+            prepare_ci.shutdown_dual_output()
+        except Exception:
+            pass  # Don't let cleanup errors prevent signal handling
+
     sys.exit(130)  # Standard exit code for SIGINT
 
 
 def signal_handler_sigterm(sig, frame):
     """Handle SIGTERM gracefully."""
     print(f"\n🛑 Received SIGTERM - Terminating CI operation...")
+
+    # Emergency cleanup of dual output
+    if prepare_ci:
+        try:
+            prepare_ci.shutdown_dual_output()
+        except Exception:
+            pass  # Don't let cleanup errors prevent signal handling
+
     sys.exit(143)  # Standard exit code for SIGTERM
 
 
@@ -423,7 +439,6 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
         # Post-execution checks and status reporting
         if prepare_ci:
             status_message = prepare_ci.postchecks(project, operation, start_time, finish_reason)
-
             msg = click.style(status_message, \
                               fg='green' if success else 'red')
         else:
@@ -432,13 +447,18 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
                 msg = click.style(f"✅ {project} {operation} completed successfully", fg='green')
             else:
                 msg = click.style(f"❌ {project} {operation} failed with exit code {result.returncode}", fg='red')
-
         click.echo(msg, err=not success)
-
         sys.exit(result.returncode)
 
     except Exception as e:
         logging.exception("Unexpected exception")
+
+        # Emergency cleanup of dual output to prevent hanging
+        if prepare_ci:
+            try:
+                prepare_ci.shutdown_dual_output()
+            except Exception:
+                pass  # Don't let cleanup errors mask the original error
 
         click.echo(
             click.style(f"❌ ERROR: Unexpected error during execution", fg='red'),

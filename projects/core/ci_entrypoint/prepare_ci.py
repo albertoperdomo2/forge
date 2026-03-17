@@ -59,14 +59,29 @@ def load_notification_module():
         logger.exception(f"Notifications module not available: {e}")
         return None
 
-# Dual output
+# Dual output global state
+_dual_output_state = None
+
+class DualOutputState:
+    """Manages dual output (console + file) state for proper cleanup."""
+    def __init__(self, daemon_thread, original_stdout_fd, original_stderr_fd, write_fd):
+        self.daemon_thread = daemon_thread
+        self.original_stdout_fd = original_stdout_fd
+        self.original_stderr_fd = original_stderr_fd
+        self.write_fd = write_fd
+
 def setup_dual_output():
     """
     Set up stdout/stderr to write to both console and log file.
 
     If ARTIFACT_DIR is set, all output will go to both console and $ARTIFACT_DIR/run.log
     This is permanent for the rest of the program execution.
+
+    Returns:
+        DualOutputState object for cleanup, or None if setup failed
     """
+    global _dual_output_state
+
     artifact_dir = os.environ.get('ARTIFACT_DIR')
 
     if not artifact_dir:
@@ -87,8 +102,9 @@ def setup_dual_output():
             f.write("| New CI run |\n")
             f.write("--------------\n")
 
-    # 1. Save the original terminal stdout so we can still write to it
+    # 1. Save the original terminal stdout/stderr so we can restore them
     original_stdout_fd = os.dup(sys.stdout.fileno())
+    original_stderr_fd = os.dup(sys.stderr.fileno())
 
     # 2. Create a pipe: (read_fd, write_fd)
     read_fd, write_fd = os.pipe()
@@ -101,15 +117,54 @@ def setup_dual_output():
         with open(log_file_path, "a") as log_file, os.fdopen(original_stdout_fd, "w") as terminal:
             # Open the read-end of the pipe
             with os.fdopen(read_fd, "r") as pipe_in:
-                for line in pipe_in:
-                    terminal.write(line) # Send to console
-                    log_file.write(line) # Send to file
-                    terminal.flush()
-                    log_file.flush()
+                try:
+                    for line in pipe_in:
+                        terminal.write(line) # Send to console
+                        log_file.write(line) # Send to file
+                        terminal.flush()
+                        log_file.flush()
+                except (OSError, ValueError):
+                    # Pipe was closed, exit gracefully
+                    pass
 
     # 4. Start a background thread to act as the 'tee' process
-    daemon = threading.Thread(target=communicate, daemon=True)
+    daemon = threading.Thread(target=communicate, daemon=False)  # Not daemon so we can join it
     daemon.start()
+
+    # Store state for cleanup
+    _dual_output_state = DualOutputState(daemon, original_stdout_fd, original_stderr_fd, write_fd)
+    return _dual_output_state
+
+
+def shutdown_dual_output():
+    """
+    Shutdown dual output system and flush all buffers.
+    Just ensure files are flushed, don't mess with file descriptors.
+    """
+    global _dual_output_state
+
+    if not _dual_output_state:
+        return
+
+    try:
+        # Flush any pending output
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        # Close the write end of the pipe to signal the daemon to stop
+        os.close(_dual_output_state.write_fd)
+
+        # Wait for daemon thread to finish processing (so files get flushed)
+        _dual_output_state.daemon_thread.join(timeout=3.0)
+
+        if _dual_output_state.daemon_thread.is_alive():
+            print("Warning: Dual output daemon thread did not finish in time")
+
+    except Exception as e:
+        print(f"Warning: Error during dual output shutdown: {e}")
+
+    # Clear state but don't try to restore file descriptors
+    _dual_output_state = None
 
 # PR arguments
 def parse_and_save_pr_arguments() -> Optional[Path]:
@@ -430,7 +485,6 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
     if not send_job_completion_notification:
         logger.info("Notifications module not available, skipping notification sending")
         return
-
     try:
         # Determine notification parameters
         success = finish_reason == FinishReason.SUCCESS
@@ -453,7 +507,6 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
             slack=slack_notifications,
             dry_run=dry_run
         )
-
         if notification_failed:
             logger.warning("Some notifications failed to send")
         else:
@@ -529,5 +582,8 @@ def postchecks(project: str, operation: str, start_time: Optional[float], finish
 
     # Send notifications for job completion
     send_notification(project, operation, finish_reason, duration_str)
+
+    # Properly shutdown dual output to flush all buffers and terminate daemon
+    shutdown_dual_output()
 
     return status
