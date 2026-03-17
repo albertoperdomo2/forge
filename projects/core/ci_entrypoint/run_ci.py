@@ -29,6 +29,7 @@ from typing import List, Optional
 
 TOPSAIL_HOME = Path(__file__).resolve().parent.parent.parent.parent
 
+EXTRA_PACKAGES = ["click", "requests"]
 
 def signal_handler_sigint(sig, frame):
     """Handle SIGINT (Ctrl+C) gracefully."""
@@ -79,6 +80,54 @@ def setup_logging():
         handlers=[logging.StreamHandler(sys.stderr)]
     )
 
+def install_extra_packages(packages):
+
+    print(f"📦 Installing {'/'.join(packages)} packages...")
+
+    # Try uv first with no-cache to avoid permission issues
+    try:
+        subprocess.run(
+            ["uv", "pip", "install", "--no-cache", *packages],
+            check=True,
+            capture_output=True
+        )
+        print(f"✅ {'/'.join(packages)} packages installed successfully with uv")
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        # Fallback to pip with user installation
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--user", "--no-cache-dir", *packages],
+                check=True,
+                capture_output=True
+            )
+            print(f"✅ {'/'.join(packages)} packages installed successfully with pip")
+        except subprocess.CalledProcessError as pip_error:
+            print(f"❌ Failed to install {'/'.join(packages)}: {pip_error}")
+            raise RuntimeError("failed to install the extra packages")
+
+    # Ensure user site-packages is in path
+    import site
+    user_site = site.getusersitepackages()
+    if user_site not in sys.path:
+        sys.path.insert(0, user_site)
+
+    # Also check for common install locations
+    import os
+    possible_paths = [
+        os.path.expanduser("~/.local/lib/python3.11/site-packages"),
+        os.path.expanduser("~/.local/lib/python3.12/site-packages"),
+        os.path.expanduser("~/.local/lib/python3.13/site-packages"),
+        user_site
+    ]
+
+    for path in possible_paths:
+        if os.path.exists(path) and path not in sys.path:
+            sys.path.insert(0, path)
+
+    # Clear import cache and try again
+    import importlib
+    importlib.invalidate_caches()
+
 # Set up logging
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -87,66 +136,9 @@ logger = logging.getLogger(__name__)
 setup_signal_handlers()
 
 # Install click package using uv (as non-root user)
-try:
-    import click
-except ImportError:
-    print("📦 Installing click/requests package...")
+install_extra_packages(EXTRA_PACKAGES)
 
-    # Try uv first with no-cache to avoid permission issues
-    install_success = False
-    try:
-        subprocess.run(
-            ["uv", "pip", "install", "--no-cache", "click", "requests"],
-            check=True,
-            capture_output=True
-        )
-        print("✅ Click/requests package installed successfully with uv")
-        install_success = True
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        # Fallback to pip with user installation
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--user", "--no-cache-dir", "click"],
-                check=True,
-                capture_output=True
-            )
-            print("✅ Click package installed successfully with pip")
-            install_success = True
-        except subprocess.CalledProcessError as pip_error:
-            print(f"❌ Failed to install click: {pip_error}")
-            sys.exit(1)
-
-    if install_success:
-        # Ensure user site-packages is in path
-        import site
-        user_site = site.getusersitepackages()
-        if user_site not in sys.path:
-            sys.path.insert(0, user_site)
-
-        # Also check for common install locations
-        import os
-        possible_paths = [
-            os.path.expanduser("~/.local/lib/python3.11/site-packages"),
-            os.path.expanduser("~/.local/lib/python3.12/site-packages"),
-            os.path.expanduser("~/.local/lib/python3.13/site-packages"),
-            user_site
-        ]
-
-        for path in possible_paths:
-            if os.path.exists(path) and path not in sys.path:
-                sys.path.insert(0, path)
-
-        # Clear import cache and try again
-        import importlib
-        importlib.invalidate_caches()
-
-        try:
-            import click
-        except ImportError:
-            print("❌ Click installation failed - module not found after installation")
-            print(f"🔍 Python path: {sys.path}")
-            print(f"🔍 User site: {user_site}")
-            sys.exit(1)
+import click
 
 # Import CI preparation module
 try:
