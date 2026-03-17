@@ -375,7 +375,7 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
 
     # Execute the command
     click.echo(f"▶️  Executing {project} {operation} {' '.join(args)}")
-
+    click.echo(" ".join(cmd))
     try:
         # Track start time for duration calculation
         start_time = time.time()
@@ -386,17 +386,22 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
             check=False  # Don't raise exception on non-zero exit
         )
 
-        success = result.returncode == 0
+        finish_reason = prepare_ci.FinishReason.SUCCESS if result.returncode == 0 \
+            else prepare_ci.FinishReason.ERROR
 
+        success = finish_reason == prepare_ci.FinishReason.SUCCESS
         # Post-execution checks and status reporting
         if prepare_ci:
-            status_message = prepare_ci.postchecks(project, operation, start_time, success)
+            status_message = prepare_ci.postchecks(project, operation, start_time, finish_reason)
 
-            msg = click.style(status_message, fg='green' if success else 'red')
+            msg = click.style(status_message, \
+                              fg='green' if success else 'red')
         else:
             # Fallback to simple messages if prepare_ci not available
-            msg = click.style(f"✅ {project} {operation} completed successfully", fg='green') if success \
-                else  click.style(f"❌ {project} {operation} failed with exit code {result.returncode}", fg='red')
+            if success:
+                msg = click.style(f"✅ {project} {operation} completed successfully", fg='green')
+            else:
+                msg = click.style(f"❌ {project} {operation} failed with exit code {result.returncode}", fg='red')
 
         click.echo(msg, err=not success)
 

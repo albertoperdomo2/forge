@@ -19,8 +19,14 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
+from enum import StrEnum
 
 IS_LIGHTWEIGHT_IMAGE = os.environ.get("TOPSAIL_LIGHT_IMAGE")
+
+class FinishReason(StrEnum):
+    SUCCESS = "success"
+    ERROR = "error"
+    OTHER = "other"
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -419,13 +425,14 @@ def format_duration(duration_seconds: int) -> str:
     seconds = duration_seconds % 60
     return f"after {hours:02d} hours {minutes:02d} minutes {seconds:02d} seconds"
 
-def send_notification(project: str, operation: str, success: str, duration: str):
+def send_notification(project: str, operation: str, finish_reason: FinishReason, duration: str):
     if not NOTIFICATIONS_AVAILABLE:
         logger.info("Notifications module not available, skipping notification sending")
         return
 
     try:
         # Determine notification parameters
+        success = finish_reason == FinishReason.SUCCESS
         notification_status = f"Test of '{project} {operation}' {('succeeded' if success else 'failed')}{duration}"
 
         # Enable GitHub notifications by default, Slack can be enabled via environment variable
@@ -435,11 +442,11 @@ def send_notification(project: str, operation: str, success: str, duration: str)
         # Check for dry run mode
         dry_run = os.environ.get('TOPSAIL_NOTIFICATION_DRY_RUN', 'false').lower() == 'true'
 
-        logger.info(f"Sending notifications - success: {success}, GitHub: {github_notifications}, Slack: {slack_notifications}, dry_run: {dry_run}")
+        logger.info(f"Sending notifications - finish_reason: {finish_reason}, GitHub: {github_notifications}, Slack: {slack_notifications}, dry_run: {dry_run}")
 
         # Send the notification
         notification_failed = send_job_completion_notification(
-            success=success,
+            finish_reason=finish_reason,
             status=notification_status,
             github=github_notifications,
             slack=slack_notifications,
@@ -452,10 +459,10 @@ def send_notification(project: str, operation: str, success: str, duration: str)
             logger.info("Notifications sent successfully")
 
     except Exception as e:
-        logger.error(f"Failed to send notifications: {e}")
+        logger.exception(f"Failed to send notifications")
         # Don't fail the entire job if notifications fail
 
-def postchecks(project: str, operation: str, start_time: Optional[float], success: str) -> str:
+def postchecks(project: str, operation: str, start_time: Optional[float], finish_reason: FinishReason) -> str:
     """
     Post-execution checks and status reporting.
 
@@ -472,13 +479,14 @@ def postchecks(project: str, operation: str, start_time: Optional[float], succes
 
     if not artifact_dir:
         # No artifact dir, just return simple status
-        return f"✅ {project} {operation} completed successfully" if success \
-            else f"❌ {project} {operation} failed"
+        return f"✅ {project} {operation} completed successfully" \
+            if finish_reason == FinishReason.SUCCESS \
+               else f"❌ {project} {operation} failed"
 
     artifact_path = Path(artifact_dir)
-    if success:
+    if finish_reason == FinishReason.SUCCESS:
         pass
-    elif not success:
+    elif finish_reason == FinishReason.ERROR:
         # Find all FAILURE files and consolidate them
         failure_files = list(artifact_path.glob("**/FAILURE"))
         failures_file = artifact_path / "FAILURES"
@@ -494,7 +502,7 @@ def postchecks(project: str, operation: str, start_time: Optional[float], succes
 
     else:
         # placeholder for future exist status (eg, performance regression, flake, ...)
-        logger.warning(f"postchecks: unhandled exit reason: {success}")
+        logger.warning(f"postchecks: unhandled finish reason: {finish_reason}")
 
     # Normal exit handling
     duration_str = ""
@@ -507,7 +515,7 @@ def postchecks(project: str, operation: str, start_time: Optional[float], succes
 
     # Check if there were failures
     failures_file = artifact_path / "FAILURES"
-    if not success or (failures_file.exists() and failures_file.stat().st_size > 0):
+    if finish_reason != FinishReason.SUCCESS or (failures_file.exists() and failures_file.stat().st_size > 0):
         status = f"❌ Test of '{project} {operation}' failed{duration_str}."
     else:
         status = f"✅ Test of '{project} {operation}' succeeded{duration_str}."
@@ -517,7 +525,8 @@ def postchecks(project: str, operation: str, start_time: Optional[float], succes
     finished_content = f"{timestamp} {status}"
     (artifact_path / "FINISHED").write_text(finished_content + "\n")
 
+
     # Send notifications for job completion
-    send_notification(project, operation, success, duration_str)
+    send_notification(project, operation, finish_reason, duration_str)
 
     return status
