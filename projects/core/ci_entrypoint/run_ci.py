@@ -420,7 +420,10 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
         result = subprocess.run(
             cmd,
             cwd=project_dir,
-            check=False  # Don't raise exception on non-zero exit
+            check=False,  # Don't raise exception on non-zero exit
+            stdin=None,   # Inherit stdin for pdb/debugging
+            stdout=None,  # Inherit stdout for pdb/debugging
+            stderr=None   # Inherit stderr for pdb/debugging
         )
         click.echo(f"▶️  Executing {project} {operation} {' '.join(args)} --> {result.returncode}")
 
@@ -430,7 +433,7 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
         success = finish_reason == prepare_ci.FinishReason.SUCCESS
         # Post-execution checks and status reporting
         if prepare_ci:
-            status_message = prepare_ci.postchecks(project, operation, start_time, finish_reason)
+            status_message = prepare_ci.postchecks(project, operation, start_time, finish_reason, list(args))
             msg = click.style(status_message, \
                               fg='green' if success else 'red')
         else:

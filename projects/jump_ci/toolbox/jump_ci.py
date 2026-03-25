@@ -76,11 +76,11 @@ class Jump_Ci:
             lock_owner,
             pr_number=None,
             repo_owner="openshift-psap",
-            repo_name="topsail",
+            repo_name="topsail-ng",
             git_ref=None,
-            image_name="localhost/topsail",
+            image_name=None,
             image_tag=None,
-            dockerfile_name="build/Dockerfile",
+            dockerfile_name="projects/core/image/Containerfile",
             update_from_imagetag="main",
             cleanup_old_pr_images=True,
     ):
@@ -103,6 +103,8 @@ class Jump_Ci:
           cleanup_old_pr_images: if disabled, don't cleanup the old images
           update_from_imagetag: if set, update the git tree from this image instead of building from scratch
         """
+        if not image_name:
+            image_name = f"localhost/{repo_name}"
 
         if not cluster: # don't accept the empty string value
             raise ValueError("--cluster must be set")

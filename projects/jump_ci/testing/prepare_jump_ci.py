@@ -59,7 +59,7 @@ def unlock_cluster(cluster=None):
 def prepare(
         cluster=None,
         repo_owner="openshift-psap",
-        repo_name="topsail",
+        repo_name="topsail-ng",
         git_ref=None,
         pr_number=None,
 ):
@@ -98,10 +98,14 @@ def prepare(
 
         elif os.environ["JOB_NAME"].startswith("periodic"):
             # periodic jobs don't have these env vars ...
-            job_spec = job_spec = json.loads(os.environ["JOB_SPEC"])
+            job_spec = json.loads(os.environ["JOB_SPEC"])
             repo_owner = os.environ["REPO_OWNER"] = job_spec["extra_refs"][0]["org"]
             repo_name = os.environ["REPO_NAME"] = job_spec["extra_refs"][0]["repo"]
             git_ref = os.environ["PULL_PULL_SHA"] = job_spec["extra_refs"][0]["base_ref"]
+        else:
+            repo_owner = os.environ["REPO_OWNER"]
+            repo_name = os.environ["REPO_NAME"]
+            git_ref = os.environ["PULL_PULL_SHA"]
 
         prepare_topsail_args |= dict(
             repo_owner=repo_owner,

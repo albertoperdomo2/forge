@@ -74,22 +74,16 @@ def handle_test_directive(line: str) -> Dict[str, Any]:
     args = parts # allowed to be empty
     result = {}
     # Special handling for jump CI - extract cluster and target project info
-    if test_name == 'jump-ci':
-        if len(args) <= 2:
-            raise ValueError("The JumpCI project expects 3+ parameters in the /test jump-ci CLUSTER PROJECT ARGS*")
-
-        # Format: /test jump-ci cluster target_project [additional_args...]
-        cluster = project_name
-        target_project = args.pop(0)
-        remaining_args = args
+    if test_name.endswith('jump-ci'):
+        # Format: /test jump-ci target_project [additional_args...]
+        target_project = project_name
 
         result.update({
-            'cluster.name': cluster,
             'project.name': target_project,
-            'project.args': remaining_args,
+            'project.args': args,
         })
 
-        logging.info(f"Jump CI configuration: cluster={cluster}, target_project={target_project}, args={remaining_args}")
+        logging.info(f"Jump CI configuration: target_project={target_project}, args={args}")
     else:
         # Build result with test info and PR positional arguments
         result.update({
@@ -267,7 +261,7 @@ def get_supported_directives() -> Dict[str, str]:
     }
 
 
-def parse_directives(text: str) -> Dict[str, Any]:
+def parse_directives(text: str) -> Tuple[Dict[str, Any], List[str]]:
     """
     Parse all directives from the given text using handler mapping.
 
@@ -278,12 +272,13 @@ def parse_directives(text: str) -> Dict[str, Any]:
         text: Text containing directives (PR body + comments)
 
     Returns:
-        Dictionary with parsed configuration
+        Tuple of (configuration dictionary, list of found directive lines)
 
     Raises:
         Exception: If any directive has invalid format
     """
     config = {}
+    found_directives = []
     directive_handlers = get_directive_handlers()
 
     has_test = False
@@ -310,16 +305,18 @@ def parse_directives(text: str) -> Dict[str, Any]:
                 # Call handler and merge results
                 result = handler(line)
                 config.update(result)
+                found_directives.append(line)
             except Exception as e:
                 raise ValueError(f"Error parsing directive '{line}': {e}")
         else:
-            # Unknown directive - log warning
+            # Unknown directive - log warning but still track it
             logging.warning(f"Unknown directive ignored: {line}")
+            found_directives.append(f"# UNKNOWN: {line}")
 
     if not has_test:
         raise ValueError("/test directive not found in the PR last comment")
 
-    return config
+    return config, found_directives
 
 
 def fetch_url(url: str, cache_file: Optional[Path] = None) -> Dict[str, Any]:
@@ -367,7 +364,7 @@ def parse_pr_arguments(
     pull_number: int,
     test_name: Optional[str] = None,
     shared_dir: Optional[Path] = None
-) -> Dict[str, Any]:
+) -> Tuple[Dict[str, Any], List[str]]:
     """
     Parse GitHub PR arguments and configuration from comments.
 
@@ -379,7 +376,7 @@ def parse_pr_arguments(
         shared_dir: Shared directory for caching (OpenShift CI)
 
     Returns:
-        Configuration dictionary with parsed arguments and directives
+        Tuple of (configuration dictionary with parsed arguments and directives, list of found directive lines)
 
     Raises:
         Exception: If required data cannot be found or parsed
@@ -452,9 +449,9 @@ def parse_pr_arguments(
     combined_text = (pr_data.get('body', '') or '') + '\n' + last_user_test_comment
 
     # Parse directives using the modular parser
-    config = parse_directives(combined_text)
+    config, found_directives = parse_directives(combined_text)
 
-    return config
+    return config, found_directives
 
 
 def main():
@@ -508,7 +505,7 @@ def main():
             shared_dir.mkdir(parents=True, exist_ok=True)
 
         # Parse PR arguments
-        config = parse_pr_arguments(
+        config, found_directives = parse_pr_arguments(
             repo_owner=repo_owner,
             repo_name=repo_name,
             pull_number=pull_number,

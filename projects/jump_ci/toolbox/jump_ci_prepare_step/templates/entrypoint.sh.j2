@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 
 interactive=""
-cmd="set -a; source /run/secrets/test_env; set +a; exec run {{ jump_ci_prepare_step_project }} test {{ jump_ci_prepare_step_step }}"
+cmd="set -a; source /run/secrets/test_env; set +a; exec /app/topsail/bin/run_ci '{{ jump_ci_prepare_step_project }}' ci '{{ jump_ci_prepare_step_step }}'"
 image="{{ pod_image_cmd.stdout | trim}}"
 
 cleanup() {
@@ -39,21 +39,25 @@ trap cleanup INT TERM ERR
 # makes it easier to rerun manually after a failure
 rm -f "{{ step_artifact_dir }}/artifacts/FAILURES"
 
-ARTIFACT_DIR="/tmp/topsail_$(date +%Y%m%d%s)"
+ARTIFACT_DIR="/log/artifacts"
 
 echo "### Running '$cmd' against image '$image' ###"
 
 podman run \
+  --userns=keep-id \
+  --user "$(id -u):$(id -g)" \
   --rm \
   --name topsail-on-{{ jump_ci_prepare_step_cluster }} \
   \
-  --volume "{{ step_artifact_dir }}/artifacts:$ARTIFACT_DIR" \
+  --volume "{{ step_artifact_dir }}/artifacts:$ARTIFACT_DIR:Z" \
   --env ARTIFACT_DIR="$ARTIFACT_DIR" \
   \
   --volume {{ cluster_lock_dir }}/secrets/{{ jump_ci_prepare_step_secrets_path_env_key }}:/run/secrets/{{ jump_ci_prepare_step_secrets_path_env_key }}:ro \
   --env {{ jump_ci_prepare_step_secrets_path_env_key }}="/run/secrets/{{ jump_ci_prepare_step_secrets_path_env_key }}" \
   \
+{%- if cluster_kubeconfig is defined -%}
   --volume {{ cluster_kubeconfig }}:/run/secrets/kubeconfig:ro \
+{%- endif -%}
   --env KUBECONFIG="/run/secrets/kubeconfig" \
   \
   --volume {{ step_artifact_dir }}/test_env:/run/secrets/test_env:ro \

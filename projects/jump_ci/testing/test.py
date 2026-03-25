@@ -140,7 +140,7 @@ def jump_ci(command):
             if not project:
                 project = config.project.get_config(f"overrides.PR_POSITIONAL_ARG_{1+nb_args_to_eat}", None)
                 if not project:
-                    raise ValueError(f"Expected to find the projec name in project.name or overrides.PR_POSITIONAL_ARG_{1+nb_args_to_eat}, but both of them were empty :/")
+                    raise ValueError(f"Expected to find the project name in project.name or overrides.PR_POSITIONAL_ARG_{1+nb_args_to_eat}, but both of them were empty :/")
                 nb_args_to_eat += 1
 
 
@@ -231,10 +231,10 @@ class JumpCi:
     """
 
     def __init__(self):
-        self.pre_cleanup_ci = jump_ci("pre_cleanup_ci")
-        self.post_cleanup_ci = jump_ci("post_cleanup_ci")
-        self.prepare_ci = jump_ci("prepare_ci")
-        self.test_ci = jump_ci("test_ci")
+        self.pre_cleanup = jump_ci("pre_cleanup")
+        self.post_cleanup = jump_ci("post_cleanup")
+        self.prepare = jump_ci("prepare")
+        self.test = jump_ci("test")
 
         self.generate_plots_from_pr_args = jump_ci("generate_plots_from_pr_args")
 

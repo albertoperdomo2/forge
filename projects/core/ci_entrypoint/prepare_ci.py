@@ -228,7 +228,7 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
 
     try:
         # Parse PR arguments
-        config = parse_pr_arguments(
+        config, found_directives = parse_pr_arguments(
             repo_owner=repo_owner,
             repo_name=repo_name,
             pull_number=pull_number,
@@ -247,11 +247,28 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
         logger.info(f"Saved PR arguments to {output_file}")
         logger.info(f"Configuration contains {len(config)} override(s)")
 
+        # Save directives to text file
+        pr_config_file = artifact_path / "pr_config.txt"
+        with open(pr_config_file, 'w') as f:
+            f.write(f"# GitHub PR Directives Found\n")
+            f.write(f"# Repository: {repo_owner}/{repo_name}#{pull_number}\n")
+            f.write(f"# Test: {test_name}\n")
+            f.write(f"# Generated at: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}\n\n")
+
+            if found_directives:
+                for directive in found_directives:
+                    f.write(f"{directive}\n")
+            else:
+                f.write("# No directives found\n")
+
+        logger.info(f"Saved PR directives to {pr_config_file}")
+        logger.info(f"Found {len(found_directives)} directive(s)")
+
         return output_file
 
     except Exception as e:
-        logger.error(f"Failed to parse PR arguments: {e}")
-        return None
+        logger.exception(f"Failed to parse PR arguments: {e}")
+        raise
 
 
 def precheck_artifact_dir() -> bool:
@@ -300,21 +317,27 @@ def ci_banner(project: str, operation: str, args: List[str]):
     if not pull_sha:
         logger.warning(f"PULL_PULL_SHA not set. Showing the last commits from main.")
 
+    logger.info(f"Git command will be: git show --quiet --oneline {base_sha}..{pull_sha}")
+
     try:
         result = subprocess.run(
-            ["git", "show", "--quiet", "--oneline", f"{base_sha}..{pull_sha}"],
+            ["git", "show", "--quiet", "--oneline", f"{base_sha}"],
             capture_output=True,
             text=True,
             timeout=10
         )
+        logger.info(f"Git command returncode: {result.returncode}")
+        logger.info(f"Git stdout: {result.stdout}")
+        logger.info(f"Git stderr: {result.stderr}")
+
         if result.returncode == 0:
             lines = result.stdout.split('\n')[:10]  # head 10
             for line in lines:
                 logging.info(line)
         else:
             logger.warning("Could not access git history (main..) ...")
-    except Exception:
-        logger.warning("Could not access git history...")
+    except Exception as e:
+        logger.warning(f"Could not access git history: {e}")
 
 
 def system_prechecks() -> bool:
@@ -457,6 +480,12 @@ def prepare(verbose: bool = False, project: str = "", operation: str = "", args:
 
     logger.info("Starting CI preparation")
 
+    if topsail_home := os.environ.get("TOPSAIL_HOME"):
+        logger.info(f"Switching to TOPSAIL_HOME={topsail_home} ...")
+        os.chdir(topsail_home)
+    elif os.environ.get("TOPSAIL_LIGHT_IMAGE"):
+        os.chdir("/app")
+
     try:
         # Set up ARTIFACT_DIR
         precheck_artifact_dir()
@@ -505,6 +534,11 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
         success = finish_reason == FinishReason.SUCCESS
         notification_status = f"Test of '{project} {operation}' {('succeeded' if success else 'failed')}{duration}"
 
+        # Skip notifications for successful non-test steps
+        if success and operation != "test":
+            logger.info(f"Skipping notification for successful '{operation}' step (only 'test' steps notify on success)")
+            return
+
         # Enable GitHub notifications by default, Slack can be enabled via environment variable
         github_notifications = True
         slack_notifications = True
@@ -531,7 +565,7 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
         logger.exception(f"Failed to send notifications")
         # Don't fail the entire job if notifications fail
 
-def postchecks(project: str, operation: str, start_time: Optional[float], finish_reason: FinishReason) -> str:
+def postchecks(project: str, operation: str, start_time: Optional[float], finish_reason: FinishReason, args: Optional[List[str]] = None) -> str:
     """
     Post-execution checks and status reporting.
 
@@ -596,7 +630,9 @@ def postchecks(project: str, operation: str, start_time: Optional[float], finish
 
 
     # Send notifications for job completion
-    send_notification(project, operation, finish_reason, duration_str)
+    # Get the actual step from args (like "test", "lock_cluster", "prepare")
+    actual_step = args[0] if args and len(args) > 0 else operation
+    send_notification(project, actual_step, finish_reason, duration_str)
 
     # Properly shutdown dual output to flush all buffers and terminate daemon
     shutdown_dual_output()
