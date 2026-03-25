@@ -6,7 +6,7 @@ set -o nounset
 set -o errtrace
 
 interactive=""
-cmd="set -a; source /run/secrets/test_env; set +a; exec run {{ jump_ci_prepare_step_project }} test {{ jump_ci_prepare_step_step }}"
+cmd="set -a; source /run/secrets/test_env; set +a; exec /app/topsail/bin/run_ci '{{ jump_ci_prepare_step_project }}' ci '{{ jump_ci_prepare_step_step }}'"
 image="{{ pod_image_cmd.stdout | trim}}"
 
 cleanup() {
