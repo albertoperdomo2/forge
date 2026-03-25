@@ -215,7 +215,7 @@ def test(ctx):
 
 @cli.command()
 @click.pass_context
-def cleanup(ctx):
+def pre_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
     runner = ctx.obj.runner
     exit_code = runner.cleanup()
