@@ -68,7 +68,7 @@ foreign_testing: # used only when testing from another repo that TOPSAIL itself
   topsail:
     repo:
       owner: openshift-psap
-      name: topsail
+      name: topsail-ng
       branch: main
 ssh:
   flags:
