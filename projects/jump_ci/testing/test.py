@@ -231,10 +231,10 @@ class JumpCi:
     """
 
     def __init__(self):
-        self.pre_cleanup_ci = jump_ci("pre_cleanup_ci")
-        self.post_cleanup_ci = jump_ci("post_cleanup_ci")
-        self.prepare_ci = jump_ci("prepare_ci")
-        self.test_ci = jump_ci("test_ci")
+        self.pre_cleanup = jump_ci("pre_cleanup")
+        self.post_cleanup = jump_ci("post_cleanup")
+        self.prepare = jump_ci("prepare")
+        self.test = jump_ci("test")
 
         self.generate_plots_from_pr_args = jump_ci("generate_plots_from_pr_args")
 

@@ -93,7 +93,7 @@ def unlock_cluster(ctx, cluster):
 def prepare(ctx):
     """Prepare phase - Trigger the project's prepare method."""
     log("Starting prepare phase...")
-    ret = run_and_catch("prepare_ci", JumpCi().prepare_ci)
+    ret = run_and_catch("prepare", JumpCi().prepare)
     log("Project prepared", "success" if not ret else "error")
     sys.exit(ret)
 
@@ -103,7 +103,7 @@ def test(ctx):
     """Test phase - Trigger the project's test method."""
     log("Starting test phase...")
 
-    ret = run_and_catch("test_ci", JumpCi().test_ci)
+    ret = run_and_catch("test", JumpCi().test)
     log("Jump CI environment test completed", "success" if not ret else "error")
     sys.exit(0)
 
@@ -112,7 +112,7 @@ def test(ctx):
 def pre_cleanup(ctx):
     """Cleanup phase - Pre-clean up resources."""
     log("Starting cleanup phase...")
-    ret = run_and_catch("pre_cleanup_ci", JumpCi().pre_cleanup_ci)
+    ret = run_and_catch("pre_cleanup", JumpCi().pre_cleanup)
     log("Cleanup phase completed!", "success" if not ret else "error")
     sys.exit(ret)
 
