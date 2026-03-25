@@ -120,7 +120,7 @@ def get_github_notification_message(finish_reason: str, status: str, pr_number: 
     def get_bold(text):
         return f"**{text}**"
 
-    status_icon = ":green_circle:" if finish_reason == "SUCCESS" \
+    status_icon = ":green_circle:" if finish_reason == "success" \
         else ":red_circle:"
 
     return get_common_message(finish_reason, f"{status_icon} {status} {status_icon}", get_link, get_italics, get_bold)
@@ -201,7 +201,7 @@ def get_slack_thread_message(finish_reason, status):
     def get_bold(text):
         return f"*{text}*"
 
-    status_icon = ":done-circle-check:" if finish_reason == "SUCCESS" \
+    status_icon = ":done-circle-check:" if finish_reason == "success" \
         else ":no-red-circle:"
 
     return get_common_message(finish_reason, f"{status_icon} {status}", get_link, get_italics, get_bold)
@@ -241,17 +241,19 @@ def send_job_completion_notification_to_slack(
     org, repo = get_org_repo()
     is_periodic = False
     pr_data = None  # Initialize pr_data to avoid UnboundLocalError
+    pr_created_at = None
 
     if pr_number:
-        pr_created_at, pr_data = github_api.fetch_pr_data(org, repo, pr_number)
+        if github_api:
+            pr_created_at, pr_data = github_api.fetch_pr_data(org, repo, pr_number)
+
         anchor = f"Thread for PR #{pr_number}"
     elif os.environ.get("JOB_TYPE") == "periodic":
-        pr_created_at = None
+
         periodic_name = os.environ["JOB_NAME_SAFE"]
         anchor = f"Thread for Periodic job `{periodic_name}`"
         is_periodic = True
     else:
-        pr_created_at = None
         anchor = "Thread for tests without PRs"
 
     channel_msg_ts, channel_message = slack_api.search_channel_message(client, anchor, not_before=pr_created_at)
@@ -316,7 +318,7 @@ def get_ci_base_link(is_raw_file=False, is_dir=False):
         job_spec = json.loads(os.environ["JOB_SPEC"])
 
         test_name = os.environ['JOB_NAME_SAFE']
-        test_path = os.environ["TOPSAIL_OPENSHIFT_CI_STEP_DIR"]
+        test_path = os.environ.get("TOPSAIL_OPENSHIFT_CI_STEP_DIR", "TOPSAIL_OPENSHIFT_CI_STEP_DIR_missing")
         job = job_spec["job"]
         build_id = job_spec["buildid"]
 
