@@ -6,18 +6,20 @@ import logging
 
 ARTIFACT_DIR = None
 
-def __set_artifact_dir(value):
+def _set_artifact_dir(value):
     global ARTIFACT_DIR
     ARTIFACT_DIR = value
 
 
-def init():
+def init(daily_artifact_dir=False):
     global ARTIFACT_DIR
     if "ARTIFACT_DIR" in os.environ:
         artifact_dir = pathlib.Path(os.environ["ARTIFACT_DIR"])
 
     else:
         env_forge_base_dir = pathlib.Path(os.environ.get("FORGE_BASE_DIR", "/tmp"))
+        fmt = '%Y%m%d' if daily_artifact_dir else '%Y%m%d-%H%M'
+
         artifact_dir = env_forge_base_dir / f"forge_{time.strftime('%Y%m%d-%H%M')}"
 
         artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -25,7 +27,7 @@ def init():
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    __set_artifact_dir(artifact_dir)
+    _set_artifact_dir(artifact_dir)
 
 
 def NextArtifactDir(name, *, lock=None, counter_p=None):
@@ -51,7 +53,7 @@ class TempArtifactDir(object):
         os.environ["ARTIFACT_DIR"] = str(self.dirname)
         self.dirname.mkdir(exist_ok=True)
 
-        __set_artifact_dir(self.dirname)
+        _set_artifact_dir(self.dirname)
 
         return True
 
@@ -63,7 +65,7 @@ class TempArtifactDir(object):
                 print(''.join(traceback.format_exception(None, value=ex_value, tb=exc_traceback)), file=f)
 
         os.environ["ARTIFACT_DIR"] = str(self.previous_dirname)
-        __set_artifact_dir(self.previous_dirname)
+        _set_artifact_dir(self.previous_dirname)
 
         return False # If we returned True here, any exception would be suppressed!
 
