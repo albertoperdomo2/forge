@@ -15,6 +15,42 @@ from projects.jump_ci.testing import utils, prepare_jump_ci, tunnelling
 
 LOCK_DIR_PREFIX = "/tmp/topsail"
 
+def test_jump_ci_skip_list(current_subcommand):
+    """
+    Check if the current jump_ci subcommand should be skipped based on exec_list configuration
+
+    Args:
+        current_subcommand: The jump_ci command to check (e.g., "prepare", "test", "pre_cleanup")
+    """
+    logging.info(f"Currently running the jump_ci subcommand '{current_subcommand}'")
+
+    exec_list = config.project.get_config("exec_list", None, print=False)
+    if exec_list is None:
+        logging.warning("The exec_list isn't defined in this project.")
+        exec_list = {}
+
+    NOT_FOUND = object()
+    exec_this_subcommand = exec_list.get(current_subcommand, NOT_FOUND)
+    if exec_this_subcommand is NOT_FOUND:
+        logging.info(f"Subcommand '{current_subcommand}' is not defined in the exec list. Executing this command by default.")
+        return
+
+    if exec_this_subcommand is False:
+        logging.fatal(f"Subcommand '{current_subcommand}' is disabled in the exec list. Stopping happily this execution.")
+        with open(env.ARTIFACT_DIR / "SKIPPED", "w") as f:
+            print("Skipped because part of the \\skip list", file=f)
+        raise SystemExit(0)
+
+    if exec_this_subcommand is not True and exec_list.get("_only_", False):
+        logging.fatal(f"Only flag is set, and subcommand '{current_subcommand}' is not enabled in the exec list. Stopping happily this execution.")
+        with open(env.ARTIFACT_DIR / "SKIPPED", "w") as f:
+            print("Skipped because not part of the \\only list", file=f)
+        raise SystemExit(0)
+
+    # not in the skip list
+    # not the only command to execute
+    # continue happilly =:-)
+
 def rewrite_variables_overrides(variable_overrides_dict, nb_args_to_eat):
     new_variable_overrides = dict()
 
@@ -64,6 +100,9 @@ def jump_ci(command):
           project: the name of the project to launch
           test_args: the test args to pass to the test command
         """
+
+        # Check skip/only list for this jump_ci command
+        test_jump_ci_skip_list(command)
 
         # Open the tunnel
         tunnelling.prepare()

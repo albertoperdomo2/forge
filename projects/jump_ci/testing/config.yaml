@@ -93,10 +93,10 @@ exec_list:
   prepare_jump_ci: true
   unlock_cluster: true
 
-  pre_cleanup_ci: null
-  prepare_ci: null
-  test_ci: null
-  post_cleanup_ci: null
+  pre_cleanup: null
+  prepare: null
+  test: null
+  post_cleanup: null
 multi_run:
   args: []
   stop_on_error: false
