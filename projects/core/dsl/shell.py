@@ -23,7 +23,15 @@ class CommandResult:
     def success(self) -> bool:
         return self.returncode == 0
 
-def run(command: str, check: bool = True, capture_output: bool = True, shell: bool = True, stdout_dest: Optional[Union[str, Path]] = None) -> CommandResult:
+def run(
+        command: str,
+        check: bool = True,
+        capture_output: bool = True,
+        shell: bool = True,
+        stdout_dest: Optional[Union[str, Path]] = None,
+        log_stdout: bool = True,
+        log_stderr: bool = True,
+) -> CommandResult:
     """
     Execute a shell command
 
@@ -33,7 +41,8 @@ def run(command: str, check: bool = True, capture_output: bool = True, shell: bo
         capture_output: Capture stdout/stderr
         shell: Execute through shell
         stdout_dest: Optional file path to write stdout to
-
+        log_stdout: Optional. If False, don't log the content of stdout.
+        log_stderr: Optional. If False, don't log the content of stderr.
     Returns:
         CommandResult with execution details
     """
@@ -66,10 +75,16 @@ def run(command: str, check: bool = True, capture_output: bool = True, shell: bo
 
         # Print output in verbose format
         if result.stdout:
-            logger.info(f"<stdout> {result.stdout.strip()}")
+            if log_stdout:
+                logger.info(f"<stdout> {result.stdout.strip()}")
+            else:
+                logger.info(f"<stdout not logged>")
 
         if result.stderr:
-            logger.info(f"<stderr> {result.stderr.strip()}")
+            if log_stderr:
+                logger.info(f"<stderr> {result.stderr.strip()}")
+            else:
+                logger.info(f"<stderr not logged>")
 
         if not (result.stdout or result.stderr):
             logger.info(f"<no output>")
