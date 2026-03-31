@@ -53,8 +53,8 @@ class Toolbox:
             try:
                 self.__dict__[toolbox_name] = getattr(mod, toolbox_name.title())
             except AttributeError as e:
-                logging.fatal(str(e)) # eg: AttributeError: module 'projects.notebooks.toolbox.notebooks' has no attribute 'Notebooks'
-                sys.exit(1)
+                logging.warning(str(e)) # eg: AttributeError: module 'projects.notebooks.toolbox.notebooks' has no attribute 'Notebooks'
+
 
 
 def AnsibleRole(role_name):
