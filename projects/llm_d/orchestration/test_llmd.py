@@ -11,11 +11,17 @@ def init():
     run.init()
     config.init(pathlib.Path(__file__).parent)
 
+@config.requires(
+    ns="prepare.namespace.name",
+    name="tests.llmd.flavors",
+)
+def test(_cfg):
+    logger.warning(f"Hello test {_cfg.ns}/{_cfg.name}")
 
-def test():
-    ns = config.project.get_config("prepare.namespace.name")
+    # two alternatives to query the configuration:
+    # @config.requires(dict) or config.project.get_config("<path>")
+    # and we will define something similar for the secrets
+
     name = config.project.get_config("tests.llmd.flavors")
 
-    logger.warning(f"Hello prepare {ns}")
-
-    capture_isvc_state(name, ns)
+    capture_isvc_state(_cfg.name, _cfg.ns)
