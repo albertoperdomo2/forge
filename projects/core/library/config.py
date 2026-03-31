@@ -5,11 +5,14 @@ import pathlib
 import yaml
 import shutil
 import subprocess
-
+import functools
+import types
 import re
 from collections import defaultdict
-import jsonpath_ng
+import inspect
 import copy
+
+import jsonpath_ng
 
 from . import env
 from . import run
@@ -281,6 +284,38 @@ def __get_config_path(orchestration_dir):
     shutil.copyfile(config_file_src, config_path_final)
 
     return config_path_final, config_file_src
+
+
+# Mock config object for demonstration
+class MockConfig:
+    data = {"prepare.namespace.name": "production-cluster"}
+    def get(self, path):
+        return self.data.get(path, "default")
+
+REQUIRES_ANNOTATION_ARG_NAME = "_cfg"
+
+# annotation
+def requires(**config_kwargs):
+    def decorator(func):
+
+        if REQUIRES_ANNOTATION_ARG_NAME not in inspect.signature(func).parameters.keys():
+            raise SyntaxError(f"Function '{func.__name__}' must accept "
+                              f"a {REQUIRES_ANNOTATION_ARG_NAME} parameter.")
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            nonlocal config_kwargs
+
+            config_obj = types.SimpleNamespace()
+
+            for field_name, config_path in config_kwargs.items():
+                config_obj.__dict__[field_name] = project.get_config(config_path)
+
+            kwargs[REQUIRES_ANNOTATION_ARG_NAME] = config_obj
+
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 def init(orchestration_dir):
