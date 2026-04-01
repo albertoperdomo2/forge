@@ -18,7 +18,7 @@ GITHUB_APP_CLIENT_ID_FILE = "topsail-bot.clientid"
 SLACK_TOKEN_FILE = "topsail-bot.slack-token"
 
 DEFAULT_REPO_OWNER = "openshift-psap"
-DEFAULT_REPO_NAME = "topsail-ng"
+DEFAULT_REPO_NAME = "forge"
 
 def get_secrets():
     # currently hardcoded, because there's no configuration file at this level

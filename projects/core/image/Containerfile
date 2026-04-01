@@ -1,4 +1,4 @@
-# TOPSAIL-NG Test Harness Container
+# FORGE Test Harness Container
 #
 # This container provides the runtime environment for CI-first, reproducible
 # and observable performance & scale testing of OpenShift AI.
@@ -11,8 +11,8 @@
 FROM quay.io/centos/centos:stream10
 
 # Metadata
-LABEL name="topsail-ng" \
-      description="TOPSAIL-NG Test Harness - Performance & Scale Testing for OpenShift AI" \
+LABEL name="forge" \
+      description="FORGE Test Harness - Performance & Scale Testing for OpenShift AI" \
       maintainer="Red Hat PSAP Team <psap@redhat.com>"
 
 # Install essential tools
@@ -43,8 +43,8 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_SYSTEM_PYTHON=1
 
 # Set working directory
-WORKDIR /app/topsail
-ENV HOME=/app/topsail
+WORKDIR /app/forge
+ENV HOME=/app/forge
 
 # Copy project configuration
 COPY pyproject.toml ./
@@ -57,9 +57,9 @@ RUN uv lock && \
 COPY . .
 
 # Create non-root user for security
-RUN groupadd -g 1001 topsail && \
-    useradd -u 1001 -g topsail -s /bin/bash -d /app/topsail -M topsail && \
-    chown -R topsail:topsail /app/topsail
+RUN groupadd -g 1001 forge && \
+    useradd -u 1001 -g forge -s /bin/bash -d /app/forge -M forge && \
+    chown -R forge:forge /app/forge
 
 # Make sure that the home directory can be written by OCP random user ID
 RUN chgrp -R 0 "$HOME" && chmod -R g=u "$HOME"
@@ -69,9 +69,9 @@ RUN rm -rf /home
 USER 1001
 
 # Set environment variables
-ENV PYTHONPATH=/app/topsail \
+ENV PYTHONPATH=/app/forge \
     PYTHONUNBUFFERED=1 \
-    TOPSAIL_HOME=/app/topsail
+    FORGE_HOME=/app/forge
 
 # Default command (can be overridden)
 CMD ["bash"]

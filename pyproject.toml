@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "topsail-ng"
+name = "forge"
 version = "0.1.0"
-description = "TOPSAIL-NG Test Harness - CI-first, reproducible and observable performance & scale testing"
+description = "FORGE Test Harness - CI-first, reproducible and observable performance & scale testing"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [

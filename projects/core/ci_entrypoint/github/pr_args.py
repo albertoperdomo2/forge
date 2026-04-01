@@ -21,7 +21,7 @@ import urllib.error
 REQUIRED_AUTHOR_ASSOCIATION = 'CONTRIBUTOR'
 
 DEFAULT_REPO_OWNER = "openshift-psap"
-DEFAULT_REPO_NAME = "topsail-ng"
+DEFAULT_REPO_NAME = "forge"
 
 def setup_logging():
     """Set up logging configuration."""
