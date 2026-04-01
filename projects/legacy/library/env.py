@@ -54,7 +54,7 @@ def init():
 
     else:
         env_topsail_base_dir = pathlib.Path(os.environ.get("TOPSAIL_BASE_DIR", "/tmp"))
-        artifact_dir = env_topsail_base_dir / f"topsail_{time.strftime('%Y%m%d-%H%M')}"
+        artifact_dir = env_topsail_base_dir / f"forge_{time.strftime('%Y%m%d-%H%M')}"
 
         artifact_dir.mkdir(parents=True, exist_ok=True)
         os.environ["ARTIFACT_DIR"] = str(artifact_dir)

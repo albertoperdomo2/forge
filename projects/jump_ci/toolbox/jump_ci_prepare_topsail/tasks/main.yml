@@ -49,7 +49,7 @@
 
 - name: Set TOPSAIL's directory
   set_fact:
-    topsail_home: "{{ cluster_lock_dir }}/topsail-ng"
+    topsail_home: "{{ cluster_lock_dir }}/forge"
 
 - name: Ensure that the src directory exists
   ansible.builtin.file:
@@ -172,6 +172,7 @@
 
     time podman build \
       --label preserve=false \
+      --label owner=forge \
       --tag "{{ image_full_name }}" \
       --file {{ cluster_lock_dir }}/overlay.containerfile \
       --from "{{ jump_ci_prepare_topsail_image_name }}:{{ jump_ci_prepare_topsail_update_from_imagetag }}"
@@ -182,7 +183,7 @@
 - name: "Build image from scatch {{ image_full_name }}"
   shell:
     time podman build --squash
-      --label topsail-ng=true
+      --label owner=forge
       --tag "{{ image_full_name }}"
       --file "{{ jump_ci_prepare_topsail_dockerfile_name }}"
       "{{ topsail_home }}" > "{{ artifact_extra_logs_dir }}/artifacts/image.log"

@@ -6,12 +6,12 @@ set -o nounset
 set -o errtrace
 
 interactive=""
-cmd="set -a; source /run/secrets/test_env; set +a; exec /app/topsail/bin/run_ci '{{ jump_ci_prepare_step_project }}' ci '{{ jump_ci_prepare_step_step }}'"
+cmd="set -a; source /run/secrets/test_env; set +a; exec /app/forge/bin/run_ci '{{ jump_ci_prepare_step_project }}' ci '{{ jump_ci_prepare_step_step }}'"
 image="{{ pod_image_cmd.stdout | trim}}"
 
 cleanup() {
     echo "Stopping the container..."
-    podman rm --force --ignore topsail-on-{{ jump_ci_prepare_step_cluster }}
+    podman rm --force --ignore forge-on-{{ jump_ci_prepare_step_cluster }}
 
     # Not cleaning up the secrets for now. They are safe anyway
     # echo Cleaning up the secrets ..
@@ -47,7 +47,7 @@ podman run \
   --userns=keep-id \
   --user "$(id -u):$(id -g)" \
   --rm \
-  --name topsail-on-{{ jump_ci_prepare_step_cluster }} \
+  --name forge-on-{{ jump_ci_prepare_step_cluster }} \
   \
   --volume "{{ step_artifact_dir }}/artifacts:$ARTIFACT_DIR:Z" \
   --env ARTIFACT_DIR="$ARTIFACT_DIR" \

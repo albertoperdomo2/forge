@@ -13,7 +13,7 @@ import joblib
 
 from . import env, config
 
-TOPSAIL_HOME = pathlib.Path(__file__).resolve().parent.parent.parent.parent
+FORGE_HOME = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 
 # create new process group, become its leader, except if we're already pid 1 (defacto group leader, setpgrp gets permission denied error)
 try:
@@ -44,7 +44,7 @@ def run_toolbox_from_config(group, command, prefix=None, suffix=None, show_args=
     if run_kwargs is None:
         run_kwargs = {}
 
-    run_kwargs["cwd"] = str(TOPSAIL_HOME)
+    run_kwargs["cwd"] = str(FORGE_HOME)
 
     kwargs = dict()
     if prefix is not None:
@@ -104,7 +104,7 @@ def run_toolbox(group, command, artifact_dir_suffix=None, run_kwargs=None, mute_
 
     cmd_env = " ".join(env_vals)
 
-    run_kwargs["cwd"] = str(TOPSAIL_HOME)
+    run_kwargs["cwd"] = str(FORGE_HOME)
 
     return run(f'{cmd_env} bin/run_toolbox.py {group} {command} {_dict_to_run_toolbox_args(kwargs)}', **run_kwargs)
 
