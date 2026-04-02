@@ -157,7 +157,7 @@ def _generate_execution_metadata(function_args: dict, caller_frame, meta_dir):
     """Generate a YAML file with execution metadata"""
     filename = caller_frame.f_code.co_filename
 
-    # Get path relative to FORGE home directory (topsail-ng root)
+    # Get path relative to FORGE home directory (forge root)
     rel_filename = _get_forge_relative_path(filename)
 
     # Use parent directory name as function name for toolbox operations
@@ -244,14 +244,14 @@ def _generate_restart_script(function_args: dict, caller_frame, meta_dir):
 
 
 def _get_forge_relative_path(filename):
-    """Get file path relative to FORGE home directory (topsail-ng root)"""
+    """Get file path relative to FORGE home directory (forge root)"""
     filename_path = Path(filename)
 
-    # Look for topsail-ng directory in the path
+    # Look for forge directory in the path
     for parent in filename_path.parents:
-        if parent.name == 'topsail-ng':
+        if parent.name == 'forge':
             try:
-                # Make path relative to topsail-ng parent (so it shows ../forge/...)
+                # Make path relative to forge parent (so it shows ../forge/...)
                 forge_home = parent.parent
                 rel_path = filename_path.relative_to(forge_home)
                 return str(rel_path)

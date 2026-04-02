@@ -1,4 +1,4 @@
-name: "Prepare TOPSAIL minimal ubuntu image"
+name: "Prepare FORGE minimal ubuntu image"
 
 runs:
   using: "composite" # <-- this is the important part

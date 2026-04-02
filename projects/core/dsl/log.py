@@ -83,7 +83,7 @@ def log_completion_banner(function_args: dict = None, status: str = "SUCCESS"):
 
 
 def _get_forge_relative_path(filename):
-    """Get file path relative to FORGE home directory (topsail-ng root)"""
+    """Get file path relative to FORGE home directory (forge root)"""
     filename_path = Path(filename)
 
     return filename_path.relative_to(config.FORGE_HOME)

@@ -160,5 +160,5 @@ Thumbs.db
 .temp/
 temp/
 
-# TOPSAIL launcher configuration (personal settings)
+# FORGE launcher configuration (personal settings)
 projects/core/launcher/launcher_config.yaml

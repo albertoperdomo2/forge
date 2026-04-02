@@ -24,7 +24,7 @@ from enum import StrEnum
 IS_LIGHTWEIGHT_IMAGE = os.environ.get("FORGE_LIGHT_IMAGE")
 
 DEFAULT_REPO_OWNER = "openshift-psap"
-DEFAULT_REPO_NAME = "topsail-ng"
+DEFAULT_REPO_NAME = "forge"
 
 class FinishReason(StrEnum):
     SUCCESS = "success"

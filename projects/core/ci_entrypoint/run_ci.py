@@ -27,16 +27,16 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
-TOPSAIL_ENV = [
-    "TOPSAIL_LIGHT_IMAGE", "TOPSAIL_JUMP_CI_INSIDE_JUMP_HOST", "TOPSAIL_HOME",
-    "TOPSAIL_OPENSHIFT_CI_STEP_DIR",
-    "PSAP_TOPSAIL_JUMP_CI_SECRET_PATH"
+FORGE_ENV = [
+    "FORGE_LIGHT_IMAGE", "FORGE_JUMP_CI_INSIDE_JUMP_HOST", "FORGE_HOME",
+    "FORGE_OPENSHIFT_CI_STEP_DIR",
+    "PSAP_FORGE_JUMP_CI_SECRET_PATH"
 ]
 
-for env_name in TOPSAIL_ENV:
+for env_name in FORGE_ENV:
     value = os.environ.get(env_name)
     if not value: continue
-    os.environ[env_name.replace("TOPSAIL", "FORGE")] = value
+    os.environ[env_name.replace("FORGE", "FORGE")] = value
 
 
 FORGE_HOME = Path(__file__).resolve().parent.parent.parent.parent
