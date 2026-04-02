@@ -46,6 +46,14 @@ def pre_cleanup(ctx):
     sys.exit(exit_code)
 
 
+@cli.command()
+@click.pass_context
+def post_cleanup(ctx):
+    """Cleanup phase - Clean up resources and finalize."""
+    exit_code = prepare_llmd.cleanup()
+    sys.exit(exit_code)
+
+
 if __name__ == "__main__":
     test_llmd.init()
     cli()
