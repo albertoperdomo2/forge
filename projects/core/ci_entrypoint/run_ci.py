@@ -29,7 +29,7 @@ from typing import List, Optional
 
 FORGE_HOME = Path(__file__).resolve().parent.parent.parent.parent
 
-EXTRA_PACKAGES = ["click", "requests"]
+EXTRA_PACKAGES = ["fire"]
 
 def signal_handler_sigint(sig, frame):
     """Handle SIGINT (Ctrl+C) gracefully."""
