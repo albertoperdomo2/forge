@@ -173,6 +173,13 @@ We will get rid of that when we remove the JumpCI.
             self.apply_preset(arg_name)
 
 
+    def has_config(self, jsonpath):
+        try:
+            _ = jsonpath_ng.parse(jsonpath).find(self.config)[0].value # raises an IndexError if jsonpath isn't found
+            return True
+        except IndexError as ex:
+            return False
+
     def get_config(self, jsonpath, default_value=..., warn=True, print=True, handled_secretly=False):
         try:
             value = jsonpath_ng.parse(jsonpath).find(self.config)[0].value
