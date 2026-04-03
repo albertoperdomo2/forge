@@ -44,12 +44,12 @@ def run_and_catch(phase, fct, *args, **kwargs):
 @click.group()
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
 @click.pass_context
-def cli(ctx, verbose):
+def main(ctx, verbose):
     """Jump CI Project CI Operations for TOPSAIL-NG."""
     ctx.ensure_object(dict)
     ctx.obj['verbose'] = verbose
 
-@cli.command()
+@main.command()
 @click.pass_context
 @click.option('--cluster', 'cluster', nargs=1, metavar='KEY', help='Give the name of the cluster to lock', default=None)
 def lock_cluster(ctx, cluster):
@@ -67,7 +67,7 @@ def lock_cluster(ctx, cluster):
 
         sys.exit(1)
 
-@cli.command()
+@main.command()
 @click.pass_context
 def prepare_jump_ci(ctx):
     """Prepare phase - Prepare the Jump CI remote system."""
@@ -78,7 +78,7 @@ def prepare_jump_ci(ctx):
     sys.exit(0)
 
 
-@cli.command()
+@main.command()
 @click.pass_context
 @click.option('--cluster', 'cluster', nargs=1, metavar='KEY', help='Give the name of the cluster to unlock', default=None)
 def unlock_cluster(ctx, cluster):
@@ -88,7 +88,7 @@ def unlock_cluster(ctx, cluster):
     log("Cluster unlocked successfully", "success")
     sys.exit(0)
 
-@cli.command()
+@main.command()
 @click.pass_context
 def prepare(ctx):
     """Prepare phase - Trigger the project's prepare method."""
@@ -97,7 +97,7 @@ def prepare(ctx):
     log("Project prepared", "success" if not ret else "error")
     sys.exit(ret)
 
-@cli.command()
+@main.command()
 @click.pass_context
 def test(ctx):
     """Test phase - Trigger the project's test method."""
@@ -107,7 +107,7 @@ def test(ctx):
     log("Jump CI environment test completed", "success" if not ret else "error")
     sys.exit(0)
 
-@cli.command()
+@main.command()
 @click.pass_context
 def pre_cleanup(ctx):
     """Cleanup phase - Pre-clean up resources."""
@@ -117,4 +117,4 @@ def pre_cleanup(ctx):
     sys.exit(ret)
 
 if __name__ == "__main__":
-    cli()
+    main()
