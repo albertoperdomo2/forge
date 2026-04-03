@@ -507,6 +507,10 @@ def main(project, operation, args, verbose, dry_run):
         run skeleton validate
     """
 
+    if project == "forge":
+        logger.info("Using project 'fournos' instead of 'forge'")
+        project = "fournos"
+
     # No arguments - list projects
     if not project:
         list_projects()
