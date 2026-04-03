@@ -533,8 +533,8 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
         notification_status = f"Test of '{project} {operation}' {('succeeded' if success else 'failed')}{duration}"
 
         # Skip notifications for successful non-test steps
-        if success and operation != "test":
-            logger.info(f"Skipping notification for successful '{operation}' step (only 'test' steps notify on success)")
+        if success and operation not in ("test", "submit"):
+            logger.info(f"Skipping notification for successful '{operation}' step (only 'test' and 'submit' steps notify on success)")
             return
 
         # Enable GitHub notifications by default, Slack can be enabled via environment variable
