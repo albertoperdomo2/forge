@@ -1,0 +1,14 @@
+env_key: PSAP_FORGE_NOTIFICATIONS_SECRET_PATH
+description: |
+  Vault to send SLACK and Github notifications
+
+content:
+  topsail-bot.2024-09-18.private-key.pem:
+    description: |
+      Private key to send github notifications
+  topsail-bot.clientid:
+    description: |
+      Token to identify the TOPSAIL-bot client
+  topsail-bot.slack-token:
+    description: |
+      Token to send slack notification from the TOPSAIL-bot
