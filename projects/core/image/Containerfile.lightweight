@@ -13,6 +13,13 @@ RUN dnf install -y --quiet \
     && dnf clean all \
     && rm -rf /var/cache/yum
 
+# Install OpenShift CLI (oc)
+RUN curl -LO "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz" && \
+    tar -xzf openshift-client-linux.tar.gz && \
+    chmod +x oc && \
+    mv oc /usr/local/bin/ && \
+    rm -f openshift-client-linux.tar.gz kubectl
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 ARG APP_NAME=forge
