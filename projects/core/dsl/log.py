@@ -86,7 +86,7 @@ def _get_forge_relative_path(filename):
     """Get file path relative to FORGE home directory (forge root)"""
     filename_path = Path(filename)
 
-    return filename_path.relative_to(config.FORGE_HOME)
+    return filename_path.relative_to(env.FORGE_HOME)
 
 
 def _get_toolbox_function_name(filename):

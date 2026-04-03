@@ -17,7 +17,6 @@ import jsonpath_ng
 from . import env
 from . import run
 
-FORGE_HOME = pathlib.Path(__file__).parents[3]
 VARIABLE_OVERRIDES_FILENAME = "variable_overrides.yaml"
 
 project = None # the project config will be populated in init()

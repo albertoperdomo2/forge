@@ -5,6 +5,7 @@ import traceback
 import logging
 
 ARTIFACT_DIR = None
+FORGE_HOME = pathlib.Path(__file__).parents[3]
 
 def _set_artifact_dir(value):
     global ARTIFACT_DIR

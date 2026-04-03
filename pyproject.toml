@@ -31,7 +31,7 @@ dependencies = [
     "click>=8.1.0",
     "requests",
     "slack_sdk==3.35.0",
-    "ansible",
+    "ansible", "fire",
     "pyjwt",
     "jsonpath_ng",
 ]

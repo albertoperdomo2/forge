@@ -245,24 +245,8 @@ def _generate_restart_script(function_args: dict, caller_frame, meta_dir):
 
 def _get_forge_relative_path(filename):
     """Get file path relative to FORGE home directory (forge root)"""
-    filename_path = Path(filename)
 
-    # Look for forge directory in the path
-    for parent in filename_path.parents:
-        if parent.name == 'forge':
-            try:
-                # Make path relative to forge parent (so it shows ../forge/...)
-                forge_home = parent.parent
-                rel_path = filename_path.relative_to(forge_home)
-                return str(rel_path)
-            except ValueError:
-                pass
-
-    # Fallback to relative to current directory
-    try:
-        return os.path.relpath(filename)
-    except ValueError:
-        return filename
+    return Path(filename).relative_to(env.FORGE_HOME)
 
 
 def _get_toolbox_function_name(filename):
