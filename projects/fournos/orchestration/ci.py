@@ -7,7 +7,6 @@ FOURNOS launcher project CI Operations
 import sys
 import subprocess
 import time
-import traceback
 from pathlib import Path
 import types
 
@@ -18,6 +17,7 @@ import click
 
 from projects.core.library import ci as ci_lib
 from projects.fournos.orchestration import submit as submit_mod
+from projects.fournos.orchestration import utils
 
 
 @click.group()
@@ -26,6 +26,7 @@ def main(ctx):
     """FOURNOS Project launcher CI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
     submit_mod.init()
+    utils.ensure_oc_available()
 
 
 @main.command()
