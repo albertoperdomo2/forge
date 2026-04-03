@@ -1,1 +1,1 @@
-# FORGE Notifications moduled
+# FORGE Notifications module
