@@ -228,6 +228,11 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
     logger.info(f"Parsing GitHub PR arguments for {repo_owner}/{repo_name}#{pull_number}")
 
     try:
+        # Save to YAML file
+        artifact_path = Path(artifact_dir)
+        artifact_path.mkdir(parents=True, exist_ok=True)
+        (artifact_path / "_meta").mkdir(parents=True, exist_ok=True)
+
         # Parse PR arguments
         config, found_directives = parse_pr_arguments(
             repo_owner=repo_owner,
@@ -237,10 +242,7 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
             shared_dir=shared_dir
         )
 
-        # Save to YAML file
-        artifact_path = Path(artifact_dir)
-        artifact_path.mkdir(parents=True, exist_ok=True)
-        output_file = artifact_path / "variable_overrides.yaml"
+        output_file = artifact_path / "_meta" / "variable_overrides.yaml"
 
         with open(output_file, 'w') as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=True)
@@ -249,7 +251,7 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
         logger.info(f"Configuration contains {len(config)} override(s)")
 
         # Save directives to text file
-        pr_config_file = artifact_path / "pr_config.txt"
+        pr_config_file = artifact_path / "_meta" / "pr_config.txt"
         with open(pr_config_file, 'w') as f:
             if found_directives:
                 for directive in found_directives:
@@ -376,8 +378,8 @@ def system_prechecks() -> bool:
             timeout=10
         )
         forge_version = result.stdout.strip() if result.returncode == 0 else "git missing"
-        (artifact_path / "forge.git_version").write_text(forge_version + "\n")
-        logger.info(f"Saving FORGE git version into {artifact_path}/forge.git_version")
+        (artifact_path / "_meta" / "forge.git_version").write_text(forge_version + "\n")
+        logger.info(f"Saving FORGE git version into {artifact_path}/_meta/forge.git_version")
 
         # Matrix-benchmarking git version (if exists)
         matbench_dir = Path(__file__).parent.parent.parent / "matrix_benchmarking" / "subproject"
@@ -405,7 +407,7 @@ def system_prechecks() -> bool:
         try:
             # Download PR data
             result = subprocess.run(
-                ["curl", "-sSf", pr_url, "-o", str(artifact_path / "pull_request.json")],
+                ["curl", "-sSf", pr_url, "-o", str(artifact_path / "_meta" / "pull_request.json")],
                 timeout=30
             )
             if result.returncode != 0:
@@ -413,7 +415,7 @@ def system_prechecks() -> bool:
 
             # Download PR comments
             result = subprocess.run(
-                ["curl", "-sSf", pr_comments_url, "-o", str(artifact_path / "pull_request-comments.json")],
+                ["curl", "-sSf", pr_comments_url, "-o", str(artifact_path / "_meta" / "pull_request-comments.json")],
                 timeout=30
             )
             if result.returncode != 0:
@@ -619,7 +621,7 @@ def postchecks(project: str, operation: str, start_time: Optional[float], finish
     # Write status to FINISHED file
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     finished_content = f"{timestamp} {status}"
-    (artifact_path / "FINISHED").write_text(finished_content + "\n")
+    (artifact_path / "_meta" / "FINISHED").write_text(finished_content + "\n")
 
 
     # Send notifications for job completion
