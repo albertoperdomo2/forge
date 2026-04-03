@@ -88,7 +88,18 @@ We will get rid of that when we remove the JumpCI.
             if name in self.config["cluster"]: continue
             self.config["cluster"][name] = None
 
+    def save_config_overrides(self):
+        variable_overrides_path = env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
 
+        if not variable_overrides_path.exists():
+            logging.debug(f"save_config_overrides: {variable_overrides_path} does not exist, nothing to save.")
+            self.config["overrides"] = {}
+            return
+
+        with open(variable_overrides_path) as f:
+            variable_overrides = yaml.safe_load(f)
+
+        self.config["overrides"] = variable_overrides
 
     def apply_config_overrides(self, *, ignore_not_found=False, variable_overrides_path=None, log=True):
         if variable_overrides_path is None:
@@ -317,7 +328,7 @@ def requires(**config_kwargs):
     return decorator
 
 
-def init(orchestration_dir):
+def init(orchestration_dir, *, apply_config_overrides=True):
     global project
 
     if project:
@@ -329,6 +340,15 @@ def init(orchestration_dir):
     project = Config(config_path)
 
     repo_var_overrides = env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
+
+    if not apply_config_overrides:
+        logging.info("config.init: running with 'apply_config_overrides', "
+                     "skipping the overrides. Saving it as 'overrides' "
+                     "field in the project configuration.")
+        project.save_config_overrides()
+        project.save_config()
+        return
+
 
     project.ensure_core_fields()
     project.load_presets(src_config.parent / "presets.d")
