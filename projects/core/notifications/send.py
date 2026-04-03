@@ -22,7 +22,7 @@ DEFAULT_REPO_NAME = "forge"
 
 def get_secrets():
     # currently hardcoded, because there's no configuration file at this level
-    SECRET_ENV_KEYS = ("PSAP_FORGE_JUMP_CI_SECRET_PATH",)
+    SECRET_ENV_KEYS = ("PSAP_FORGE_NOTIFICATIONS_SECRET_PATH", "PSAP_FORGE_JUMP_CI_SECRET_PATH",)
 
     secret_env_key = None
     warn = []
