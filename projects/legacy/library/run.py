@@ -9,7 +9,11 @@ import pathlib
 
 import subprocess
 
-import joblib
+try:
+    import joblib
+except ImportError:
+    logging.warning("Joblib package not available. Won't run jobs with multiple Parallel processes.")
+    joblib = None
 
 from . import env, config
 
@@ -149,7 +153,9 @@ class Parallel(object):
         return self
 
     def delayed(self, function, *args, **kwargs):
-        self.parallel_tasks += [joblib.delayed(function)(*args, **kwargs)]
+        self.parallel_tasks += [joblib.delayed(function)(*args, **kwargs)] \
+            if joblib \
+               else [(function, args, kwargs)]
 
     def __exit__(self, ex_type, ex_value, exc_traceback):
 
@@ -164,7 +170,13 @@ class Parallel(object):
 
         with context:
             try:
-                joblib.Parallel(n_jobs=-1, backend="threading")(self.parallel_tasks)
+                if joblib:
+                    joblib.Parallel(n_jobs=-1, backend="threading")(self.parallel_tasks)
+                else:
+                    logging.info("joblib not available, running the delayed function sequentially.")
+
+                    for function, args, kwargs in self.parallel_tasks:
+                        function(*args, **kwargs)
             except Exception as e:
                 if not self.exit_on_exception:
                     raise e
