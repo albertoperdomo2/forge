@@ -618,12 +618,6 @@ def postchecks(project: str, operation: str, start_time: Optional[float], finish
     else:
         status = f"✅ Test of '{project} {operation}' succeeded{duration_str}."
 
-    # Write status to FINISHED file
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    finished_content = f"{timestamp} {status}"
-    (artifact_path / "_meta" / "FINISHED").write_text(finished_content + "\n")
-
-
     # Send notifications for job completion
     # Get the actual step from args (like "test", "lock_cluster", "prepare")
     actual_step = args[0] if args and len(args) > 0 else operation
