@@ -12,7 +12,7 @@ import types
 
 import click
 
-from projects.core.library import ci
+from projects.core.library import ci_lib
 import test_llmd, prepare_llmd
 
 @click.group()
@@ -24,7 +24,7 @@ def main(ctx):
 
 @main.command()
 @click.pass_context
-@ci.safe_ci_command
+@ci_lib.safe_ci_command
 def prepare(ctx):
     """Prepare phase - Set up environment and dependencies."""
     return prepare_llmd.prepare()
@@ -32,7 +32,7 @@ def prepare(ctx):
 
 @main.command()
 @click.pass_context
-@ci.safe_ci_command
+@ci_lib.safe_ci_command
 def test(ctx):
     """Test phase - Execute the main testing logic."""
     return test_llmd.test()
@@ -40,7 +40,7 @@ def test(ctx):
 
 @main.command()
 @click.pass_context
-@ci.safe_ci_command
+@ci_lib.safe_ci_command
 def pre_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
     return prepare_llmd.cleanup()
