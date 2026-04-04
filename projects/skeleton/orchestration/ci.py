@@ -23,6 +23,7 @@ import test_skeleton, prepare_skeleton
 def main(ctx):
     """Skeleton Example Project CI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
+    test_skeleton.init()
 
 
 @main.command()
@@ -50,5 +51,4 @@ def pre_cleanup(ctx):
 
 
 if __name__ == "__main__":
-    test_skeleton.init()
     main()
