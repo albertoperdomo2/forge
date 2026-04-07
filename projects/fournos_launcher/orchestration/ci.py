@@ -34,7 +34,7 @@ def main(ctx):
 @ci_lib.safe_ci_command
 def submit(ctx):
     """Submit a CI job to FOURNOS CI entrypoint."""
-    return submit_mod.submit()
+    return submit_mod.submit_job()
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,9 @@
 cluster:
-  name: null
+  name: totor
 ci_job:
-  name: null
-  project: null
+  name: hello
+  project: llmd
   args: []
+
+fournos:
+  namespace: psap-automation
