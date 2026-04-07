@@ -191,8 +191,6 @@ def find_ci_script(project_dir: Path, operation: str) -> Optional[Path]:
     """
     # Check possible locations for CI scripts
     possible_locations = [
-        # Operation-specific script in project root
-        project_dir / f"{operation}.py",
         # Operation-specific script in orchestration subdirectory
         project_dir / "orchestration" / f"{operation}.py",
     ]
@@ -281,11 +279,8 @@ def show_project_operations(project: str):
         python_files.append((operation_name, file_path))
 
 
-    # List Python files in the project directory
+    # List Python files in the orchestration directory
     for file_path in (project_dir / "orchestration").glob("*.py"):
-        add_python_file(file_path)
-
-    for file_path in project_dir.glob("*.py"):
         add_python_file(file_path)
 
     if not python_files:
@@ -398,7 +393,7 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
             ),
             err=True
         )
-        click.echo(f"🔍 Expected: {project_dir}/ci.py or {project_dir}/{operation}.py")
+        click.echo(f"🔍 Expected: {project_dir}/orchestration/{operation}.py")
         sys.exit(1)
 
     # Convert underscores to hyphens in args for Click compatibility
