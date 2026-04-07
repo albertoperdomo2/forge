@@ -18,11 +18,13 @@ import test_llmd, prepare_llmd
 
 @click.group()
 @click.pass_context
-def cli(ctx):
+def main(ctx):
     """LLM-D Project CI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
+    test_llmd.init()
 
-@cli.command()
+
+@main.command()
 @click.pass_context
 def prepare(ctx):
     """Prepare phase - Set up environment and dependencies."""
@@ -30,7 +32,7 @@ def prepare(ctx):
     sys.exit(exit_code)
 
 
-@cli.command()
+@main.command()
 @click.pass_context
 def test(ctx):
     """Test phase - Execute the main testing logic."""
@@ -38,7 +40,7 @@ def test(ctx):
     sys.exit(exit_code)
 
 
-@cli.command()
+@main.command()
 @click.pass_context
 def pre_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
@@ -46,7 +48,7 @@ def pre_cleanup(ctx):
     sys.exit(exit_code)
 
 
-@cli.command()
+@main.command()
 @click.pass_context
 def post_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
@@ -55,5 +57,4 @@ def post_cleanup(ctx):
 
 
 if __name__ == "__main__":
-    test_llmd.init()
-    cli()
+    main()

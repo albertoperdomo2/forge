@@ -1,0 +1,6 @@
+cluster:
+  name: null
+ci_job:
+  name: null
+  project: null
+  args: []

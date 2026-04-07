@@ -22,7 +22,7 @@ DEFAULT_REPO_NAME = "forge"
 
 def get_secrets():
     # currently hardcoded, because there's no configuration file at this level
-    SECRET_ENV_KEYS = ("PSAP_FORGE_JUMP_CI_SECRET_PATH",)
+    SECRET_ENV_KEYS = ("PSAP_FORGE_NOTIFICATIONS_SECRET_PATH", "PSAP_FORGE_JUMP_CI_SECRET_PATH",)
 
     secret_env_key = None
     warn = []
@@ -151,7 +151,7 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 • No reports index generated...
 """
 
-    if (var_over := pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "variable_overrides.yaml").exists():
+    if (var_over := pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "_meta" / "pr_config.txt").exists():
         with open(var_over) as f:
             message += f"""
 {get_bold("Test configuration")}:
