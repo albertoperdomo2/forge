@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 import click
 
-from projects.fournos.orchestration import submit as submit_mod
+from projects.fournos_launcher.orchestration import submit as submit_mod
 
 
 @click.group()
