@@ -189,7 +189,7 @@ def _generate_execution_metadata(function_args: dict, caller_frame, meta_dir):
 
 def _setup_execution_logging(artifact_dir):
     """Setup file logging to capture all stdout/stderr during execution"""
-    log_file = artifact_dir / "execution.log"
+    log_file = artifact_dir / "task.log"
 
     # Create file handler for the DSL logger
     file_handler = logging.FileHandler(log_file, mode='w')
