@@ -46,7 +46,7 @@ def execute_tasks(function_args: dict = None):
         meta_dir.mkdir(exist_ok=True)
 
         # Setup file logging first so all output is captured
-        _setup_execution_logging(meta_dir)
+        _setup_execution_logging(env.ARTIFACT_DIR)
 
         # Log execution banner (now captured in file)
         log_execution_banner(function_args)
@@ -187,9 +187,9 @@ def _generate_execution_metadata(function_args: dict, caller_frame, meta_dir):
     logger.info(f"Generated execution metadata: {metadata_file}")
 
 
-def _setup_execution_logging(meta_dir):
+def _setup_execution_logging(artifact_dir):
     """Setup file logging to capture all stdout/stderr during execution"""
-    log_file = meta_dir / "execution.log"
+    log_file = artifact_dir / "execution.log"
 
     # Create file handler for the DSL logger
     file_handler = logging.FileHandler(log_file, mode='w')
