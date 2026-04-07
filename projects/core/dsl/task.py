@@ -77,7 +77,8 @@ def task(func):
         except KeyboardInterrupt:
             raise
         except Exception as e:
-            logger.exception(f"==> TASK FAILED: {e.__class__.__name__}: {e}")
+            logger.error(f"==> TASK FAILED: {task_name}: {func.__doc__ or 'No description'}")
+            logger.error(f"==> {e.__class__.__name__}: {e}")
             logger.info("")
             raise
 
@@ -190,6 +191,3 @@ def retry(attempts=3, delay=1, backoff=1.0):
 
         return wrapper
     return decorator
-
-
-

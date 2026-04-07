@@ -96,7 +96,17 @@ def run(
         logger.info("")
 
         if check and result.returncode != 0:
-            raise subprocess.CalledProcessError(result.returncode, command, result.stdout, result.stderr)
+            # Create a more informative error message
+            error_msg = f"Command failed with exit code {result.returncode}: {command}"
+            if result.stderr:
+                error_msg += f"\nSTDERR: {result.stderr.strip()}"
+            if result.stdout:
+                error_msg += f"\nSTDOUT: {result.stdout.strip()}"
+
+            # Create exception with enhanced message
+            error = subprocess.CalledProcessError(result.returncode, command, result.stdout, result.stderr)
+            error.args = (error_msg,)
+            raise error
 
         return cmd_result
 
