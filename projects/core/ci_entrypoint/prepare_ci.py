@@ -582,8 +582,9 @@ def postchecks(project: str, operation: str, start_time: Optional[float], finish
         with failures_file.open("w") as f:
             for failure_file in sorted(failure_files):
                 try:
-                    f.write(f"{failure_file} | ")
+                    f.write(f"## {failure_file} \n")
                     f.write(failure_file.read_text().strip())
+                    f.write("\n")
                     f.write("\n")
                 except Exception as e:
                     f.write(f"{failure_file} | Error reading file: {e}\n")
