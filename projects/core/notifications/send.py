@@ -170,14 +170,18 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 
     if (failures := pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "FAILURES").exists():
         with open(failures) as f:
-            HEAD = 10
+            DEFAULT_HEAD = 10
             lines = f.readlines()
+            try:
+                head = lines.index("---\n")
+            except ValueError:
+                head = DEFAULT_HEAD
 
             message += f"""
 *{get_link("Failure indicator", "FAILURES", is_raw_file=True)}*:
 ```
-{"".join(lines[:HEAD])}
-{"[...]" if len(lines) > HEAD else ""}
+{"".join(lines[:head])}
+{"[...]" if len(lines) > head else ""}
 ```
 """ if lines else f"""
 *Failure indicator*: Empty. (See {get_link("run.log", "run.log", is_raw_file=True)})
