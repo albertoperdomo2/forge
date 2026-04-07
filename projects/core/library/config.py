@@ -17,7 +17,7 @@ import jsonpath_ng
 from . import env
 from . import run
 
-VARIABLE_OVERRIDES_FILENAME = "variable_overrides.yaml"
+VARIABLE_OVERRIDES_FILENAME = "_meta/variable_overrides.yaml"
 
 project = None # the project config will be populated in init()
 
