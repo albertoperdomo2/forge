@@ -380,18 +380,6 @@ def system_prechecks() -> bool:
         forge_version = result.stdout.strip() if result.returncode == 0 else "git missing"
         (artifact_path / "_meta" / "forge.git_version").write_text(forge_version + "\n")
         logger.info(f"Saving FORGE git version into {artifact_path}/_meta/forge.git_version")
-
-        # Matrix-benchmarking git version (if exists)
-        matbench_dir = Path(__file__).parent.parent.parent / "matrix_benchmarking" / "subproject"
-        if matbench_dir.exists():
-            result = subprocess.run(
-                ["git", "-C", str(matbench_dir), "describe", "HEAD", "--long", "--always"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            matbench_version = result.stdout.strip() if result.returncode == 0 else "git missing"
-            (artifact_path / "matbench.git_version").write_text(matbench_version + "\n")
     except Exception as e:
         logger.warning(f"Could not store git versions: {e}")
 
