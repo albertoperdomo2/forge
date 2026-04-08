@@ -102,23 +102,19 @@ def execute_tasks(function_args: dict = None):
                 logger.info("==> Exiting...")
                 # Show completion banner with interrupted status
                 log_completion_banner(function_args, status="INTERRUPTED")
-                sys.exit(1)
-
-            except TaskExecutionError:
-                # Re-raise the TaskExecutionError to preserve context
                 raise
-            except ConditionError as e:
-                logger.info("")
-                logger.exception(f"==> CONDITION Exception {e}")
-                sys.exit(1)
-            except RetryFailure as e:
-                logger.info("")
-                logger.fatal(f"==> RETRY failure {e}")
-                sys.exit(1)
 
-            except Exception as e:
-                execution_error = e
-                # catch and execute the ALWAYS tasks
+            except (TaskExecutionError, ConditionError, RetryFailure, Exception) as e:
+                # Log and re-raise DSL-specific exceptions
+                logger.info("")
+                logger.fatal(f"==> {e.__class__.__name__}: {e}")
+                log_completion_banner(function_args, status="EXCEPTION")
+
+                if isinstance(e, RetryFailure):
+                    # catch and execute the ALWAYS tasks
+                    execution_error = e
+                else:
+                    raise
 
             # Always execute "always" tasks
             try:
@@ -183,7 +179,13 @@ def _execute_single_task(task_info, args):
     except (KeyboardInterrupt, SignalError):
         raise
     except Exception as e:
-        co_filename = Path(task_func.original_func.__code__.co_filename).relative_to(env.FORGE_HOME)
+        co_filename = task_func.original_func.__code__.co_filename
+        try:
+            co_filename = Path(co_filename).relative_to(env.FORGE_HOME)
+        except ValueError as e:
+            logging.warning(f"Path {co_filename} isn't relative to FORGE_HOME={env.FORGE_HOME} ({e})")
+            pass  # Use absolute path if file is outside FORGE_HOME
+
         task_location = f"{co_filename}:{task_func.original_func.__code__.co_firstlineno}"
 
         # Wrap in custom exception with context
