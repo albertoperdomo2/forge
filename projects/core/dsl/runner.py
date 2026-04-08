@@ -35,8 +35,7 @@ def run(command: str, check: bool = True, capture_output: bool = True, shell: bo
         CommandResult with execution details
     """
     # Print command in verbose format
-    print(f"<command> {command}")
-    print()
+    logger.info(f"== command == {command}")
 
     try:
         result = subprocess.run(
@@ -56,11 +55,11 @@ def run(command: str, check: bool = True, capture_output: bool = True, shell: bo
 
         # Print output in verbose format
         if result.stdout:
-            print(f"<stdout> {result.stdout.strip()}")
+            print(f"| <stdout> {result.stdout.strip()}")
         if result.stderr:
-            print(f"<stderr> {result.stderr.strip()}")
+            print(f"| <stderr> {result.stderr.strip()}")
         if result.returncode != 0:
-            print(f"<exit_code> {result.returncode}")
+            print(f"| <exit_code> {result.returncode}")
 
         print()
 
