@@ -20,6 +20,7 @@ import test_skeleton, prepare_skeleton
 
 @click.group()
 @click.pass_context
+@ci_lib.safe_ci_function
 def main(ctx):
     """Skeleton Example Project CI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
