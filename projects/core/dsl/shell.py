@@ -75,19 +75,21 @@ def run(
 
         # Print output in verbose format
         if result.stdout:
-            if log_stdout:
+            if stdout_dest:
+                logger.info(f"| <stdout saved into {stdout_dest}>")
+            elif log_stdout:
                 logger.info(f"| <stdout> {result.stdout.strip()}")
             else:
-                logger.info(f"| <stdout not logged>")
+                logger.info("| <stdout not captured>")
 
         if result.stderr:
             if log_stderr:
                 logger.info(f"| <stderr> {result.stderr.strip()}")
             else:
-                logger.info(f"| <stderr not logged>")
+                logger.info("| <stderr not captured>")
 
         if not (result.stdout or result.stderr):
-            logger.info(f"| <no output>")
+            logger.info("| <no output>")
 
         if result.returncode != 0:
             logger.info(f"| <exit_code> {result.returncode}")
@@ -118,7 +120,8 @@ def run(
 
 def mkdir(path, *, parents=True, exists_ok=True):
     """Create a directory with default arguments"""
-    logger.info(f"== shell == ")
+
+    logger.info("== shell == ")
     logger.info(f"| <mkdir> {path}")
 
     if not isinstance(path, Path):

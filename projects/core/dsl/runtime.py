@@ -135,6 +135,7 @@ def execute_tasks(function_args: dict = None):
 
             # Re-raise original error if normal tasks failed
             if execution_error:
+                log_completion_banner(function_args, status=f"COMPLETED ({execution_error.__class__.__name__})")
                 raise execution_error
 
             # Log completion banner if execution was successful
