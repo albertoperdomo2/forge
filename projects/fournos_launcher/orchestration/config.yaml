@@ -1,3 +1,7 @@
+vaults:
+- psap-forge-ci
+
+
 cluster:
   name: totor
 ci_job:
@@ -7,3 +11,7 @@ ci_job:
 
 fournos:
   namespace: psap-automation
+  kubeconfig:
+    vault:
+      name: psap-forge-ci
+      key: kubeconfig
