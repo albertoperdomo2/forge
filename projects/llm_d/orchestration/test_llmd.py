@@ -24,4 +24,4 @@ def test(_cfg):
 
     name = config.project.get_config("tests.llmd.flavors")
 
-    capture_isvc_state(_cfg.name, _cfg.ns)
+    capture_isvc_state(_cfg.name, namespace=_cfg.ns)
