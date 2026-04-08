@@ -29,11 +29,15 @@ def prepare_env():
 
 
 def submit_job():
+    overrides = {}
+    overrides.update(config.project.get_config("overrides"))
+    overrides.update(config.project.get_config("extra_overrides"))
+
     submit_and_wait(
       cluster_name=config.project.get_config("cluster.name"),
       project=config.project.get_config("ci_job.project"),
       args=config.project.get_config("ci_job.args"),
-      variables_overrides=config.project.get_config("overrides"),
+      variables_overrides=overrides,
       namespace=config.project.get_config("fournos.namespace"),
     )
 
