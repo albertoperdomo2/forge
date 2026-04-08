@@ -15,6 +15,7 @@ from typing import List
 import projects.core.library.env as env
 from projects.core.library.run import SignalError
 from .log import log_execution_banner, log_completion_banner, logger
+from .context import create_task_parameters
 
 # Import from task.py to avoid circular imports
 from .task import _task_registry, _task_results, ConditionError, RetryFailure
@@ -23,12 +24,13 @@ from .task import _task_registry, _task_results, ConditionError, RetryFailure
 class TaskExecutionError(Exception):
     """Custom exception that wraps task execution failures with context"""
 
-    def __init__(self, task_name: str, task_description: str, original_exception: Exception, task_args: dict = None, task_location: str = None, artifact_dir: str = None):
+    def __init__(self, task_name: str, task_description: str, original_exception: Exception, task_args: dict = None, task_location: str = None, artifact_dir: str = None, task_context: dict = None):
         self.task_name = task_name
         self.task_description = task_description
         self.original_exception = original_exception
         self.task_args = task_args
         self.task_location = task_location
+        self.task_context = task_context
         self.artifact_dir = artifact_dir
         tb = original_exception.__traceback__
 
@@ -71,6 +73,9 @@ def execute_tasks(function_args: dict = None):
         args = types.SimpleNamespace(**(function_args or {}))
         args.artifact_dir = env.ARTIFACT_DIR
 
+        # Create a shared context that persists across all tasks
+        shared_context = types.SimpleNamespace()
+
         # Create _meta directory for metadata files
         meta_dir = env.ARTIFACT_DIR / "_meta"
         meta_dir.mkdir(exist_ok=True)
@@ -95,7 +100,7 @@ def execute_tasks(function_args: dict = None):
             # Execute normal tasks
             try:
                 for task_info in normal_tasks:
-                    _execute_single_task(task_info, args)
+                    _execute_single_task(task_info, args, shared_context)
             except (KeyboardInterrupt, SignalError):
                 logger.info("")
                 logger.fatal("==> INTERRUPTED: Received KeyboardInterrupt (Ctrl+C)")
@@ -119,7 +124,7 @@ def execute_tasks(function_args: dict = None):
             # Always execute "always" tasks
             try:
                 for task_info in always_tasks:
-                    _execute_single_task(task_info, args)
+                    _execute_single_task(task_info, args, shared_context)
             except Exception as e:
                 # If normal tasks succeeded but always task failed, raise always task error
                 if execution_error is None:
@@ -142,7 +147,7 @@ def execute_tasks(function_args: dict = None):
             file_handler.close()
 
 
-def _execute_single_task(task_info, args):
+def _execute_single_task(task_info, args, shared_context):
     """Execute a single task with condition checking"""
     task_name = task_info['name']
     task_func = task_info['func']
@@ -172,9 +177,19 @@ def _execute_single_task(task_info, args):
 
     # Execute the task
     try:
-        task_status["ret"] = task_func(args)
+        # Create readonly args and mutable context
+        readonly_args, context = create_task_parameters(args, shared_context)
+
+        # Call task with readonly args and mutable context
+        task_status["ret"] = task_func(readonly_args, context)
         if task_status["ret"] is not None:
             logger.info(f"<task returned value> {task_status['ret']}")
+
+        # Store context values back into shared_context for access by subsequent tasks
+        # This allows tasks to communicate through context without polluting args
+        for attr_name, attr_value in vars(context).items():
+            if not attr_name.startswith('_'):
+                setattr(shared_context, attr_name, attr_value)
 
     except (KeyboardInterrupt, SignalError):
         raise
@@ -194,6 +209,7 @@ def _execute_single_task(task_info, args):
             task_description=task_func.__doc__ or 'No description',
             original_exception=e,
             task_args=vars(args) if hasattr(args, '__dict__') else None,
+            task_context=vars(context) if hasattr(context, '__dict__') else None,
             task_location=task_location,
             artifact_dir=str(env.ARTIFACT_DIR),
         )

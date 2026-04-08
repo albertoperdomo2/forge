@@ -47,8 +47,8 @@ def run(
         CommandResult with execution details
     """
     # Print command in verbose format
-    logger.info("==")
-    logger.info(f"<command> {command}")
+    logger.info("== command == ")
+    logger.info(f"| <command> {command}")
 
     try:
         result = subprocess.run(
@@ -76,24 +76,23 @@ def run(
         # Print output in verbose format
         if result.stdout:
             if log_stdout:
-                logger.info(f"<stdout> {result.stdout.strip()}")
+                logger.info(f"| <stdout> {result.stdout.strip()}")
             else:
-                logger.info(f"<stdout not logged>")
+                logger.info(f"| <stdout not logged>")
 
         if result.stderr:
             if log_stderr:
-                logger.info(f"<stderr> {result.stderr.strip()}")
+                logger.info(f"| <stderr> {result.stderr.strip()}")
             else:
-                logger.info(f"<stderr not logged>")
+                logger.info(f"| <stderr not logged>")
 
         if not (result.stdout or result.stderr):
-            logger.info(f"<no output>")
+            logger.info(f"| <no output>")
 
         if result.returncode != 0:
-            logger.info(f"<exit_code> {result.returncode}")
+            logger.info(f"| <exit_code> {result.returncode}")
 
         logger.info("==")
-        logger.info("")
 
         if check and result.returncode != 0:
             # Create a more informative error message
@@ -119,12 +118,15 @@ def run(
 
 def mkdir(path, *, parents=True, exists_ok=True):
     """Create a directory with default arguments"""
-    logger.info(f"<shell> mkdir {path}")
+    logger.info(f"== shell == ")
+    logger.info(f"| <mkdir> {path}")
 
     if not isinstance(path, Path):
         path = Path(path)
 
     if not path.is_absolute():
         path = env.ARTIFACT_DIR / path
+
+    logger.info("==")
 
     return path.mkdir(parents=parents, exist_ok=exists_ok)

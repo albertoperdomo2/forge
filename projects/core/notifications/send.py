@@ -167,13 +167,13 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
                 head = DEFAULT_HEAD
 
             message += f"""
-• {get_link("Failure indicator", "FAILURES", is_raw_file=True)}*:
+• {get_link("Failure indicator", "FAILURES", is_raw_file=True)}:
 ```
 {"".join(lines[:head])}
 {"[...]" if len(lines) > head else ""}
 ```
 """ if lines else """
-• Failure indicator*: Empty.
+• Failure indicator: Empty.
 """
 
     message += "• " + get_link("Execution logs", "run.log", is_raw_file=True)

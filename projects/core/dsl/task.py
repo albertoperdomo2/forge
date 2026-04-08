@@ -129,12 +129,19 @@ def task_only(decorator_func):
     """
     @functools.wraps(decorator_func)
     def wrapper(*args, **kwargs):
-        # Check if this is a direct application to a function (simple decorator)
-        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]) and hasattr(args[0], '__name__'):
+        # Use the signature of decorator_func to determine if it's a simple decorator or factory
+        sig = inspect.signature(decorator_func)
+        params = list(sig.parameters.values())
+
+        # Check if this is a simple decorator that takes a single function argument
+        if (len(params) == 1 and
+            params[0].annotation in (inspect.Parameter.empty, 'func', callable) and
+            len(args) == 1 and len(kwargs) == 0 and
+            callable(args[0]) and hasattr(args[0], '__name__')):
             # Simple decorator case: @always
             func = args[0]
-            name = getattr(decorator_func, "name", decorator_func.__name__)
-            _ensure_is_task(func, name)
+            _ensure_is_task(func, decorator_func.__name__)
+
             return decorator_func(func)
         else:
             # Decorator factory case: @retry(attempts=3) or @when(condition)

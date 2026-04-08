@@ -5,17 +5,15 @@ LLMInferenceService state capture using task-based DSL
 Replaces llmd_capture_isvc_state Ansible role
 """
 
-import sys
-import logging
 from datetime import datetime
 from pathlib import Path
 
 from projects.core.library import env
-from projects.core.dsl import task, retry, when, always, execute_tasks, clear_tasks, shell
-from projects.core.dsl.cli import create_dynamic_parser
+from projects.core.dsl import task, retry, when, always, execute_tasks, clear_tasks, shell, toolbox
 
 def run(
     llmisvc_name: str,
+    *,
     namespace: str = ""
 ):
     """
@@ -31,7 +29,7 @@ def run(
 
 
 @task
-def setup_directories(args):
+def setup_directories(args, context):
     """Create the artifacts directory"""
 
     shell.mkdir("artifacts")
@@ -39,31 +37,31 @@ def setup_directories(args):
 
 
 @task
-def get_current_timestamp(args):
+def get_current_timestamp(args, context):
     """Get current timestamp"""
 
     result = shell.run("date -Iseconds")
-    args.capture_timestamp = result.stdout.strip()
-    return f"Timestamp: {args.capture_timestamp}"
+    context.capture_timestamp = result.stdout.strip()
+    return f"Timestamp: {context.capture_timestamp}"
 
 
 @task
-def determine_target_namespace(args):
+def determine_target_namespace(args, context):
     """Get current namespace if not specified"""
     if args.namespace:
-        args.target_namespace = args.namespace
-        return f"Using specified namespace: {args.target_namespace}"
+        context.target_namespace = args.namespace
+        return f"Using specified namespace: {context.target_namespace}"
 
     result = shell.run("oc project -q")
-    args.target_namespace = result.stdout.strip()
-    return f"Using current namespace: {args.target_namespace}"
+    context.target_namespace = result.stdout.strip()
+    return f"Using current namespace: {context.target_namespace}"
 
 
 @task
-def capture_llminferenceservice_yaml(args):
+def capture_llminferenceservice_yaml(args, context):
     """Capture the LLMInferenceService definition"""
     shell.run(
-        f'oc get llminferenceservice {args.llmisvc_name} -n {args.target_namespace} -oyaml',
+        f'oc get llminferenceservice {args.llmisvc_name} -n {context.target_namespace} -oyaml',
         stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.yaml",
         check=False
     )
@@ -71,10 +69,10 @@ def capture_llminferenceservice_yaml(args):
 
 
 @task
-def capture_llminferenceservice_json(args):
+def capture_llminferenceservice_json(args, context):
     """Capture LLMInferenceService status in JSON for easier parsing"""
     shell.run(
-        f'oc get llminferenceservice {args.llmisvc_name} -n {args.target_namespace} -ojson',
+        f'oc get llminferenceservice {args.llmisvc_name} -n {context.target_namespace} -ojson',
         stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.json",
         check=False
     )
@@ -82,10 +80,10 @@ def capture_llminferenceservice_json(args):
 
 
 @task
-def capture_related_pods_yaml(args):
+def capture_related_pods_yaml(args, context):
     """Capture all pods related to the LLMInferenceService"""
     shell.run(
-        f'oc get pods -l "app.kubernetes.io/name={args.llmisvc_name}" -n {args.target_namespace} -oyaml',
+        f'oc get pods -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -oyaml',
         stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.pods.yaml",
         check=False
     )
@@ -93,10 +91,10 @@ def capture_related_pods_yaml(args):
 
 
 @task
-def capture_related_deployments(args):
+def capture_related_deployments(args, context):
     """Capture deployments related to the LLMInferenceService"""
     shell.run(
-        f'oc get deployments -l "app.kubernetes.io/name={args.llmisvc_name}" -n {args.target_namespace} -oyaml',
+        f'oc get deployments -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -oyaml',
         stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.deployments.yaml",
         check=False
     )
@@ -104,10 +102,10 @@ def capture_related_deployments(args):
 
 
 @task
-def capture_related_replicasets(args):
+def capture_related_replicasets(args, context):
     """Capture replicasets related to the LLMInferenceService"""
     shell.run(
-        f'oc get replicasets -l "app.kubernetes.io/name={args.llmisvc_name}" -n {args.target_namespace} -oyaml',
+        f'oc get replicasets -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -oyaml',
         stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.replicasets.yaml",
         check=False
     )
@@ -115,10 +113,10 @@ def capture_related_replicasets(args):
 
 
 @task
-def capture_namespace_pods(args):
+def capture_namespace_pods(args, context):
     """Capture all pods in the namespace with wide output"""
     shell.run(
-        f'oc get pods -owide -n {args.target_namespace}',
+        f'oc get pods -owide -n {context.target_namespace}',
         stdout_dest=args.artifact_dir / "artifacts/namespace.pods.status",
         check=False
     )
@@ -126,10 +124,10 @@ def capture_namespace_pods(args):
 
 
 @task
-def capture_namespace_services(args):
+def capture_namespace_services(args, context):
     """Capture all services in the namespace"""
     shell.run(
-        f'oc get svc -n {args.target_namespace}',
+        f'oc get svc -n {context.target_namespace}',
         stdout_dest=args.artifact_dir / "artifacts/namespace.services.status",
         check=False
     )
@@ -137,10 +135,10 @@ def capture_namespace_services(args):
 
 
 @task
-def capture_servicemonitors(args):
+def capture_servicemonitors(args, context):
     """Capture ServiceMonitors for monitoring"""
     shell.run(
-        f'oc get servicemonitor -l "app.kubernetes.io/name={args.llmisvc_name}" -n {args.target_namespace} -oyaml',
+        f'oc get servicemonitor -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -oyaml',
         stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.servicemonitors.yaml",
         check=False
     )
@@ -148,10 +146,10 @@ def capture_servicemonitors(args):
 
 
 @task
-def capture_podmonitors(args):
+def capture_podmonitors(args, context):
     """Capture PodMonitors for monitoring"""
     shell.run(
-        f'oc get podmonitor -l "app.kubernetes.io/name={args.llmisvc_name}" -n {args.target_namespace} -oyaml',
+        f'oc get podmonitor -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -oyaml',
         stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.podmonitors.yaml",
         check=False,
     )
@@ -159,11 +157,11 @@ def capture_podmonitors(args):
 
 
 @task
-def capture_pod_logs(args):
+def capture_pod_logs(args, context):
     """Capture logs from LLMInferenceService pods"""
     # Get list of pod names
     result = shell.run(
-        f'oc get pods -l "app.kubernetes.io/name={args.llmisvc_name}" -n {args.target_namespace} -o jsonpath="{{.items[*].metadata.name}}"',
+        f'oc get pods -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -o jsonpath="{{.items[*].metadata.name}}"',
         check=False,
         log_stdout=False,
     )
@@ -181,7 +179,7 @@ def capture_pod_logs(args):
 
             # Get logs for this pod
             log_result = shell.run(
-                f'oc logs {pod_name} -n {args.target_namespace} --all-containers=true',
+                f'oc logs {pod_name} -n {context.target_namespace} --all-containers=true',
                 check=False,
                 log_stdout=False,
             )
@@ -192,11 +190,11 @@ def capture_pod_logs(args):
 
 
 @task
-def capture_pod_previous_logs(args):
+def capture_pod_previous_logs(args, context):
     """Capture previous logs from LLMInferenceService pods if available"""
     # Get list of pod names
     result = shell.run(
-        f'oc get pods -l "app.kubernetes.io/name={args.llmisvc_name}" -n {args.target_namespace} -o jsonpath="{{.items[*].metadata.name}}"',
+        f'oc get pods -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -o jsonpath="{{.items[*].metadata.name}}"',
         check=False
     )
 
@@ -213,7 +211,7 @@ def capture_pod_previous_logs(args):
 
             # Get previous logs for this pod
             log_result = shell.run(
-                f'oc logs {pod_name} -n {args.target_namespace} --previous --all-containers=true',
+                f'oc logs {pod_name} -n {context.target_namespace} --previous --all-containers=true',
                 check=False,
                 log_stdout=False,
             )
@@ -224,10 +222,10 @@ def capture_pod_previous_logs(args):
 
 
 @task
-def capture_llminferenceservice_describe(args):
+def capture_llminferenceservice_describe(args, context):
     """Capture describe output for the LLMInferenceService"""
     shell.run(
-        f'oc describe llminferenceservice {args.llmisvc_name} -n {args.target_namespace}',
+        f'oc describe llminferenceservice {args.llmisvc_name} -n {context.target_namespace}',
         stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.describe.txt",
         check=False
     )
@@ -235,11 +233,11 @@ def capture_llminferenceservice_describe(args):
 
 
 @task
-def capture_pods_describe(args):
+def capture_pods_describe(args, context):
     """Capture describe output for related pods"""
     # Get list of pod names
     result = shell.run(
-        f'oc get pods -l "app.kubernetes.io/name={args.llmisvc_name}" -n {args.target_namespace} -o jsonpath="{{.items[*].metadata.name}}"',
+        f'oc get pods -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -o jsonpath="{{.items[*].metadata.name}}"',
         check=False
     )
 
@@ -256,7 +254,7 @@ def capture_pods_describe(args):
 
             # Get describe output for this pod
             describe_result = shell.run(
-                f'oc describe pod {pod_name} -n {args.target_namespace}',
+                f'oc describe pod {pod_name} -n {context.target_namespace}',
                 log_stdout=False,
                 check=False
             )
@@ -266,26 +264,8 @@ def capture_pods_describe(args):
     return f"Pod describe output captured for {len(pod_names)} pods"
 
 
-def main():
-    """CLI entrypoint with dynamic argument discovery"""
-
-    # Create parser dynamically from function signature
-    parser = create_dynamic_parser(
-        capture_isvc_state,
-        positional_args=['llmisvc_name']
-    )
-    args = parser.parse_args()
-
-    # Convert args to kwargs for function call
-    kwargs = vars(args)
-    env.init(daily_artifact_dir=True)
-    try:
-        capture_isvc_state(**kwargs)
-    except KeyboardInterrupt:
-        sys.exit(1)
-    except Exception as e:
-        logging.exception(f"Error: {e}")
-        sys.exit(1)
+# Create the main function using the toolbox library
+main = toolbox.create_toolbox_main(run)
 
 
 if __name__ == "__main__":

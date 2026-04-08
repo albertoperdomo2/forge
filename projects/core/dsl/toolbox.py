@@ -38,40 +38,19 @@ def _get_positional_args(func: Callable) -> List[str]:
     return positional_args
 
 
-def run_toolbox_command(
-    command_func: Callable,
-    positional_args: Optional[List[str]] = None,
-    success_message: str = "✅ Command completed successfully",
-    interrupted_message: str = "\n🚫 Operation interrupted by user",
-    error_prefix: str = "❌ Error"
-) -> None:
+def run_toolbox_command(command_func: Callable) -> None:
     """
     Run a toolbox command with standard argument parsing and error handling.
 
     Args:
         command_func: The main function to execute (e.g., run, submit_and_wait, etc.)
-        positional_args: List of argument names to treat as positional (auto-detected if None)
-        success_message: Message to display on successful completion
-        interrupted_message: Message to display on keyboard interrupt
-        error_prefix: Prefix for error messages
 
-    Examples:
-        # Auto-detect positional args from function signature
+    Example:
+        # Auto-detect everything from function signature
         run_toolbox_command(run)
-
-        # Explicit positional args
-        run_toolbox_command(run, ['cluster_name', 'project'])
-
-        # Custom messages
-        run_toolbox_command(
-            command_func=run,
-            success_message="✅ FOURNOS job completed successfully",
-            error_prefix="❌ FOURNOS Error"
-        )
     """
-    # Auto-detect positional args if not provided
-    if positional_args is None:
-        positional_args = _get_positional_args(command_func)
+    # Auto-detect positional args from function signature
+    positional_args = _get_positional_args(command_func)
 
     # Create parser dynamically from function signature
     parser = create_dynamic_parser(
@@ -87,9 +66,9 @@ def run_toolbox_command(
     try:
         # Execute the command function
         command_func(**kwargs)
-        print(success_message)
+        print("✅ Command completed successfully")
     except KeyboardInterrupt:
-        print(interrupted_message)
+        print("\n🚫 Operation interrupted by user")
         sys.exit(1)
     except Exception as e:
         # Check if this is a TaskExecutionError to provide better formatting
@@ -102,7 +81,7 @@ def run_toolbox_command(
 
         else:
             # Show the full exception with stack trace
-            logging.exception(f"{error_prefix}: {e}")
+            logging.exception(f"❌ Error: {e}")
         sys.exit(1)
 
 
@@ -125,26 +104,21 @@ def get_task_execution_error(e):
     yield f"~~ ARGS:"
     for line in yaml.dump(clean_args(e.task_args), default_flow_style=False, sort_keys=False).splitlines():
         yield f"~~     {line}"
+    yield f"~~ CONTEXT:"
+    for line in yaml.dump(clean_args(e.task_context), default_flow_style=False, sort_keys=False).splitlines():
+        yield f"~~     {line}"
     yield "~~"
     yield f"~~ EXCEPTION: {e.original_exception.__class__.__name__}"
     yield f"~~     {e.original_exception}"
     yield "x" * 80
 
 
-def create_toolbox_main(
-    command_func: Callable,
-    positional_args: Optional[List[str]] = None,
-    success_message: str = "✅ Command completed successfully",
-    **kwargs
-) -> Callable:
+def create_toolbox_main(command_func: Callable) -> Callable:
     """
     Create a main() function for a toolbox command.
 
     Args:
         command_func: The main function to execute
-        positional_args: List of argument names to treat as positional (auto-detected if None)
-        success_message: Message to display on successful completion
-        **kwargs: Additional arguments to pass to run_toolbox_command
 
     Returns:
         A main() function that can be used as the entry point
@@ -154,25 +128,14 @@ def create_toolbox_main(
             # Command implementation
             return execute_tasks(locals())
 
-        # Auto-detect positional args from signature (cluster_name, project)
+        # Create main function with automatic argument detection
         main = create_toolbox_main(run)
-
-        # Or with custom configuration
-        main = create_toolbox_main(
-            run,
-            success_message="✅ FOURNOS job completed successfully"
-        )
 
         if __name__ == "__main__":
             main()
     """
     def main():
         """CLI entrypoint with dynamic argument discovery"""
-        run_toolbox_command(
-            command_func=command_func,
-            positional_args=positional_args,
-            success_message=success_message,
-            **kwargs
-        )
+        run_toolbox_command(command_func)
 
     return main

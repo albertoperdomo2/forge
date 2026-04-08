@@ -46,9 +46,10 @@ def _display_error_summary(e: Exception) -> None:
         summary_lines.append("")
         summary_lines.append("---")
 
+    # mind that any thing below a '---\n' will be cut in the notification
+
     # Add the full stacktrace
     summary_lines.append("--- 📍 STACKTRACE")
-    summary_lines.append("---")
     summary_lines.append("")
 
     full_traceback = traceback.format_exc().splitlines()
@@ -94,6 +95,29 @@ def safe_ci_command(command_func):
         try:
             exit_code = command_func(*args, **kwargs)
             sys.exit(exit_code)
+        except Exception as e:
+            handle_ci_exception(e)
+            sys.exit(1)
+
+    # Preserve original function metadata
+    wrapper.__name__ = command_func.__name__
+    wrapper.__doc__ = command_func.__doc__
+    wrapper.__module__ = command_func.__module__
+    wrapper.__qualname__ = command_func.__qualname__
+
+    return wrapper
+
+def safe_ci_function(command_func):
+    """
+    Decorator/wrapper for CI commands to provide consistent error handling.
+    This version does NOT exit on success.
+
+    Args:
+        command_func: Function to execute safely
+    """
+    def wrapper(*args, **kwargs):
+        try:
+            return command_func(*args, **kwargs)
         except Exception as e:
             handle_ci_exception(e)
             sys.exit(1)

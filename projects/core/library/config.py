@@ -286,6 +286,22 @@ We will get rid of that when we remove the JumpCI.
         return copy.deepcopy(new_value)
 
 
+    def filter_out_used_overrides(self):
+        """
+        Remove the config fields that apply to the current config.
+        Keep only the overrides that do not apply.
+        """
+
+        overrides = self.get_config("overrides", {}) or {}
+        new_overrides = {}
+        for key, value in overrides.items():
+            if self.has_config(key):
+                continue
+            new_overrides[key] = value
+
+        self.set_config("overrides", new_overrides, print=False)
+
+
 def __get_config_path(orchestration_dir):
     config_file_src = orchestration_dir / "config.yaml"
     config_path_final = pathlib.Path(env.ARTIFACT_DIR / "config.yaml")

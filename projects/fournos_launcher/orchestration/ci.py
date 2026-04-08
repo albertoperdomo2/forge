@@ -22,6 +22,7 @@ from projects.fournos_launcher.orchestration import utils
 
 @click.group()
 @click.pass_context
+@ci_lib.safe_ci_function
 def main(ctx):
     """FOURNOS Project launcher CI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
@@ -35,6 +36,7 @@ def main(ctx):
 def submit(ctx):
     """Submit a CI job to FOURNOS CI entrypoint."""
     return submit_mod.submit_job()
+
 
 if __name__ == "__main__":
     main()
