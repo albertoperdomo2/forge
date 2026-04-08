@@ -76,67 +76,74 @@ def execute_tasks(function_args: dict = None):
         meta_dir.mkdir(exist_ok=True)
 
         # Setup file logging first so all output is captured
-        log_file = _setup_execution_logging(env.ARTIFACT_DIR)
+        log_file, file_handler = _setup_execution_logging(env.ARTIFACT_DIR)
 
-        # Log execution banner (now captured in file)
-        log_execution_banner(function_args, log_file)
-
-        # Generate metadata files
-        _generate_execution_metadata(function_args, caller_frame, meta_dir)
-        _generate_restart_script(function_args, caller_frame, meta_dir)
-
-        # Separate normal tasks from always tasks
-        normal_tasks = [t for t in _task_registry if not t.get('always_execute', False)]
-        always_tasks = [t for t in _task_registry if t.get('always_execute', False)]
-
-        execution_error = None
-
-        # Execute normal tasks
         try:
-            for task_info in normal_tasks:
-                _execute_single_task(task_info, args)
-        except (KeyboardInterrupt, SignalError):
-            logger.info("")
-            logger.fatal("==> INTERRUPTED: Received KeyboardInterrupt (Ctrl+C)")
-            logger.info("==> Exiting...")
-            # Show completion banner with interrupted status
-            log_completion_banner(function_args, status="INTERRUPTED")
-            sys.exit(1)
+            # Log execution banner (now captured in file)
+            log_execution_banner(function_args, log_file)
 
-        except TaskExecutionError:
-            # Re-raise the TaskExecutionError to preserve context
-            raise
-        except ConditionError as e:
-            logger.info("")
-            logger.exception(f"==> CONDITION Exception {e}")
-            sys.exit(1)
-        except RetryFailure as e:
-            logger.info("")
-            logger.fatal(f"==> RETRY failure {e}")
-            sys.exit(1)
+            # Generate metadata files
+            _generate_execution_metadata(function_args, caller_frame, meta_dir)
+            _generate_restart_script(function_args, caller_frame, meta_dir)
 
-        except Exception as e:
-            execution_error = e
-            # catch and execute the ALWAYS tasks
+            # Separate normal tasks from always tasks
+            normal_tasks = [t for t in _task_registry if not t.get('always_execute', False)]
+            always_tasks = [t for t in _task_registry if t.get('always_execute', False)]
 
-        # Always execute "always" tasks
-        try:
-            for task_info in always_tasks:
-                _execute_single_task(task_info, args)
-        except Exception as e:
-            # If normal tasks succeeded but always task failed, raise always task error
-            if execution_error is None:
+            execution_error = None
+
+            # Execute normal tasks
+            try:
+                for task_info in normal_tasks:
+                    _execute_single_task(task_info, args)
+            except (KeyboardInterrupt, SignalError):
+                logger.info("")
+                logger.fatal("==> INTERRUPTED: Received KeyboardInterrupt (Ctrl+C)")
+                logger.info("==> Exiting...")
+                # Show completion banner with interrupted status
+                log_completion_banner(function_args, status="INTERRUPTED")
+                sys.exit(1)
+
+            except TaskExecutionError:
+                # Re-raise the TaskExecutionError to preserve context
                 raise
-            # If both failed, log always task error but preserve original error
-            logger.error(f"==> ALWAYS TASK ALSO FAILED: {e}")
-            logger.info("")
+            except ConditionError as e:
+                logger.info("")
+                logger.exception(f"==> CONDITION Exception {e}")
+                sys.exit(1)
+            except RetryFailure as e:
+                logger.info("")
+                logger.fatal(f"==> RETRY failure {e}")
+                sys.exit(1)
 
-        # Re-raise original error if normal tasks failed
-        if execution_error:
-            raise execution_error
+            except Exception as e:
+                execution_error = e
+                # catch and execute the ALWAYS tasks
 
-        # Log completion banner if execution was successful
-        log_completion_banner(function_args)
+            # Always execute "always" tasks
+            try:
+                for task_info in always_tasks:
+                    _execute_single_task(task_info, args)
+            except Exception as e:
+                # If normal tasks succeeded but always task failed, raise always task error
+                if execution_error is None:
+                    raise
+                # If both failed, log always task error but preserve original error
+                logger.error(f"==> ALWAYS TASK ALSO FAILED: {e}")
+                logger.info("")
+
+            # Re-raise original error if normal tasks failed
+            if execution_error:
+                raise execution_error
+
+            # Log completion banner if execution was successful
+            log_completion_banner(function_args)
+
+        finally:
+            # Clean up the file handler to prevent leaks
+            dsl_logger = logging.getLogger('projects.core.dsl')
+            dsl_logger.removeHandler(file_handler)
+            file_handler.close()
 
 
 def _execute_single_task(task_info, args):
@@ -248,7 +255,7 @@ def _setup_execution_logging(artifact_dir):
     dsl_logger = logging.getLogger('projects.core.dsl')
     dsl_logger.addHandler(file_handler)
 
-    return log_file
+    return log_file, file_handler
 
 
 def _generate_restart_script(function_args: dict, caller_frame, meta_dir):
