@@ -28,6 +28,127 @@ class ConditionError(Exception): pass
 
 class RetryFailure(Exception): pass
 
+
+def _ensure_is_task(func, decorator_name):
+    """
+    Validate that a function is already decorated with @task.
+
+    Args:
+        func: The function to check
+        decorator_name: Name of the decorator calling this (for error messages)
+
+    Raises:
+        TypeError: If the function is not a task
+    """
+
+    if not hasattr(func, 'is_dsl_task') or not func.is_dsl_task:
+        raise TypeError(
+            f"@{decorator_name} can only be applied to functions decorated with @task. \n"
+            f"Function '{func.__name__}' is not a task. \n"
+            f"Put '@task' BELOW '@{decorator_name}' in your decorator stack."
+        )
+    return True
+
+
+def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
+    """
+    Execute a function with retry logic.
+
+    Args:
+        func: The function to execute
+        attempts: Number of retry attempts
+        delay: Initial delay between retries in seconds
+        backoff: Multiplier for delay on each retry
+        *args, **kwargs: Arguments to pass to the function
+
+    Returns:
+        Result of the function execution
+
+    Raises:
+        RetryFailure: If all retry attempts fail
+    """
+    retry_config = getattr(func, '_retry_config', {})
+    retry_attempts = retry_config.get('attempts', attempts)
+    retry_delay = retry_config.get('delay', delay)
+    retry_backoff = retry_config.get('backoff', backoff)
+
+    last_exception = None
+    current_delay = retry_delay
+
+    for attempt in range(retry_attempts):
+        try:
+            return func(*args, **kwargs)
+        except KeyboardInterrupt:
+            # Don't retry on keyboard interrupt, just re-raise immediately
+            raise
+        except Exception as e:
+            last_exception = e
+            if attempt < retry_attempts - 1:  # Not the last attempt
+                logger.info("")
+                logger.info("~" * LINE_WIDTH)
+                logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
+                logger.warning(f"~~ FAILED ATTEMPT #{attempt + 1}/{retry_attempts}")
+
+                logger.info(f"~~ RETRY in {current_delay:.0f}s")
+                logger.info("~" * LINE_WIDTH)
+                time.sleep(current_delay)
+                logger.info("")
+
+                current_delay *= retry_backoff
+            else:
+                logger.error(f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts}")
+                logger.info("")
+                raise RetryFailure(f"All {retry_attempts} attemps failed for task {func.__name__} : {func.__doc__ or 'No description'}")
+
+    # Re-raise the last exception
+    raise last_exception
+
+
+def task_only(decorator_func):
+    """
+    Decorator for decorator functions that should only be applied to @task functions.
+
+    This ensures that decorators like @always, @when, @retry can only be applied
+    to functions that are already decorated with @task.
+
+    Handles both simple decorators and decorator factories:
+
+    Simple decorator usage:
+        @task_only
+        def always(func):
+            func._always_execute = True
+            return func
+
+    Decorator factory usage:
+        @task_only
+        def retry(attempts=3, delay=1):
+            def decorator(func):
+                # decorator logic here
+                return func
+            return decorator
+    """
+    @functools.wraps(decorator_func)
+    def wrapper(*args, **kwargs):
+        # Check if this is a direct application to a function (simple decorator)
+        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]) and hasattr(args[0], '__name__'):
+            # Simple decorator case: @always
+            func = args[0]
+            name = getattr(decorator_func, "name", decorator_func.__name__)
+            _ensure_is_task(func, name)
+            return decorator_func(func)
+        else:
+            # Decorator factory case: @retry(attempts=3) or @when(condition)
+            # Return a decorator that validates when applied to a function
+            def inner_decorator(func):
+                _ensure_is_task(func, decorator_func.__name__)
+                # Call the original decorator factory with the parameters,
+                # then apply the resulting decorator to the function
+                actual_decorator = decorator_func(*args, **kwargs)
+                return actual_decorator(func)
+            return inner_decorator
+
+    return wrapper
+
 class TaskResult:
     """Container for task results that can be referenced in conditions"""
     def __init__(self, task_name: str):
@@ -77,7 +198,8 @@ def task(func):
         except KeyboardInterrupt:
             raise
         except Exception as e:
-            logger.exception(f"==> TASK FAILED: {e.__class__.__name__}: {e}")
+            logger.error(f"==> TASK FAILED: {task_name}: {func.__doc__ or 'No description'}")
+            logger.error(f"==> {e.__class__.__name__}: {e}")
             logger.info("")
             raise
 
@@ -106,9 +228,12 @@ def task(func):
     return wrapper
 
 
+@task_only
 def when(condition):
     """
     Conditional execution decorator with lazy evaluation
+
+    Must be applied to a function that is already decorated with @task.
 
     Args:
         condition: A callable (lambda) that returns True/False
@@ -125,9 +250,12 @@ def when(condition):
     return decorator
 
 
+@task_only
 def always(func):
     """
     Mark a task to always execute, even if previous tasks fail
+
+    Must be applied to a function that is already decorated with @task.
     """
     func._always_execute = True
     return func
@@ -137,11 +265,15 @@ def retry(attempts=3, delay=1, backoff=1.0):
     """
     Simple retry decorator
 
+    Must be applied to a function that is already decorated with @task.
+
     Args:
         attempts: Number of retry attempts
         delay: Initial delay between retries in seconds
         backoff: Multiplier for delay on each retry
     """
+
+    @task_only
     def decorator(func):
         # Store retry config on function
         func._retry_config = {
@@ -152,44 +284,8 @@ def retry(attempts=3, delay=1, backoff=1.0):
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            retry_config = getattr(func, '_retry_config', {})
-            retry_attempts = retry_config.get('attempts', attempts)
-            retry_delay = retry_config.get('delay', delay)
-            retry_backoff = retry_config.get('backoff', backoff)
-
-            last_exception = None
-            current_delay = retry_delay
-
-            for attempt in range(retry_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except KeyboardInterrupt:
-                    # Don't retry on keyboard interrupt, just re-raise immediately
-                    raise
-                except Exception as e:
-                    last_exception = e
-                    if attempt < retry_attempts - 1:  # Not the last attempt
-                        logger.info("")
-                        logger.info("~" * LINE_WIDTH)
-                        logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
-                        logger.warning(f"~~ FAILED ATTEMPT #{attempt + 1}/{retry_attempts}")
-
-                        logger.info(f"~~ RETRY in {current_delay:.0f}s")
-                        logger.info("~" * LINE_WIDTH)
-                        time.sleep(current_delay)
-                        logger.info("")
-
-                        current_delay *= retry_backoff
-                    else:
-                        logger.error(f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts}")
-                        logger.info("")
-                        raise RetryFailure(f"All {retry_attempts} attemps failed for task {func.__name__} : {func.__doc__ or 'No description'}")
-
-            # Re-raise the last exception
-            raise last_exception
+            return _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs)
 
         return wrapper
+
     return decorator
-
-
-

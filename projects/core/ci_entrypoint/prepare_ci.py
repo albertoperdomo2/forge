@@ -25,6 +25,7 @@ IS_LIGHTWEIGHT_IMAGE = os.environ.get("FORGE_LIGHT_IMAGE")
 
 DEFAULT_REPO_OWNER = "openshift-psap"
 DEFAULT_REPO_NAME = "forge"
+CI_METADATA_DIRNAME = "000__ci_metadata"
 
 class FinishReason(StrEnum):
     SUCCESS = "success"
@@ -231,7 +232,7 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
         # Save to YAML file
         artifact_path = Path(artifact_dir)
         artifact_path.mkdir(parents=True, exist_ok=True)
-        (artifact_path / "_meta").mkdir(parents=True, exist_ok=True)
+        (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
 
         # Parse PR arguments
         config, found_directives = parse_pr_arguments(
@@ -242,7 +243,7 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
             shared_dir=shared_dir
         )
 
-        output_file = artifact_path / "_meta" / "variable_overrides.yaml"
+        output_file = artifact_path / CI_METADATA_DIRNAME / "variable_overrides.yaml"
 
         with open(output_file, 'w') as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=True)
@@ -251,7 +252,7 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
         logger.info(f"Configuration contains {len(config)} override(s)")
 
         # Save directives to text file
-        pr_config_file = artifact_path / "_meta" / "pr_config.txt"
+        pr_config_file = artifact_path / CI_METADATA_DIRNAME / "pr_config.txt"
         with open(pr_config_file, 'w') as f:
             if found_directives:
                 for directive in found_directives:
@@ -378,8 +379,9 @@ def system_prechecks() -> bool:
             timeout=10
         )
         forge_version = result.stdout.strip() if result.returncode == 0 else "git missing"
-        (artifact_path / "_meta" / "forge.git_version").write_text(forge_version + "\n")
-        logger.info(f"Saving FORGE git version into {artifact_path}/_meta/forge.git_version")
+        (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
+        (artifact_path / CI_METADATA_DIRNAME / "forge.git_version").write_text(forge_version + "\n")
+        logger.info(f"Saving FORGE git version into {artifact_path}/{CI_METADATA_DIRNAME}/forge.git_version")
     except Exception as e:
         logger.warning(f"Could not store git versions: {e}")
 
@@ -395,7 +397,7 @@ def system_prechecks() -> bool:
         try:
             # Download PR data
             result = subprocess.run(
-                ["curl", "-sSf", pr_url, "-o", str(artifact_path / "_meta" / "pull_request.json")],
+                ["curl", "-sSf", pr_url, "-o", str(artifact_path / CI_METADATA_DIRNAME / "pull_request.json")],
                 timeout=30
             )
             if result.returncode != 0:
@@ -403,7 +405,7 @@ def system_prechecks() -> bool:
 
             # Download PR comments
             result = subprocess.run(
-                ["curl", "-sSf", pr_comments_url, "-o", str(artifact_path / "_meta" / "pull_request-comments.json")],
+                ["curl", "-sSf", pr_comments_url, "-o", str(artifact_path / CI_METADATA_DIRNAME / "pull_request-comments.json")],
                 timeout=30
             )
             if result.returncode != 0:
@@ -580,8 +582,9 @@ def postchecks(project: str, operation: str, start_time: Optional[float], finish
         with failures_file.open("w") as f:
             for failure_file in sorted(failure_files):
                 try:
-                    f.write(f"{failure_file} | ")
+                    f.write(f"## {failure_file} \n")
                     f.write(failure_file.read_text().strip())
+                    f.write("\n")
                     f.write("\n")
                 except Exception as e:
                     f.write(f"{failure_file} | Error reading file: {e}\n")

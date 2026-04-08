@@ -6,6 +6,7 @@ import os
 
 from projects.core.library import env, config, run
 
+from projects.fournos_launcher.toolbox.submit_and_wait.main import run as submit_and_wait
 
 def filter_out_launcher_overrides():
     """Remove the config fields that apply to FOURNOS, keep only
@@ -29,11 +30,16 @@ def init():
     filter_out_launcher_overrides()
 
 
-def submit():
-    logger.warning(f"Hello Fournos")
+def submit_job():
 
     os.environ["KUBECONFIG"] = str(pathlib.Path(os.environ["PSAP_FORGE_FOURNOS_CI_SECRET_PATH"]) / "kubeconfig")
 
-    run.run("oc get fjobs")
+    submit_and_wait(
+      cluster_name=config.project.get_config("cluster.name"),
+      project=config.project.get_config("ci_job.project"),
+      args=config.project.get_config("ci_job.args"),
+      variables_overrides=config.project.get_config("overrides"),
+      namespace=config.project.get_config("fournos.namespace"),
+    )
 
     return 0

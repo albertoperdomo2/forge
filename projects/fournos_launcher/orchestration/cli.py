@@ -28,7 +28,7 @@ def main(ctx):
 def submit(ctx):
     """Submit a CI job to FOURNOS CI entrypoint."""
 
-    sys.exit(submit_mod.submit())
+    sys.exit(submit_mod.submit_job())
 
 
 if __name__ == "__main__":

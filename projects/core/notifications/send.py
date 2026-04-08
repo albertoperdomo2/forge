@@ -132,13 +132,6 @@ def get_github_notification_message(finish_reason: str, status: str, pr_number: 
 def get_common_message(finish_reason: str, status: str, get_link, get_italics, get_bold):
     message = ""
 
-    if os.environ.get("PERFLAB_CI") == "true":
-        message += get_perflab_ci_extra_header_message(get_link)
-        message += "\n\n"
-    message += f"""\
-{get_bold(status)}
-"""
-
     message  += f"""
 • Link to the {get_link("test results", "", is_dir=True)}.
 """
@@ -151,7 +144,7 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 • No reports index generated...
 """
 
-    if (var_over := pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "_meta" / "pr_config.txt").exists():
+    if (var_over := pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "000__ci_metadata" / "pr_config.txt").exists():
         with open(var_over) as f:
             message += f"""
 {get_bold("Test configuration")}:
@@ -164,29 +157,26 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 • No test configuration (`variable_overrides.yaml`) available.
 """
 
-    if os.environ.get("PERFLAB_CI") == "true":
-        message += get_perflab_ci_extra_footer_message(get_link)
-
-
     if (failures := pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "FAILURES").exists():
         with open(failures) as f:
-            HEAD = 10
+            DEFAULT_HEAD = 10
             lines = f.readlines()
+            try:
+                head = lines.index("---\n")
+            except ValueError:
+                head = DEFAULT_HEAD
 
             message += f"""
-*{get_link("Failure indicator", "FAILURES", is_raw_file=True)}*:
+• {get_link("Failure indicator", "FAILURES", is_raw_file=True)}*:
 ```
-{"".join(lines[:HEAD])}
-{"[...]" if len(lines) > HEAD else ""}
+{"".join(lines[:head])}
+{"[...]" if len(lines) > head else ""}
 ```
-""" if lines else f"""
-*Failure indicator*: Empty. (See {get_link("run.log", "run.log", is_raw_file=True)})
+""" if lines else """
+• Failure indicator*: Empty.
 """
 
-    if os.environ.get("PERFLAB_CI") == "true":
-        message += f"""
-{get_italics("[Test ran on the internal Perflab CI]")}
-"""
+    message += "• " + get_link("Execution logs", "run.log", is_raw_file=True)
 
     return message
 
@@ -375,19 +365,6 @@ def get_ci_link(path, is_raw_file=False, base=None, is_dir=False):
     link = base + (f"/{path}" if path else "") + (suffix if suffix else "")
 
     return link
-
-
-def get_perflab_ci_extra_header_message(get_link):
-    return f"```Jenkins Job #{os.environ['JENKINS_BUILD_NUMBER']}```"
-
-
-def get_perflab_ci_extra_footer_message(get_link):
-    base = get_ci_base_link()[0].partition("/artifact/run")[0]
-    link = f"rebuild/parameterized"
-
-    return f"""
-• Link to the {get_link("Rebuild page", link, base=base)}.
-"""
 
 
 """ # example of a regression_summary file:

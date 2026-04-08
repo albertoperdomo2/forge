@@ -59,12 +59,6 @@ class TempArtifactDir(object):
         return True
 
     def __exit__(self, ex_type, ex_value, exc_traceback):
-        if ex_value:
-            logging.error(f"Caught exception {ex_type.__name__}: {ex_value}")
-            with open(ARTIFACT_DIR / "FAILURE", "a") as f:
-                print(f"{ex_type.__name__}: {ex_value}", file=f)
-                print(''.join(traceback.format_exception(None, value=ex_value, tb=exc_traceback)), file=f)
-
         os.environ["ARTIFACT_DIR"] = str(self.previous_dirname)
         _set_artifact_dir(self.previous_dirname)
 

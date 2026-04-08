@@ -20,6 +20,36 @@ from .log import log_execution_banner, log_completion_banner, logger
 from .task import _task_registry, _task_results, ConditionError, RetryFailure
 
 
+class TaskExecutionError(Exception):
+    """Custom exception that wraps task execution failures with context"""
+
+    def __init__(self, task_name: str, task_description: str, original_exception: Exception, task_args: dict = None, task_location: str = None, artifact_dir: str = None):
+        self.task_name = task_name
+        self.task_description = task_description
+        self.original_exception = original_exception
+        self.task_args = task_args
+        self.task_location = task_location
+        self.artifact_dir = artifact_dir
+        tb = original_exception.__traceback__
+
+        # Skip the first 2 frames of the stack
+        if tb and tb.tb_next:
+            original_exception.__traceback__ = tb.tb_next.tb_next
+
+        # Create a comprehensive error message with clear task context
+        message_parts = [
+            f"❌ TASK FAILURE: {task_name}: {task_description or 'No description'}",
+            f"   {task_location or 'Unknown'}",
+            f"   {original_exception.__class__.__name__}: {original_exception}"
+        ]
+
+        message = "\n".join(message_parts)
+        super().__init__(message)
+
+        # Preserve the original exception chain to maintain full stack trace
+        # This allows the full traceback to be shown in logs
+
+
 def execute_tasks(function_args: dict = None):
     """
     Execute all registered tasks in order, respecting conditions
@@ -46,64 +76,70 @@ def execute_tasks(function_args: dict = None):
         meta_dir.mkdir(exist_ok=True)
 
         # Setup file logging first so all output is captured
-        _setup_execution_logging(meta_dir)
+        log_file, file_handler = _setup_execution_logging(env.ARTIFACT_DIR)
 
-        # Log execution banner (now captured in file)
-        log_execution_banner(function_args)
-
-        # Generate metadata files
-        _generate_execution_metadata(function_args, caller_frame, meta_dir)
-        _generate_restart_script(function_args, caller_frame, meta_dir)
-
-        # Separate normal tasks from always tasks
-        normal_tasks = [t for t in _task_registry if not t.get('always_execute', False)]
-        always_tasks = [t for t in _task_registry if t.get('always_execute', False)]
-
-        execution_error = None
-
-        # Execute normal tasks
         try:
-            for task_info in normal_tasks:
-                _execute_single_task(task_info, args)
-        except (KeyboardInterrupt, SignalError):
-            logger.info("")
-            logger.fatal("==> INTERRUPTED: Received KeyboardInterrupt (Ctrl+C)")
-            logger.info("==> Exiting...")
-            # Show completion banner with interrupted status
-            log_completion_banner(function_args, status="INTERRUPTED")
-            sys.exit(1)
+            # Log execution banner (now captured in file)
+            log_execution_banner(function_args, log_file)
 
-        except ConditionError as e:
-            logger.info("")
-            logger.exception(f"==> CONDITION Exception {e}")
-            sys.exit(1)
-        except RetryFailure as e:
-            logger.info("")
-            logger.fatal(f"==> RETRY failure {e}")
-            sys.exit(1)
+            # Generate metadata files
+            _generate_execution_metadata(function_args, caller_frame, meta_dir)
+            _generate_restart_script(function_args, caller_frame, meta_dir)
 
-        except Exception as e:
-            execution_error = e
-            # catch and execute the ALWAYS tasks
+            # Separate normal tasks from always tasks
+            normal_tasks = [t for t in _task_registry if not t.get('always_execute', False)]
+            always_tasks = [t for t in _task_registry if t.get('always_execute', False)]
 
-        # Always execute "always" tasks
-        try:
-            for task_info in always_tasks:
-                _execute_single_task(task_info, args)
-        except Exception as e:
-            # If normal tasks succeeded but always task failed, raise always task error
-            if execution_error is None:
+            execution_error = None
+
+            # Execute normal tasks
+            try:
+                for task_info in normal_tasks:
+                    _execute_single_task(task_info, args)
+            except (KeyboardInterrupt, SignalError):
+                logger.info("")
+                logger.fatal("==> INTERRUPTED: Received KeyboardInterrupt (Ctrl+C)")
+                logger.info("==> Exiting...")
+                # Show completion banner with interrupted status
+                log_completion_banner(function_args, status="INTERRUPTED")
                 raise
-            # If both failed, log always task error but preserve original error
-            logger.error(f"==> ALWAYS TASK ALSO FAILED: {e}")
-            logger.info("")
 
-        # Re-raise original error if normal tasks failed
-        if execution_error:
-            raise execution_error
+            except (TaskExecutionError, ConditionError, RetryFailure, Exception) as e:
+                # Log and re-raise DSL-specific exceptions
+                logger.info("")
+                logger.fatal(f"==> {e.__class__.__name__}: {e}")
+                log_completion_banner(function_args, status="EXCEPTION")
 
-        # Log completion banner if execution was successful
-        log_completion_banner(function_args)
+                if isinstance(e, RetryFailure):
+                    # catch and execute the ALWAYS tasks
+                    execution_error = e
+                else:
+                    raise
+
+            # Always execute "always" tasks
+            try:
+                for task_info in always_tasks:
+                    _execute_single_task(task_info, args)
+            except Exception as e:
+                # If normal tasks succeeded but always task failed, raise always task error
+                if execution_error is None:
+                    raise
+                # If both failed, log always task error but preserve original error
+                logger.error(f"==> ALWAYS TASK ALSO FAILED: {e}")
+                logger.info("")
+
+            # Re-raise original error if normal tasks failed
+            if execution_error:
+                raise execution_error
+
+            # Log completion banner if execution was successful
+            log_completion_banner(function_args)
+
+        finally:
+            # Clean up the file handler to prevent leaks
+            dsl_logger = logging.getLogger('projects.core.dsl')
+            dsl_logger.removeHandler(file_handler)
+            file_handler.close()
 
 
 def _execute_single_task(task_info, args):
@@ -129,7 +165,8 @@ def _execute_single_task(task_info, args):
                 logger.info("~" * 80)
                 return
         except Exception as e:
-            logger.error(f"==> CONDITION EXCEPTION raised by {task_name}: {e}")
+            logger.error(f"==> CONDITION EXCEPTION raised by {task_name}: {e.__class__.__name__}: {e}")
+            logger.error(f"==> Task: {task_name} ({task_func.__doc__ or 'No description'})")
             logger.info("")
             raise ConditionError(e)
 
@@ -142,8 +179,26 @@ def _execute_single_task(task_info, args):
     except (KeyboardInterrupt, SignalError):
         raise
     except Exception as e:
-        logger.error(f"==> EXECUTION FAILED for {task_name}: {e}")
-        raise
+        co_filename = task_func.original_func.__code__.co_filename
+        try:
+            co_filename = Path(co_filename).relative_to(env.FORGE_HOME)
+        except ValueError as e:
+            logging.warning(f"Path {co_filename} isn't relative to FORGE_HOME={env.FORGE_HOME} ({e})")
+            pass  # Use absolute path if file is outside FORGE_HOME
+
+        task_location = f"{co_filename}:{task_func.original_func.__code__.co_firstlineno}"
+
+        # Wrap in custom exception with context
+        task_error = TaskExecutionError(
+            task_name=task_name,
+            task_description=task_func.__doc__ or 'No description',
+            original_exception=e,
+            task_args=vars(args) if hasattr(args, '__dict__') else None,
+            task_location=task_location,
+            artifact_dir=str(env.ARTIFACT_DIR),
+        )
+        # Don't use 'from None' - preserve the original stack trace
+        raise task_error
 
 
 def clear_tasks():
@@ -184,12 +239,12 @@ def _generate_execution_metadata(function_args: dict, caller_frame, meta_dir):
     with open(metadata_file, 'w') as f:
         yaml.dump(metadata, f, default_flow_style=False, sort_keys=False)
 
-    logger.info(f"Generated execution metadata: {metadata_file}")
+    logger.debug(f"Generated execution metadata: {metadata_file}")
 
 
-def _setup_execution_logging(meta_dir):
+def _setup_execution_logging(artifact_dir):
     """Setup file logging to capture all stdout/stderr during execution"""
-    log_file = meta_dir / "execution.log"
+    log_file = artifact_dir / "task.log"
 
     # Create file handler for the DSL logger
     file_handler = logging.FileHandler(log_file, mode='w')
@@ -202,7 +257,7 @@ def _setup_execution_logging(meta_dir):
     dsl_logger = logging.getLogger('projects.core.dsl')
     dsl_logger.addHandler(file_handler)
 
-    logger.info(f"Execution logging enabled: {log_file}")
+    return log_file, file_handler
 
 
 def _generate_restart_script(function_args: dict, caller_frame, meta_dir):
@@ -240,7 +295,7 @@ def _generate_restart_script(function_args: dict, caller_frame, meta_dir):
     # Make executable
     os.chmod(restart_file, 0o755)
 
-    logger.info(f"Generated restart script: {restart_file}")
+    logger.debug(f"Generated restart script: {restart_file}")
 
 
 def _get_forge_relative_path(filename):

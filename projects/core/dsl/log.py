@@ -15,6 +15,7 @@ LINE_WIDTH = 80
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
+
 def log_task_header(task_name: str, task_doc: str, rel_filename: str, line_no: int):
     """Log the verbose task header with tildes"""
     logger.info("")
@@ -24,7 +25,8 @@ def log_task_header(task_name: str, task_doc: str, rel_filename: str, line_no: i
     logger.info("~" * LINE_WIDTH)
     logger.info("")
 
-def log_execution_banner(function_args: dict = None):
+
+def log_execution_banner(function_args: dict = None, log_file: str = None):
     """Log the execution banner with function info and arguments"""
     # Get the caller's filename and function name for the header
     frame = inspect.currentframe()
@@ -42,19 +44,20 @@ def log_execution_banner(function_args: dict = None):
     logger.info(f"| FILE: {rel_filename}")
     logger.info(f"| COMMAND: {function_name}")
 
-    # Display arguments in YAML format
-    logger.info("| ARGUMENTS:")
+    if function_args:
+        # Display arguments in YAML format
+        logger.info("| ARGUMENTS:")
 
-    for key, value in function_args.items():
-        if key == 'function_args':  # Skip the function_args parameter itself
-            continue
-        if value is None:
-            continue
+        for key, value in function_args.items():
+            if key == 'function_args':  # Skip the function_args parameter itself
+                continue
+            if value is None:
+                continue
 
-        logger.info(f"|   {key}: {value}")
+            logger.info(f"|   {key}: {value}")
 
     logger.info(f"| ARTIFACT_DIR: {env.ARTIFACT_DIR}")
-
+    logger.info(f"| LOG_FILE: {log_file}")
     logger.info("===============================================================================")
     logger.info("")
 

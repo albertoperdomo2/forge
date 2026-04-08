@@ -196,7 +196,7 @@ def find_ci_script(project_dir: Path, operation: str) -> Optional[Path]:
     ]
 
     for script_path in possible_locations:
-        if script_path.exists():
+        if script_path.exists() and os.access(script_path, os.X_OK):
             return script_path
 
     return None
