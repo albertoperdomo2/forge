@@ -1,0 +1,18 @@
+apiVersion: fournos.example.com/v1
+kind: FournosJob
+metadata:
+  name: {{ ctx.final_job_name }}
+  namespace: {{ args.namespace }}
+spec:
+  owner: {{ args.owner }}
+  displayName: {{ args.display_name }}
+  cluster: {{ args.cluster_name }}
+  pipeline: {{ args.pipeline_name }}
+  forge:
+    project: {{ args.project }}
+    preset:
+{{ args.args | toyaml | indent(4, true)}}
+
+  # variableOverrides: {{ args.variables_overrides | tojson }}
+  env:
+{{ args.env | toyaml | indent(4, true) }}

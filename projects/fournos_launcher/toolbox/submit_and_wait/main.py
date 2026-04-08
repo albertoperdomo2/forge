@@ -22,6 +22,10 @@ def run(
     variables_overrides: dict = None,
     job_name: str = "",
     namespace: str = "fournos-jobs",
+    owner: str = "",
+    display_name: str = "",
+    pipeline_name: str = "",
+    env: dict = None,
 ):
     """
     Submit a FOURNOS job and wait for completion
@@ -33,6 +37,10 @@ def run(
         variables_overrides: Dictionary of config variables to override (default: empty dict)
         job_name: Custom name for the FOURNOS job (auto-generated if empty)
         namespace: Kubernetes namespace for the FOURNOS job (default: "fournos-jobs")
+        owner: Owner of the FOURNOS job (default: empty)
+        display_name: Human-readable display name for the job (default: empty)
+        pipeline_name: Name of the pipeline to execute (default: empty)
+        env: Dictionary of environment variables to set (default: empty dict)
 
     Examples:
         # Called by entrypoint with config values:
@@ -41,7 +49,11 @@ def run(
             project="llm_d",
             args=["test", "--verbose"],
             variables_overrides={"model": "mistral", "replicas": 2},
-            namespace="my-fournos-jobs"
+            namespace="my-fournos-jobs",
+            owner="user@example.com",
+            display_name="LLM Testing Job",
+            pipeline_name="test-pipeline",
+            env={"DEBUG": "1", "LOG_LEVEL": "info"}
         )
     """
     # Set defaults
@@ -49,6 +61,8 @@ def run(
         args = []
     if variables_overrides is None:
         variables_overrides = {}
+    if env is None:
+        env = {}
 
     # Execute all registered tasks in order
     return execute_tasks(locals())
@@ -69,6 +83,9 @@ def validate_inputs(args, ctx):
 
     if not isinstance(args.variables_overrides, dict):
         raise ValueError("variables_overrides should be a dict")
+
+    if not isinstance(args.env, dict):
+        raise ValueError("env should be a dict")
 
     return f"Inputs validated"
 

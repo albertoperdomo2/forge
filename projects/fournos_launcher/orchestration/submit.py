@@ -33,12 +33,24 @@ def submit_job():
     overrides.update(config.project.get_config("overrides"))
     overrides.update(config.project.get_config("extra_overrides"))
 
+    # Build env dict from pass lists
+    env_dict = {}
+    env_pass_lists = config.project.get_config("fournos.job.env", print=False)
+    for _, pass_list in (env_pass_lists or {}).items():
+        for env_var in pass_list:
+            if env_var in os.environ:
+                env_dict[env_var] = os.environ[env_var]
+
     submit_and_wait(
       cluster_name=config.project.get_config("cluster.name"),
       project=config.project.get_config("ci_job.project"),
       args=config.project.get_config("ci_job.args"),
       variables_overrides=overrides,
       namespace=config.project.get_config("fournos.namespace"),
+      owner=config.project.get_config("fournos.job.owner"),
+      display_name=config.project.get_config("fournos.job.display_name"),
+      pipeline_name=config.project.get_config("fournos.job.pipeline_name"),
+      env=env_dict,
     )
 
     return 0
