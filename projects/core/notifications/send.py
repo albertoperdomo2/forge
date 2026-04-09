@@ -132,6 +132,10 @@ def get_github_notification_message(finish_reason: str, status: str, pr_number: 
 def get_common_message(finish_reason: str, status: str, get_link, get_italics, get_bold):
     message = ""
 
+    message += f"""\
+{get_bold(status)}
+"""
+
     message  += f"""
 • Link to the {get_link("test results", "", is_dir=True)}.
 """

@@ -15,7 +15,7 @@ import types
 
 import click
 
-from projects.core.library import ci_lib
+from projects.core.library import ci as ci_lib
 import test_skeleton, prepare_skeleton
 
 @click.group()
