@@ -385,6 +385,26 @@ def system_prechecks() -> bool:
     except Exception as e:
         logger.warning(f"Could not store git versions: {e}")
 
+    # Save environment variables
+    try:
+        (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
+        env_file = artifact_path / CI_METADATA_DIRNAME / "env.sh"
+
+        with open(env_file, 'w') as f:
+            f.write("#!/bin/bash\n")
+            f.write("# Environment variables from CI execution\n")
+            f.write(f"# Generated on: {datetime.now().isoformat()}\n\n")
+
+            # Export all environment variables, sorted for consistency
+            for key, value in sorted(os.environ.items()):
+                # Escape shell special characters in values
+                escaped_value = value.replace("'", "'\\''")
+                f.write(f"export {key}='{escaped_value}'\n")
+
+        logger.info(f"Saved environment variables to {env_file}")
+    except Exception as e:
+        logger.warning(f"Could not save environment variables: {e}")
+
     # Download PR information if available
     pull_number = os.environ.get('PULL_NUMBER')
     if pull_number:
