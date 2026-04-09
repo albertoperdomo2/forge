@@ -13,6 +13,10 @@ from pathlib import Path
 
 from projects.core.library import env
 from projects.core.dsl import task, retry, when, always, execute_tasks, clear_tasks, shell, toolbox, template
+from projects.core.dsl.utils.k8s import sanitize_k8s_name
+
+logger = logging.getLogger(__name__)
+
 
 def run(
     cluster_name: str,
@@ -89,16 +93,27 @@ def validate_inputs(args, ctx):
 
     return f"Inputs validated"
 
+@task
+def setup_directories(args, context):
+    """Create the artifacts directory"""
+
+    shell.mkdir("artifacts")
+    return "Artifacts directory created"
+
 
 @task
 def generate_job_name(args, ctx):
-    """Generate job name if not provided"""
+    """Generate job name if not provided and ensure K8s compatibility"""
 
     if args.job_name:
-        ctx.final_job_name = args.job_name
+        # Sanitize user-provided job name
+        raw_name = args.job_name
     else:
+        # Generate and sanitize auto job name
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        ctx.final_job_name = f"forge-{args.project}-{timestamp}"
+        raw_name = f"forge-{args.project}-{timestamp}"
+
+    ctx.final_job_name = sanitize_k8s_name(raw_name)
 
     return f"Job name: {ctx.final_job_name}"
 
@@ -128,16 +143,13 @@ def create_job_manifest(args, ctx):
 def submit_fournos_job(args, ctx):
     """Submit the FOURNOS job"""
 
-    # Apply the job manifest
-    result = shell.run(f"oc apply -f {ctx.manifest_file}")
-
-    if not result.success:
-        raise RuntimeError(f"Failed to submit FOURNOS job: {result.stderr}")
+    # Apply the job manifest (will raise CalledProcessError with full details on failure)
+    shell.run(f"oc apply -f {ctx.manifest_file}")
 
     return f"Successfully submitted FOURNOS job: {ctx.final_job_name}"
 
 
-@retry(attempts=120, delay=30, backoff=1.0)
+@retry(attempts=120, delay=10, backoff=1.0)
 @task
 def wait_for_job_completion(args, ctx):
     """Wait for FOURNOS job to complete"""
@@ -151,8 +163,8 @@ def wait_for_job_completion(args, ctx):
 
     if not status_result.success:
         # Failed to get status, will retry
-        print(f"Failed to get job status, retrying...")
-        raise RuntimeError("Failed to get job status")
+        logger.info(f"Failed to get job status, retrying...")
+        return False  # Retry
 
     status = status_result.stdout.strip()
 
@@ -166,42 +178,22 @@ def wait_for_job_completion(args, ctx):
             log_stdout=False
         )
         failure_msg = failure_result.stdout.strip() if failure_result.success else "Unknown failure"
-        raise RuntimeError(f"Job {ctx.final_job_name} failed: {failure_msg}")
-    elif status in ["Running", "Pending"]:
-        print(f"Job {ctx.final_job_name} status: {status}")
-        # Job still running, will retry
-        raise RuntimeError("Job still running")
+        raise RuntimeError(f"Job {ctx.final_job_name} failed: {failure_msg}")  # Abort on failure
+    elif status in ["Running", "Pending", "Admitted"]:
+        logger.info(f"Job {ctx.final_job_name} status: {status}. Keep waiting.")
+        return False  # Retry
     else:
-        print(f"Job {ctx.final_job_name} status: {status}")
-        # Unknown status, will retry
-        raise RuntimeError(f"Unknown job status: {status}")
+        logger.info(f"Job {ctx.final_job_name} status: {status}")
+        return False  # Unknown status, retry
 
-
-@task
-def retrieve_job_logs(args, ctx):
-    """Retrieve and save job logs"""
-
-    # Get job logs
-    logs_result = shell.run(
-        f'oc logs -l "fournos.job={ctx.final_job_name}" -n {args.namespace} --all-containers=true',
-        check=False,
-        stdout_dest=args.artifact_dir / f"{ctx.final_job_name}-logs.txt"
-    )
-
-    if logs_result.success:
-        return f"Job logs saved to {ctx.final_job_name}-logs.txt"
-    else:
-        return "No logs available or failed to retrieve logs"
-
-
+@always
 @task
 def capture_final_job_status(args, ctx):
     """Capture final job status and details"""
-
     # Get full job details
     shell.run(
         f'oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o yaml',
-        stdout_dest=args.artifact_dir / f"{ctx.final_job_name}-final-status.yaml",
+        stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.final_job_name}-final-status.yaml",
         check=False
     )
 

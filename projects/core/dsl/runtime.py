@@ -110,16 +110,13 @@ def execute_tasks(function_args: dict = None):
                 raise
 
             except (TaskExecutionError, ConditionError, RetryFailure, Exception) as e:
-                # Log and re-raise DSL-specific exceptions
+                # Log error but continue to always tasks
                 logger.info("")
                 logger.fatal(f"==> {e.__class__.__name__}: {e}")
-                log_completion_banner(function_args, status="EXCEPTION")
+                log_completion_banner(function_args, status=f"EXCEPTION ({e.__class__.__name__})")
 
-                if isinstance(e, RetryFailure):
-                    # catch and execute the ALWAYS tasks
-                    execution_error = e
-                else:
-                    raise
+                # Save error to re-raise after always tasks execute
+                execution_error = e
 
             # Always execute "always" tasks
             try:
@@ -135,6 +132,7 @@ def execute_tasks(function_args: dict = None):
 
             # Re-raise original error if normal tasks failed
             if execution_error:
+                log_completion_banner(function_args, status=f"COMPLETED ({execution_error.__class__.__name__})")
                 raise execution_error
 
             # Log completion banner if execution was successful
@@ -180,8 +178,22 @@ def _execute_single_task(task_info, args, shared_context):
         # Create readonly args and mutable context
         readonly_args, context = create_task_parameters(args, shared_context)
 
-        # Call task with readonly args and mutable context
-        task_status["ret"] = task_func(readonly_args, context)
+        # Check if task has retry configuration
+        retry_config = task_info.get('retry_config')
+        if retry_config:
+            # Import here to avoid circular imports
+            from .task import _execute_with_retry
+            task_status["ret"] = _execute_with_retry(
+                task_func,
+                retry_config['attempts'],
+                retry_config['delay'],
+                retry_config['backoff'],
+                readonly_args,
+                context
+            )
+        else:
+            # Call task with readonly args and mutable context
+            task_status["ret"] = task_func(readonly_args, context)
         if task_status["ret"] is not None:
             logger.info(f"<task returned value> {task_status['ret']}")
 

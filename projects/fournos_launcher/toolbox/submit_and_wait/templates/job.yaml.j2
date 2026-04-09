@@ -1,4 +1,4 @@
-apiVersion: fournos.example.com/v1
+apiVersion: fournos.dev/v1
 kind: FournosJob
 metadata:
   name: {{ ctx.final_job_name }}
@@ -10,9 +10,8 @@ spec:
   pipeline: {{ args.pipeline_name }}
   forge:
     project: {{ args.project }}
-    preset:
-{{ args.args | toyaml | indent(4, true)}}
-
-  # variableOverrides: {{ args.variables_overrides | tojson }}
+    preset: "{{ args.args | join(' ') }}"
+    configOverrides:
+{{ args.variables_overrides | toyaml | indent(6, true)}}
   env:
 {{ args.env | toyaml | indent(4, true) }}

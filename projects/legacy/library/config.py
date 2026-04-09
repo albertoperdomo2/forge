@@ -16,7 +16,7 @@ from . import run
 from . import common
 
 TOPSAIL_DIR = pathlib.Path(common.__file__).parents[3]
-VARIABLE_OVERRIDES_FILENAME = "variable_overrides.yaml"
+VARIABLE_OVERRIDES_FILENAME = "000__ci_metadata/variable_overrides.yaml"
 PR_ARG_KEY = "PR_POSITIONAL_ARG_"
 
 project = None # the project config will be populated in init()

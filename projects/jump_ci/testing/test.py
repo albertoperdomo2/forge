@@ -135,7 +135,7 @@ def jump_ci(command):
 
             return env_fd_path, env_file
 
-        variable_overrides_file = pathlib.Path(os.environ.get("ARTIFACT_DIR")) / "variable_overrides.yaml"
+        variable_overrides_file = pathlib.Path(os.environ.get("ARTIFACT_DIR")) / "000__ci_metadata" / "variable_overrides.yaml"
 
         config_test_args = config.project.get_config("project.args", None) \
             if test_args is None else None

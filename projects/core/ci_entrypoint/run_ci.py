@@ -405,7 +405,7 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
     if verbose or dry_run:
         click.echo(f"\n🔧 Execution Details:")
         click.echo(f"   Command: {' '.join(cmd)}")
-        click.echo(f"   Working Directory: {project_dir}")
+        click.echo(f"   Working Directory: {Path.cwd()}")
         click.echo(f"   Script: {ci_script}")
         if any('_' in arg for arg in args):
             converted_args = [f"'{arg}' -> '{arg.replace('_', '-')}'" for arg in args if '_' in arg]
@@ -427,7 +427,6 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
 
         result = subprocess.run(
             cmd,
-            cwd=project_dir,
             check=False,  # Don't raise exception on non-zero exit
             stdin=None,   # Inherit stdin for pdb/debugging
             stdout=None,  # Inherit stdout for pdb/debugging
