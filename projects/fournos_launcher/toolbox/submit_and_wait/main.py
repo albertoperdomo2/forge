@@ -134,11 +134,8 @@ def create_job_manifest(args, ctx):
 def submit_fournos_job(args, ctx):
     """Submit the FOURNOS job"""
 
-    # Apply the job manifest
-    result = shell.run(f"oc apply -f {ctx.manifest_file}")
-
-    if not result.success:
-        raise RuntimeError(f"Failed to submit FOURNOS job: {result.stderr}")
+    # Apply the job manifest (will raise CalledProcessError with full details on failure)
+    shell.run(f"oc apply -f {ctx.manifest_file}")
 
     return f"Successfully submitted FOURNOS job: {ctx.final_job_name}"
 
