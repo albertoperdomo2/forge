@@ -13,6 +13,8 @@ from pathlib import Path
 
 from projects.core.library import env
 from projects.core.dsl import task, retry, when, always, execute_tasks, clear_tasks, shell, toolbox, template
+from projects.core.dsl.utils.k8s import sanitize_k8s_name
+
 
 def run(
     cluster_name: str,
@@ -92,13 +94,17 @@ def validate_inputs(args, ctx):
 
 @task
 def generate_job_name(args, ctx):
-    """Generate job name if not provided"""
+    """Generate job name if not provided and ensure K8s compatibility"""
 
     if args.job_name:
-        ctx.final_job_name = args.job_name
+        # Sanitize user-provided job name
+        raw_name = args.job_name
     else:
+        # Generate and sanitize auto job name
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        ctx.final_job_name = f"forge-{args.project}-{timestamp}"
+        raw_name = f"forge-{args.project}-{timestamp}"
+
+    ctx.final_job_name = sanitize_k8s_name(raw_name)
 
     return f"Job name: {ctx.final_job_name}"
 
