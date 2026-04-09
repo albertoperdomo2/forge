@@ -11,8 +11,7 @@ from pathlib import Path
 import types
 
 import click
-
-from projects.core.library import ci_lib
+from projects.core.library import ci as ci_lib
 import test_llmd, prepare_llmd
 
 @click.group()
