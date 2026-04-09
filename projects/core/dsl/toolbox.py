@@ -9,6 +9,7 @@ including argument parsing, environment setup, and error handling.
 import sys
 import logging
 import inspect
+import subprocess
 from typing import Callable, List, Optional
 import traceback
 import yaml
@@ -109,7 +110,13 @@ def get_task_execution_error(e):
         yield f"~~     {line}"
     yield "~~"
     yield f"~~ EXCEPTION: {e.original_exception.__class__.__name__}"
-    yield f"~~     {e.original_exception}"
+
+    # Use enhanced error message for CalledProcessError if available
+    if isinstance(e.original_exception, subprocess.CalledProcessError) and e.original_exception.args:
+        yield f"~~     {e.original_exception.args[0]}"
+    else:
+        yield f"~~     {e.original_exception}"
+
     yield "x" * 80
 
 
