@@ -18,7 +18,7 @@ fournos:
       name: psap-forge-ci
       key: kubeconfig
   job:
-    owner: fournos-launcher
+    owner: "FORGE/fournos-launcher"
     display_name: "Forge Job"
     pipeline_name: forge-test-only
     env:
