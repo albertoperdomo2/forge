@@ -77,31 +77,41 @@ def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
 
     for attempt in range(retry_attempts):
         try:
-            return func(*args, **kwargs)
+            result = func(*args, **kwargs)
+
+            # Check if result indicates we should retry (falsy values like False, None, [], etc.)
+            if not result:
+                if attempt < retry_attempts - 1:  # Not the last attempt
+                    logger.info("")
+                    logger.info("~" * LINE_WIDTH)
+                    logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
+                    logger.warning(f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} (returned: {result})")
+
+                    logger.info(f"~~ RETRY in {current_delay:.0f}s")
+                    logger.info("~" * LINE_WIDTH)
+                    time.sleep(current_delay)
+                    logger.info("")
+
+                    current_delay *= retry_backoff
+                else:
+                    logger.error(f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts}")
+                    logger.info("")
+                    raise RetryFailure(f"All {retry_attempts} attempts failed for task {func.__name__} : {func.__doc__ or 'No description'} (last result: {result})")
+            else:
+                # Truthy result means success
+                return result
+
         except KeyboardInterrupt:
             # Don't retry on keyboard interrupt, just re-raise immediately
             raise
         except Exception as e:
-            last_exception = e
-            if attempt < retry_attempts - 1:  # Not the last attempt
-                logger.info("")
-                logger.info("~" * LINE_WIDTH)
-                logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
-                logger.warning(f"~~ FAILED ATTEMPT #{attempt + 1}/{retry_attempts}")
+            # Exception means abort, don't retry
+            logger.error(f"==> TASK EXCEPTION: {func.__name__} failed with exception")
+            logger.info("")
+            raise e
 
-                logger.info(f"~~ RETRY in {current_delay:.0f}s")
-                logger.info("~" * LINE_WIDTH)
-                time.sleep(current_delay)
-                logger.info("")
-
-                current_delay *= retry_backoff
-            else:
-                logger.error(f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts}")
-                logger.info("")
-                raise RetryFailure(f"All {retry_attempts} attemps failed for task {func.__name__} : {func.__doc__ or 'No description'}")
-
-    # Re-raise the last exception
-    raise last_exception
+    # This should not be reached due to the logic above, but kept for safety
+    raise RetryFailure(f"Unexpected end of retry loop for task {func.__name__}")
 
 
 def task_only(decorator_func):
@@ -220,11 +230,14 @@ def task(func):
         'name': func.__name__,
         'func': wrapper,
         'condition': getattr(func, '_when_condition', None),
-        'retry_config': getattr(func, '_retry_config', None),
+        'retry_config': getattr(func, '_retry_config', None),  # May be updated by @retry
         'always_execute': getattr(func, '_always_execute', False)
     }
 
     _task_registry.append(task_info)
+
+    # Store reference to task_info so other decorators can update it
+    wrapper._task_info = task_info
 
     # Create result container for this task
     _task_results[func.__name__] = TaskResult(func.__name__)
@@ -257,14 +270,18 @@ def when(condition):
     return decorator
 
 
-@task_only
 def always(func):
     """
     Mark a task to always execute, even if previous tasks fail
 
-    Must be applied to a function that is already decorated with @task.
+    Can be applied before or after @task decorator.
     """
     func._always_execute = True
+
+    # If this is already a registered task, update its always_execute flag
+    if hasattr(func, '_task_info'):
+        func._task_info['always_execute'] = True
+
     return func
 
 
@@ -280,19 +297,19 @@ def retry(attempts=3, delay=1, backoff=1.0):
         backoff: Multiplier for delay on each retry
     """
 
-    @task_only
     def decorator(func):
-        # Store retry config on function
-        func._retry_config = {
+        # Store retry config on function (runtime will handle the actual retry)
+        retry_config = {
             'attempts': attempts,
             'delay': delay,
             'backoff': backoff
         }
+        func._retry_config = retry_config
 
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            return _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs)
+        # If this is already a registered task, update its retry config
+        if hasattr(func, '_task_info'):
+            func._task_info['retry_config'] = retry_config
 
-        return wrapper
+        return func
 
     return decorator
