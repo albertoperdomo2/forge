@@ -162,14 +162,19 @@ def wait_for_job_completion(args, ctx):
     )
 
     if not status_result.success:
-        # Failed to get status, will retry
-        logger.info(f"Failed to get job status, retrying...")
+        # Check if it's a "not found" error (permanent failure) vs temporary error
+        if "not found" in status_result.stderr.lower():
+            raise RuntimeError(f"Job {ctx.final_job_name} not found in namespace {args.namespace}")
+
+        # Other errors might be temporary, retry
+        logger.info(f"Failed to get job status, retrying... (stderr: {status_result.stderr.strip()})")
         return False  # Retry
 
     status = status_result.stdout.strip()
 
-    if status == "Completed":
+    if status in ["Succeeded"]:
         return f"Job {ctx.final_job_name} completed successfully"
+
     elif status == "Failed":
         # Get failure details
         failure_result = shell.run(
