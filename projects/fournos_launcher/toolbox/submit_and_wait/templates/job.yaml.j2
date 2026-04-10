@@ -10,7 +10,8 @@ spec:
   pipeline: {{ args.pipeline_name }}
   forge:
     project: {{ args.project }}
-    preset: "{{ args.args | join(' ') }}"
+    args:
+{{ args.args | toyaml | indent(6, true)}}
     configOverrides:
 {{ args.variables_overrides | toyaml | indent(6, true)}}
   env:
