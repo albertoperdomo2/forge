@@ -16,6 +16,7 @@ import subprocess
 import glob
 import json
 import shutil
+import requests
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
@@ -406,32 +407,59 @@ def system_prechecks() -> bool:
         logger.warning(f"Could not save environment variables: {e}")
 
     # Download PR information if available
+    download_pr_information()
+
+
+def download_pr_information():
+    """
+    Download PR information from GitHub API if available.
+
+    Downloads PR data and comments to the CI metadata directory.
+    """
     pull_number = os.environ.get('PULL_NUMBER')
-    if pull_number:
-        repo_owner = os.environ.get('REPO_OWNER', DEFAULT_REPO_OWNER)
-        repo_name = os.environ.get('REPO_NAME', DEFAULT_REPO_NAME)
+    if not pull_number:
+        return
 
-        pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pull_number}"
-        pr_comments_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pull_number}/comments"
+    artifact_dir = os.environ.get('ARTIFACT_DIR')
+    if not artifact_dir:
+        logger.warning("ARTIFACT_DIR not set, cannot download PR information")
+        return
 
+    artifact_path = Path(artifact_dir)
+    repo_owner = os.environ.get('REPO_OWNER', DEFAULT_REPO_OWNER)
+    repo_name = os.environ.get('REPO_NAME', DEFAULT_REPO_NAME)
+
+    pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pull_number}"
+    pr_comments_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pull_number}/comments"
+
+    try:
+        # Ensure metadata directory exists
+        (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
+
+        # Download PR data
         try:
-            # Download PR data
-            result = subprocess.run(
-                ["curl", "-sSf", pr_url, "-o", str(artifact_path / CI_METADATA_DIRNAME / "pull_request.json")],
-                timeout=30
-            )
-            if result.returncode != 0:
-                logger.warning(f"Failed to download the PR from {pr_url}")
+            response = requests.get(pr_url, timeout=30)
+            response.raise_for_status()
 
-            # Download PR comments
-            result = subprocess.run(
-                ["curl", "-sSf", pr_comments_url, "-o", str(artifact_path / CI_METADATA_DIRNAME / "pull_request-comments.json")],
-                timeout=30
-            )
-            if result.returncode != 0:
-                logger.warning(f"Failed to download the PR comments from {pr_comments_url}")
-        except Exception as e:
-            logger.warning(f"Could not download PR information: {e}")
+            with open(artifact_path / CI_METADATA_DIRNAME / "pull_request.json", 'w') as f:
+                f.write(response.text)
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Failed to download the PR from {pr_url}: {e}")
+
+        # Download PR comments
+        try:
+            response = requests.get(pr_comments_url, timeout=30)
+            response.raise_for_status()
+
+            with open(artifact_path / CI_METADATA_DIRNAME / "pull_request-comments.json", 'w') as f:
+                f.write(response.text)
+
+            logger.info(f"Downloaded PR #{pull_number} information from {repo_owner}/{repo_name}")
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Failed to download the PR comments from {pr_comments_url}: {e}")
+
+    except Exception as e:
+        logger.warning(f"Could not download PR information: {e}")
 
 
 def setup_environment_variables():
