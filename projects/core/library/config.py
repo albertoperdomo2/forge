@@ -323,12 +323,6 @@ def __get_config_path(orchestration_dir):
     return config_path_final, config_file_src
 
 
-# Mock config object for demonstration
-class MockConfig:
-    data = {"prepare.namespace.name": "production-cluster"}
-    def get(self, path):
-        return self.data.get(path, "default")
-
 REQUIRES_ANNOTATION_ARG_NAME = "_cfg"
 
 # annotation
