@@ -36,6 +36,15 @@ class FinishReason(StrEnum):
 # Set up logging
 logger = logging.getLogger(__name__)
 
+# Import FOURNOS functionality
+try:
+    from .fournos import process_fournos_environment, transform_fournos_config_to_variable_overrides
+    logger.debug("FOURNOS integration module imported successfully")
+except ImportError as e:
+    logger.warning(f"FOURNOS integration module not available: {e}")
+    process_fournos_environment = None
+    transform_fournos_config_to_variable_overrides = None
+
 # Import pr_args functionality
 try:
     # Add the github directory to Python path
@@ -194,6 +203,27 @@ def shutdown_dual_output():
 def parse_and_save_pr_arguments() -> Optional[Path]:
     """
     Parse GitHub PR arguments and save to variable overrides file.
+
+    Behavior depends on CI environment:
+    - FOURNOS_CI=true: FOURNOS-specific PR argument parsing (to be implemented)
+    - Otherwise: OpenShift CI PR argument parsing
+
+    Returns:
+        Path to saved file if successful, None otherwise
+    """
+    # Check which CI environment we're in
+    if os.environ.get('FOURNOS_CI') == 'true':
+        # Process FOURNOS environment variables first
+        fournos.process_fournos_environment()
+
+        return fournos.parse_and_save_pr_arguments_fournos()
+    else:
+        return parse_and_save_pr_arguments_ocpci()
+
+
+def parse_and_save_pr_arguments_ocpci() -> Optional[Path]:
+    """
+    Parse GitHub PR arguments for OpenShift CI environment.
 
     Returns:
         Path to saved file if successful, None otherwise
