@@ -207,12 +207,12 @@ def capture_final_job_status(args, ctx):
 
 @always
 @task
-def cleanup_job_manifest(args, ctx):
-    """Clean up temporary files"""
+def cleanup_job(args, ctx):
+    """Clean up the job object"""
 
-    if hasattr(ctx, 'manifest_file') and ctx.manifest_file.exists():
-        ctx.manifest_file.unlink()
-        return f"Cleaned up manifest file: {ctx.manifest_file}"
+    shell.run(
+        f'oc delete fournosjob {ctx.final_job_name} -n {args.namespace} --ignore-not-found',
+    )
 
     return "No manifest file to clean up"
 
