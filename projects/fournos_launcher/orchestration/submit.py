@@ -51,6 +51,7 @@ def submit_job():
       display_name=config.project.get_config("fournos.job.display_name"),
       pipeline_name=config.project.get_config("fournos.job.pipeline_name"),
       env=env_dict,
+      status_dest=env.ARTIFACT_DIR,
     )
 
     return 0

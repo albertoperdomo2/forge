@@ -30,6 +30,7 @@ def run(
     display_name: str = "",
     pipeline_name: str = "",
     env: dict = None,
+    status_dest = None,
 ):
     """
     Submit a FOURNOS job and wait for completion
@@ -45,6 +46,7 @@ def run(
         display_name: Human-readable display name for the job (default: empty)
         pipeline_name: Name of the pipeline to execute (default: empty)
         env: Dictionary of environment variables to set (default: empty dict)
+        status_dest: Directory to save status information and pod logs (default: {artifact_dir}/artifacts)
 
     Examples:
         # Called by entrypoint with config values:
@@ -57,7 +59,8 @@ def run(
             owner="user@example.com",
             display_name="LLM Testing Job",
             pipeline_name="test-pipeline",
-            env={"DEBUG": "1", "LOG_LEVEL": "info"}
+            env={"DEBUG": "1", "LOG_LEVEL": "info"},
+            status_dest="/path/to/artifacts"
         )
     """
     # Set defaults
@@ -67,6 +70,12 @@ def run(
         variables_overrides = {}
     if env is None:
         env = {}
+    if status_dest is None:
+        status_dest = env.ARTIFACT_DIR / "artifacts"
+    else:
+        status_dest = Path(status_dest)
+        if not status_dest.exists():
+            raise ValueError(f"status_dest='{status_dest}' does not exist")
 
     # Execute all registered tasks in order
     return execute_tasks(locals())
@@ -203,6 +212,47 @@ def capture_final_job_status(args, ctx):
     )
 
     return f"Final job status captured to {ctx.final_job_name}-final-status.yaml"
+
+
+@always
+@task
+def capture_pod_information(args, ctx):
+    """Capture pod status and logs for the FOURNOS job"""
+
+    # List all pods with the FOURNOS job label
+    label_selector = f"fournos.dev/job-name={ctx.final_job_name}"
+
+    # Get pod status and save to status destination
+    shell.run(
+        f'oc get pods -l {label_selector} -n {args.namespace}',
+        stdout_dest=args.status_dest / "tasks.status",
+        check=False
+    )
+
+    # Get list of pod names to collect logs
+    pod_list_result = shell.run(
+        f'oc get pods -l {label_selector} -n {args.namespace} -o jsonpath="{{.items[*].metadata.name}}"',
+        check=False,
+        log_stdout=False
+    )
+
+    if not (pod_list_result.success and pod_list_result.stdout.strip()):
+        return "No pods found for the job or failed to get pod list"
+
+    pod_names = pod_list_result.stdout.strip().split()
+
+    # Create logs directory in status destination
+    logs_dir = args.status_dest / "task_logs"
+    shell.mkdir(logs_dir)
+
+    for pod_name in pod_names:
+        # Get logs for each pod (default container only)
+        shell.run(
+            f'oc logs {pod_name} -n {args.namespace}',
+            stdout_dest=logs_dir / f"{pod_name}.log",
+            check=False
+        )
+    return f"Captured logs for {len(pod_names)} pods in logs/ directory"
 
 
 @always
