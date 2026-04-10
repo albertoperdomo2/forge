@@ -5,13 +5,8 @@ import json
 import yaml
 import html
 
-try:
-    import github.api as github_api
-except ImportError as e:
-    logging.warning(f"Cannot import the github API: {e}")
-    github_api = None
-
-import slack.api as slack_api
+import projects.core.notifications.slack.api as slack_api
+import projects.core.notifications.github.api as github_api
 
 GITHUB_APP_PEM_FILE = "topsail-bot.2024-09-18.private-key.pem"
 GITHUB_APP_CLIENT_ID_FILE = "topsail-bot.clientid"

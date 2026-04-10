@@ -10,9 +10,9 @@ import os
 import yaml
 import logging
 from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger(__name__)
-
 
 def process_fournos_environment():
     """
@@ -23,8 +23,6 @@ def process_fournos_environment():
     - Update environment variables
     - Move the file to CI_METADATA_DIRNAME
     """
-    from . import prepare_ci  # Import here to avoid circular imports
-
     artifact_dir = os.environ.get('ARTIFACT_DIR')
     if not artifact_dir:
         logger.warning("ARTIFACT_DIR not set, cannot process FOURNOS environment")
@@ -64,9 +62,11 @@ def process_fournos_environment():
             os.environ[key] = value
             logger.debug(f"Set environment variable: {key}={value}")
 
+        from .prepare_ci import CI_METADATA_DIRNAME
+
         # Create CI metadata directory and move the file
-        (artifact_path / prepare_ci.CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
-        moved_env_path = artifact_path / prepare_ci.CI_METADATA_DIRNAME / "forge_config.env"
+        (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
+        moved_env_path = artifact_path / CI_METADATA_DIRNAME / "forge_config.env"
         env_config_path.rename(moved_env_path)
         logger.info(f"Moved forge_config.env to {moved_env_path}")
 
@@ -137,6 +137,7 @@ def parse_and_save_pr_arguments_fournos() -> Optional[Path]:
         logger.info(f"Loaded FOURNOS config from {forge_config_path}")
         logger.debug(f"Config content: {forge_config}")
 
+        from .prepare_ci import CI_METADATA_DIRNAME
         # Create CI metadata directory
         (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
 

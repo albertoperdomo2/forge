@@ -36,42 +36,9 @@ class FinishReason(StrEnum):
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Import FOURNOS functionality
-try:
-    from .fournos import process_fournos_environment, transform_fournos_config_to_variable_overrides
-    logger.debug("FOURNOS integration module imported successfully")
-except ImportError as e:
-    logger.warning(f"FOURNOS integration module not available: {e}")
-    process_fournos_environment = None
-    transform_fournos_config_to_variable_overrides = None
-
-# Import pr_args functionality
-try:
-    # Add the github directory to Python path
-    github_dir = Path(__file__).parent / "github"
-    if str(github_dir) not in sys.path:
-        sys.path.insert(0, str(github_dir))
-
-    from pr_args import parse_pr_arguments
-    logger.info("GitHub PR arguments parser imported successfully")
-except ImportError as e:
-    logger.warning(f"GitHub PR arguments parser not available: {e}")
-    parse_pr_arguments = None
-
-def load_notification_module():
-    # Import notifications module
-    try:
-        # Add the notifications directory to Python path
-        notifications_dir = Path(__file__).parent.parent / "notifications"
-        if str(notifications_dir) not in sys.path:
-            sys.path.insert(0, str(notifications_dir))
-
-        import projects.core.notifications.send as send
-        logger.info("Notifications module imported successfully")
-        return send.send_job_completion_notification
-    except ImportError as e:
-        logger.exception(f"Notifications module not available: {e}")
-        return None
+import projects.core.ci_entrypoint.fournos as fournos
+import projects.core.ci_entrypoint.github.pr_args as github_pr_args
+import projects.core.notifications.send as send
 
 # Dual output global state
 _dual_output_state = None
@@ -228,9 +195,6 @@ def parse_and_save_pr_arguments_ocpci() -> Optional[Path]:
     Returns:
         Path to saved file if successful, None otherwise
     """
-    if not parse_pr_arguments:
-        logger.warning("PR arguments parser not available")
-        return None
 
     # Check if we're in a PR context
     repo_owner = os.environ.get('REPO_OWNER')
@@ -266,7 +230,7 @@ def parse_and_save_pr_arguments_ocpci() -> Optional[Path]:
         (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
 
         # Parse PR arguments
-        config, found_directives = parse_pr_arguments(
+        config, found_directives = github_pr_args.parse_pr_arguments(
             repo_owner=repo_owner,
             repo_name=repo_name,
             pull_number=pull_number,
@@ -583,11 +547,6 @@ def format_duration(duration_seconds: int) -> str:
     return f"after {hours:02d} hours {minutes:02d} minutes {seconds:02d} seconds"
 
 def send_notification(project: str, operation: str, finish_reason: FinishReason, duration: str):
-    send_job_completion_notification = load_notification_module()
-    if not send_job_completion_notification:
-        logger.info("Notifications module not available, skipping notification sending")
-        return
-
     if project == "jump_ci":
         logger.info("No need to send notification in the JumpCI project")
         return
@@ -612,7 +571,7 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
         logger.info(f"Sending notifications - finish_reason: {finish_reason} | GitHub: {github_notifications}, Slack: {slack_notifications}, dry_run: {dry_run}")
 
         # Send the notification
-        notification_failed = send_job_completion_notification(
+        notification_failed = send.send_job_completion_notification(
             finish_reason=finish_reason,
             status=notification_status,
             github=github_notifications,
