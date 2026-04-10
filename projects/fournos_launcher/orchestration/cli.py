@@ -30,10 +30,11 @@ def main(ctx):
 @click.option('--cluster', help='Target cluster name')
 @click.option('--project', help='Project to run (e.g., llm_d)')
 @click.option('--args', help='Arguments to pass to the project (space-separated string)')
+@click.option('--namespace', help='Kubernetes namespace for the FOURNOS job (optional)')
 @click.option('--override', '-o', multiple=True, help='Config overrides in key=value format')
 @click.pass_context
 @safe_cli_command
-def submit(ctx, cluster, project, args, override):
+def submit(ctx, cluster, project, args, namespace, override):
     """Submit a CI job to FOURNOS CI entrypoint."""
 
     # Parse args string into list
@@ -71,6 +72,10 @@ def submit(ctx, cluster, project, args, override):
     if args_list:
         config.project.set_config("ci_job.args", args_list)
         logging.info(f"Using args {args_list}")
+
+    if namespace:
+        config.project.set_config("fournos.namespace", namespace)
+        logging.info(f"Using namespace {namespace}")
 
     if extra_overrides:
         config.project.set_config("extra_overrides", extra_overrides)
