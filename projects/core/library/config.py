@@ -72,7 +72,7 @@ We will get rid of that when we remove the JumpCI.
 
         self.config["presets"] = {}
 
-        for name in "cluster", "project", "exec_list":
+        for name in "cluster", "project", "exec_list", "ci_job":
             if name in self.config: continue
             self.config[name] = {}
 
@@ -87,6 +87,10 @@ We will get rid of that when we remove the JumpCI.
         for name in "name",:
             if name in self.config["cluster"]: continue
             self.config["cluster"][name] = None
+
+        for name in "name", "project", "args":
+            if name in self.config["ci_job"]: continue
+            self.config["ci_job"][name] = None
 
     def save_config_overrides(self):
         variable_overrides_path = env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
