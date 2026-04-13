@@ -92,6 +92,10 @@ def send_job_completion_notification_to_github(pem_file, client_id, finish_reaso
         return
 
     user_token = github_api.get_user_token(pem_file, client_id, org, repo)
+    if not user_token:
+        logging.error("github: Couldn't fetch the user token. Is the app installed in the repo?")
+        return
+
     if dry_run:
         logging.info(f"Github notification:\n{message}")
         logging.info(f"***")
