@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-"""
-LLM-D Project CLI Operations
-"""
 
 import logging
 import sys
@@ -19,7 +16,7 @@ logger = logging.getLogger(__name__)
 @click.group()
 @click.pass_context
 def main(ctx):
-    """LLM-D Project CI Operations for FORGE."""
+    """LLM-D Project CLI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
     test_llmd.init()
 
@@ -27,37 +24,33 @@ def main(ctx):
 @main.command()
 @click.pass_context
 @safe_cli_command
-def prepare(ctx):
+def prepare(ctx) -> int:
     """Prepare phase - Set up environment and dependencies."""
-    exit_code = prepare_llmd.prepare()
-    sys.exit(exit_code)
+    return prepare_llmd.prepare()
 
 
 @main.command()
 @click.pass_context
 @safe_cli_command
-def test(ctx):
+def test(ctx) -> int:
     """Test phase - Execute the main testing logic."""
-    exit_code = test_llmd.test()
-    sys.exit(exit_code)
+    return test_llmd.test()
 
 
 @main.command()
 @click.pass_context
 @safe_cli_command
-def pre_cleanup(ctx):
+def pre_cleanup(ctx) -> int:
     """Cleanup phase - Clean up resources and finalize."""
-    exit_code = prepare_llmd.cleanup()
-    sys.exit(exit_code)
+    return prepare_llmd.cleanup()
 
 
 @main.command()
 @click.pass_context
 @safe_cli_command
-def post_cleanup(ctx):
+def post_cleanup(ctx) -> int:
     """Cleanup phase - Clean up resources and finalize."""
-    exit_code = prepare_llmd.cleanup()
-    sys.exit(exit_code)
+    return prepare_llmd.cleanup()
 
 
 if __name__ == "__main__":

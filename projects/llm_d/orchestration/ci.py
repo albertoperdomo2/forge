@@ -25,7 +25,7 @@ def main(ctx):
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_command
-def prepare(ctx):
+def prepare(ctx) -> int:
     """Prepare phase - Set up environment and dependencies."""
     return prepare_llmd.prepare()
 
@@ -33,7 +33,7 @@ def prepare(ctx):
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_command
-def test(ctx):
+def test(ctx) -> int:
     """Test phase - Execute the main testing logic."""
     return test_llmd.test()
 
@@ -41,7 +41,7 @@ def test(ctx):
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_command
-def pre_cleanup(ctx):
+def pre_cleanup(ctx) -> int:
     """Cleanup phase - Clean up resources and finalize."""
     return prepare_llmd.cleanup()
 
