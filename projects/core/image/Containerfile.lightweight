@@ -33,7 +33,7 @@ ENV USER_NAME=${APP_NAME} \
 
 ENV PYTHONPATH=$HOME
 
-WORKDIR /app/forge
+WORKDIR ${APP_HOME}
 
 RUN git clone https://github.com/openshift-psap/forge/ $HOME
 
