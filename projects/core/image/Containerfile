@@ -15,6 +15,9 @@ LABEL name="forge" \
       description="FORGE Test Harness - Performance & Scale Testing for OpenShift AI" \
       maintainer="Red Hat PSAP Team <psap@redhat.com>"
 
+ARG APP_NAME=forge
+ARG APP_HOME=/app/forge
+
 # Install essential tools
 RUN dnf install -y \
     python3 python3-pip\
@@ -43,8 +46,8 @@ ENV UV_COMPILE_BYTECODE=1
 ENV UV_SYSTEM_PYTHON=1
 
 # Set working directory
-WORKDIR /app/forge
-ENV HOME=/app/forge
+WORKDIR ${APP_HOME}
+ENV HOME=${APP_HOME}
 
 # Copy project configuration
 COPY pyproject.toml ./
@@ -57,9 +60,9 @@ RUN uv lock && \
 COPY . .
 
 # Create non-root user for security
-RUN groupadd -g 1001 forge && \
-    useradd -u 1001 -g forge -s /bin/bash -d /app/forge -M forge && \
-    chown -R forge:forge /app/forge
+RUN groupadd -g 1001 ${APP_NAME} && \
+    useradd -u 1001 -g ${APP_NAME} -s /bin/bash -d ${APP_HOME} -M ${APP_NAME} && \
+    chown -R ${APP_NAME}:${APP_NAME} ${APP_HOME}
 
 # Make sure that the home directory can be written by OCP random user ID
 RUN chgrp -R 0 "$HOME" && chmod -R g=u "$HOME"
@@ -69,9 +72,9 @@ RUN rm -rf /home
 USER 1001
 
 # Set environment variables
-ENV PYTHONPATH=/app/forge \
+ENV PYTHONPATH=${APP_HOME} \
     PYTHONUNBUFFERED=1 \
-    FORGE_HOME=/app/forge
+    FORGE_HOME=${APP_HOME}
 
 # Default command (can be overridden)
 CMD ["bash"]
