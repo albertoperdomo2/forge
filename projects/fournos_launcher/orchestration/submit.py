@@ -41,6 +41,10 @@ def submit_job():
             if env_var in os.environ:
                 env_dict[env_var] = os.environ[env_var]
 
+    # Add extra environment variables
+    extra_env = config.project.get_config("fournos.job.extra_env", {}, print=False)
+    env_dict.update(extra_env)
+
     submit_and_wait(
       cluster_name=config.project.get_config("cluster.name"),
       project=config.project.get_config("ci_job.project"),
@@ -51,6 +55,7 @@ def submit_job():
       display_name=config.project.get_config("fournos.job.display_name"),
       pipeline_name=config.project.get_config("fournos.job.pipeline_name"),
       env=env_dict,
+      status_dest=env.ARTIFACT_DIR,
     )
 
     return 0

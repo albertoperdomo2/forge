@@ -16,6 +16,7 @@ import subprocess
 import glob
 import json
 import shutil
+import requests
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
@@ -35,33 +36,9 @@ class FinishReason(StrEnum):
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Import pr_args functionality
-try:
-    # Add the github directory to Python path
-    github_dir = Path(__file__).parent / "github"
-    if str(github_dir) not in sys.path:
-        sys.path.insert(0, str(github_dir))
-
-    from pr_args import parse_pr_arguments
-    logger.info("GitHub PR arguments parser imported successfully")
-except ImportError as e:
-    logger.warning(f"GitHub PR arguments parser not available: {e}")
-    parse_pr_arguments = None
-
-def load_notification_module():
-    # Import notifications module
-    try:
-        # Add the notifications directory to Python path
-        notifications_dir = Path(__file__).parent.parent / "notifications"
-        if str(notifications_dir) not in sys.path:
-            sys.path.insert(0, str(notifications_dir))
-
-        import projects.core.notifications.send as send
-        logger.info("Notifications module imported successfully")
-        return send.send_job_completion_notification
-    except ImportError as e:
-        logger.exception(f"Notifications module not available: {e}")
-        return None
+import projects.core.ci_entrypoint.fournos as fournos
+import projects.core.ci_entrypoint.github.pr_args as github_pr_args
+import projects.core.notifications.send as send
 
 # Dual output global state
 _dual_output_state = None
@@ -194,12 +171,30 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
     """
     Parse GitHub PR arguments and save to variable overrides file.
 
+    Behavior depends on CI environment:
+    - FOURNOS_CI=true: FOURNOS-specific PR argument parsing (to be implemented)
+    - Otherwise: OpenShift CI PR argument parsing
+
     Returns:
         Path to saved file if successful, None otherwise
     """
-    if not parse_pr_arguments:
-        logger.warning("PR arguments parser not available")
-        return None
+    # Check which CI environment we're in
+    if os.environ.get('FOURNOS_CI') == 'true':
+        # Process FOURNOS environment variables first
+        fournos.process_fournos_environment()
+
+        return fournos.parse_and_save_pr_arguments_fournos()
+    else:
+        return parse_and_save_pr_arguments_ocpci()
+
+
+def parse_and_save_pr_arguments_ocpci() -> Optional[Path]:
+    """
+    Parse GitHub PR arguments for OpenShift CI environment.
+
+    Returns:
+        Path to saved file if successful, None otherwise
+    """
 
     # Check if we're in a PR context
     repo_owner = os.environ.get('REPO_OWNER')
@@ -235,7 +230,7 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
         (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
 
         # Parse PR arguments
-        config, found_directives = parse_pr_arguments(
+        config, found_directives = github_pr_args.parse_pr_arguments(
             repo_owner=repo_owner,
             repo_name=repo_name,
             pull_number=pull_number,
@@ -385,33 +380,80 @@ def system_prechecks() -> bool:
     except Exception as e:
         logger.warning(f"Could not store git versions: {e}")
 
+    # Save environment variables
+    try:
+        (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
+        env_file = artifact_path / CI_METADATA_DIRNAME / "env.sh"
+
+        with open(env_file, 'w') as f:
+            f.write("#!/bin/bash\n")
+            f.write("# Environment variables from CI execution\n")
+            f.write(f"# Generated on: {datetime.now().isoformat()}\n\n")
+
+            # Export all environment variables, sorted for consistency
+            for key, value in sorted(os.environ.items()):
+                # Escape shell special characters in values
+                escaped_value = value.replace("'", "'\\''")
+                f.write(f"export {key}='{escaped_value}'\n")
+
+        logger.info(f"Saved environment variables to {env_file}")
+    except Exception as e:
+        logger.warning(f"Could not save environment variables: {e}")
+
     # Download PR information if available
+    download_pr_information()
+
+
+def download_pr_information():
+    """
+    Download PR information from GitHub API if available.
+
+    Downloads PR data and comments to the CI metadata directory.
+    """
     pull_number = os.environ.get('PULL_NUMBER')
-    if pull_number:
-        repo_owner = os.environ.get('REPO_OWNER', DEFAULT_REPO_OWNER)
-        repo_name = os.environ.get('REPO_NAME', DEFAULT_REPO_NAME)
+    if not pull_number:
+        return
 
-        pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pull_number}"
-        pr_comments_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pull_number}/comments"
+    artifact_dir = os.environ.get('ARTIFACT_DIR')
+    if not artifact_dir:
+        logger.warning("ARTIFACT_DIR not set, cannot download PR information")
+        return
 
+    artifact_path = Path(artifact_dir)
+    repo_owner = os.environ.get('REPO_OWNER', DEFAULT_REPO_OWNER)
+    repo_name = os.environ.get('REPO_NAME', DEFAULT_REPO_NAME)
+
+    pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pull_number}"
+    pr_comments_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pull_number}/comments"
+
+    try:
+        # Ensure metadata directory exists
+        (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
+
+        # Download PR data
         try:
-            # Download PR data
-            result = subprocess.run(
-                ["curl", "-sSf", pr_url, "-o", str(artifact_path / CI_METADATA_DIRNAME / "pull_request.json")],
-                timeout=30
-            )
-            if result.returncode != 0:
-                logger.warning(f"Failed to download the PR from {pr_url}")
+            response = requests.get(pr_url, timeout=30)
+            response.raise_for_status()
 
-            # Download PR comments
-            result = subprocess.run(
-                ["curl", "-sSf", pr_comments_url, "-o", str(artifact_path / CI_METADATA_DIRNAME / "pull_request-comments.json")],
-                timeout=30
-            )
-            if result.returncode != 0:
-                logger.warning(f"Failed to download the PR comments from {pr_comments_url}")
-        except Exception as e:
-            logger.warning(f"Could not download PR information: {e}")
+            with open(artifact_path / CI_METADATA_DIRNAME / "pull_request.json", 'w') as f:
+                f.write(response.text)
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Failed to download the PR from {pr_url}: {e}")
+
+        # Download PR comments
+        try:
+            response = requests.get(pr_comments_url, timeout=30)
+            response.raise_for_status()
+
+            with open(artifact_path / CI_METADATA_DIRNAME / "pull_request-comments.json", 'w') as f:
+                f.write(response.text)
+
+            logger.info(f"Downloaded PR #{pull_number} information from {repo_owner}/{repo_name}")
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Failed to download the PR comments from {pr_comments_url}: {e}")
+
+    except Exception as e:
+        logger.warning(f"Could not download PR information: {e}")
 
 
 def setup_environment_variables():
@@ -505,11 +547,6 @@ def format_duration(duration_seconds: int) -> str:
     return f"after {hours:02d} hours {minutes:02d} minutes {seconds:02d} seconds"
 
 def send_notification(project: str, operation: str, finish_reason: FinishReason, duration: str):
-    send_job_completion_notification = load_notification_module()
-    if not send_job_completion_notification:
-        logger.info("Notifications module not available, skipping notification sending")
-        return
-
     if project == "jump_ci":
         logger.info("No need to send notification in the JumpCI project")
         return
@@ -534,7 +571,7 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
         logger.info(f"Sending notifications - finish_reason: {finish_reason} | GitHub: {github_notifications}, Slack: {slack_notifications}, dry_run: {dry_run}")
 
         # Send the notification
-        notification_failed = send_job_completion_notification(
+        notification_failed = send.send_job_completion_notification(
             finish_reason=finish_reason,
             status=notification_status,
             github=github_notifications,

@@ -70,23 +70,31 @@ project.name: skeleton
 We will get rid of that when we remove the JumpCI.
         """
 
-        self.config["presets"] = {}
+        # Define mandatory fields structure
+        mandatory_fields = {
+            "presets": {},  # Special case: always create as empty dict
+            "cluster": dict.fromkeys(["name"]),
+            "project": dict.fromkeys(["name", "args"]),
+            "exec_list": dict.fromkeys(["_only_", "prepare", "pre_cleanup", "test"]),
+            "ci_job": dict.fromkeys(["name", "project", "args"])
+        }
 
-        for name in "cluster", "project", "exec_list":
-            if name in self.config: continue
-            self.config[name] = {}
+        # Apply the mandatory field structure
+        for section_name, section_fields in mandatory_fields.items():
+            # Create section if it doesn't exist
+            if section_name not in self.config:
+                self.config[section_name] = {}
 
-        for name in "_only_", "prepare", "pre_cleanup", "test":
-            if name in self.config["exec_list"]: continue
-            self.config["exec_list"][name] = None
+            # Handle special case for presets (always overwrite with empty dict)
+            if section_name == "presets":
+                self.config[section_name] = section_fields
+                continue
 
-        for name in "name", "args":
-            if name in self.config["project"]: continue
-            self.config["project"][name] = None
-
-        for name in "name",:
-            if name in self.config["cluster"]: continue
-            self.config["cluster"][name] = None
+            # Add missing fields to the section
+            for field_name, default_value in section_fields.items():
+                if field_name in self.config[section_name]:
+                    continue
+                self.config[section_name][field_name] = default_value
 
     def save_config_overrides(self):
         variable_overrides_path = env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
@@ -318,12 +326,6 @@ def __get_config_path(orchestration_dir):
 
     return config_path_final, config_file_src
 
-
-# Mock config object for demonstration
-class MockConfig:
-    data = {"prepare.namespace.name": "production-cluster"}
-    def get(self, path):
-        return self.data.get(path, "default")
 
 REQUIRES_ANNOTATION_ARG_NAME = "_cfg"
 

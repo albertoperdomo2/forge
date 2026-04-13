@@ -30,10 +30,12 @@ def main(ctx):
 @click.option('--cluster', help='Target cluster name')
 @click.option('--project', help='Project to run (e.g., llm_d)')
 @click.option('--args', help='Arguments to pass to the project (space-separated string)')
+@click.option('--namespace', help='Kubernetes namespace for the FOURNOS job (optional)')
 @click.option('--override', '-o', multiple=True, help='Config overrides in key=value format')
+@click.option('--commit', help='Git commit SHA to set as PULL_PULL_SHA (optional)')
 @click.pass_context
 @safe_cli_command
-def submit(ctx, cluster, project, args, override):
+def submit(ctx, cluster, project, args, namespace, override, commit):
     """Submit a CI job to FOURNOS CI entrypoint."""
 
     # Parse args string into list
@@ -72,9 +74,21 @@ def submit(ctx, cluster, project, args, override):
         config.project.set_config("ci_job.args", args_list)
         logging.info(f"Using args {args_list}")
 
+    if namespace:
+        config.project.set_config("fournos.namespace", namespace)
+        logging.info(f"Using namespace {namespace}")
+
     if extra_overrides:
         config.project.set_config("extra_overrides", extra_overrides)
         logging.info(f"Using overrides {extra_overrides}")
+
+    # Empty the fournos job environment variables
+    config.project.set_config("fournos.job.env", {})
+
+    # Set commit SHA if provided
+    if commit:
+        config.project.set_config("fournos.job.extra_env", {"PULL_PULL_SHA": commit})
+        logging.info(f"Using commit SHA {commit}")
 
     return submit_mod.submit_job()
 
