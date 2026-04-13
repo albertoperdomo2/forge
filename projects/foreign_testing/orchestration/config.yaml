@@ -1,0 +1,6 @@
+vaults: []
+
+foreign_testing:
+  openshift-psap/fournos:
+    project_mappings:
+      fournos_deploy: tests/forge/deploy
