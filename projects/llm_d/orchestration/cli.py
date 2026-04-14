@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-LLM-D Project CI Operations
+LLM-D Project CLI Operations
 """
 
 import test_llmd, prepare_llmd
