@@ -310,14 +310,18 @@ class VaultManager:
         return all_valid
 
 
-def _filter_and_validate_vaults(vault_manager: VaultManager, vaults: List[str]):
+def _filter_and_validate_vaults(
+        vault_manager: VaultManager,
+        vaults: List[str],
+        strict: bool = True
+):
     """
     Filter vault manager to only include specified vaults and validate them
 
     Args:
         vault_manager: The vault manager instance to filter
         vaults: List of vault names to keep and validate
-
+        strict: Don't raise exception if the vault validation fails
     Raises:
         ValueError: If requested vaults don't exist
         RuntimeError: If vault validation fails
@@ -349,15 +353,21 @@ def _filter_and_validate_vaults(vault_manager: VaultManager, vaults: List[str]):
             validation_failed = True
 
     if validation_failed:
-        raise RuntimeError("One or more vaults failed validation")
+        msg = "One or more vaults failed validation"
+        if strict:
+            raise RuntimeError(msg)
+
+        logger.warning(msg)
+        return False
 
     logger.info("All requested vaults validated successfully")
 
+    return True
 
 # Global vault manager instance
 _vault_manager: Optional[VaultManager] = None
 
-def init(vaults: List[str] = None):
+def init(vaults: List[str] = None, strict: bool = True):
     """Initialize the vault manager
 
     - Initialize the vault manager
@@ -375,8 +385,10 @@ def init(vaults: List[str] = None):
 
     _vault_manager = VaultManager()
 
-    if vaults:
-        _filter_and_validate_vaults(_vault_manager, vaults)
+    if not vaults:
+        return
+
+    _filter_and_validate_vaults(_vault_manager, vaults, strict)
 
 
 def get_vault_manager() -> VaultManager:
