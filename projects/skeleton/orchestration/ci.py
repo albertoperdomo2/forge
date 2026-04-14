@@ -6,17 +6,11 @@ This is a skeleton/template project that demonstrates how to create a new projec
 within the FORGE test harness framework. Use this as a starting point for
 building your own projects.
 """
-
-import sys
-import subprocess
-import time
-from pathlib import Path
-import types
-
-import click
-
 from projects.core.library import ci as ci_lib
 import test_skeleton, prepare_skeleton
+
+import types
+import click
 
 @click.group()
 @click.pass_context
