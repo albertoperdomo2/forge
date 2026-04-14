@@ -17,6 +17,8 @@ Examples:
     run skeleton validate
 """
 
+# Import CI preparation module
+from projects.core.ci_entrypoint import prepare_ci
 
 import os
 import sys
@@ -26,6 +28,20 @@ import signal
 import time
 from pathlib import Path
 from typing import List, Optional
+
+import click
+
+def setup_logging():
+    """Set up logging configuration."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(levelname)s: %(message)s',
+        handlers=[logging.StreamHandler(sys.stderr)]
+    )
+
+# Set up logging
+setup_logging()
+logger = logging.getLogger(__name__)
 
 FORGE_HOME = Path(__file__).resolve().parent.parent.parent.parent
 
@@ -69,14 +85,6 @@ def setup_signal_handlers():
         # Signal handling might not be available on all platforms
         pass
 
-
-def setup_logging():
-    """Set up logging configuration."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(levelname)s: %(message)s',
-        handlers=[logging.StreamHandler(sys.stderr)]
-    )
 
 def install_extra_packages(packages):
     if not packages:
@@ -130,31 +138,23 @@ def install_extra_packages(packages):
     import importlib
     importlib.invalidate_caches()
 
-# Set up logging
-setup_logging()
-logger = logging.getLogger(__name__)
 
-# Set up signal handlers for graceful interruption
-setup_signal_handlers()
+def prepare():
+    # Set up signal handlers for graceful interruption
+    setup_signal_handlers()
 
-# Install click package using uv (as non-root user)
-install_extra_packages(EXTRA_PACKAGES)
+    # Install click package using uv (as non-root user)
+    install_extra_packages(EXTRA_PACKAGES)
 
-import click
+    # Set up ARTIFACT_DIR
+    prepare_ci.precheck_artifact_dir()
 
-# Import CI preparation module
-from projects.core.ci_entrypoint import prepare_ci
-logger.info("CI preparation module imported successfully")
-
-# Set up ARTIFACT_DIR
-prepare_ci.precheck_artifact_dir()
-
-if os.isatty(sys.stdin.fileno()):
-    # not working very well from a TTY ...
-    logger.info("Running from a TTY, not enabling the dual output")
-else:
-    # Set up dual output as early as possible
-    prepare_ci.setup_dual_output()
+    if os.isatty(sys.stdin.fileno()):
+        # not working very well from a TTY ...
+        logger.info("Running from a TTY, not enabling the dual output")
+    else:
+        # Set up dual output as early as possible
+        prepare_ci.setup_dual_output()
 
 
 def find_project_directory(project_name: str) -> Optional[Path]:
@@ -173,6 +173,30 @@ def find_project_directory(project_name: str) -> Optional[Path]:
 
     if project_dir.exists() and project_dir.is_dir():
         return project_dir
+
+    return None
+
+
+def find_ci_script(project_dir: Path, operation: str) -> Optional[Path]:
+    """
+    Find the appropriate CI script for the operation.
+
+    Args:
+        project_dir: Project directory path
+        operation: Operation to perform (e.g., 'ci')
+
+    Returns:
+        Path to CI script if found, None otherwise
+    """
+    # Check possible locations for CI scripts
+    possible_locations = [
+        # Operation-specific script in orchestration subdirectory
+        project_dir / "orchestration" / f"{operation}.py",
+    ]
+
+    for script_path in possible_locations:
+        if script_path.exists() and os.access(script_path, os.X_OK):
+            return script_path
 
     return None
 
@@ -397,14 +421,26 @@ def execute_project_operation(
     # Find CI script
     ci_script = find_ci_script(project_dir, operation)
     if not ci_script:
-        click.echo(
-            click.style(
-                f"❌ ERROR: No CI script found for project '{project}' operation '{operation}'.",
-                fg='red'
-            ),
-            err=True
-        )
-        click.echo(f"🔍 Expected: {project_dir}/orchestration/{operation}.py")
+        script_path = project_dir / "orchestration" / f"{operation}.py"
+
+        if script_path.exists():
+            click.echo(
+                click.style(
+                    f"❌ ERROR: CI script exists but is not executable for project '{project}' operation '{operation}'.",
+                    fg='red'
+                ),
+                err=True
+            )
+            click.echo(f"💡 Fix with: chmod +x {script_path}")
+        else:
+            click.echo(
+                click.style(
+                    f"❌ ERROR: No CI script found for project '{project}' operation '{operation}'.",
+                    fg='red'
+                ),
+                err=True
+            )
+            click.echo(f"🔍 Expected: {script_path}")
         sys.exit(1)
 
     # Convert underscores to hyphens in args for Click compatibility
@@ -503,9 +539,7 @@ def main(project, operation, args, verbose, dry_run):
         run skeleton validate
     """
 
-    if project == "fournos":
-        logger.info("Using project 'fournos_launcher' instead of 'fournos'")
-        project = "fournos_launcher"
+    prepare()
 
     # No arguments - list projects
     if not project:
