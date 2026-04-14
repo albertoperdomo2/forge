@@ -556,9 +556,19 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
         success = finish_reason == FinishReason.SUCCESS
         notification_status = f"Test of '{project} {operation}' {('succeeded' if success else 'failed')}{duration}"
 
-        # Skip notifications for successful non-test steps
-        if success and operation not in ("test", "submit"):
-            logger.info(f"Skipping notification for successful '{operation}' step (only 'test' and 'submit' steps notify on success)")
+        if project == "foreign_testing":
+            # never submit for the time being
+            logger.info(f"Skipping notification for project '{project}'")
+            return
+        elif project == "fournos_launcher":
+            # always submit for the time being
+            logger.info(f"Keeping all the notications for the {project} project")
+            pass
+        elif os.environ.get("PSAP_FORGE_FOREIGN_TESTING"):
+            logger.info("Keeping all the notications for foreign tests")
+            pass
+        elif success and operation not in ("test", ):
+            logger.info(f"Skipping notification for successful '{operation}' step (only 'test' step notifies on success)")
             return
 
         # Enable GitHub notifications by default, Slack can be enabled via environment variable

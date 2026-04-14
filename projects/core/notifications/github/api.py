@@ -24,6 +24,9 @@ def get_user_token(pem_file, client_id, org, repo):
 
     installation_resp = requests.get(f"{BASE_URL}/repos/{org}/{repo}/installation", headers=headers)
 
+    if "id" not in installation_resp.json():
+        return None
+
     try:
         installation_id = installation_resp.json()["id"]
     except Exception as e:

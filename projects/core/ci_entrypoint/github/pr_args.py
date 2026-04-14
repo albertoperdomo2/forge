@@ -69,10 +69,10 @@ def handle_test_directive(line: str) -> Dict[str, Any]:
 
     test_name = parts.pop(0)
 
-    if not parts:
-        raise ValueError(f"Found a /test directive without a project ('{line.strip()}')")
-
-    project_name = parts.pop(0)
+    if parts:
+        project_name = parts.pop(0)
+    else:
+        project_name = "project_not_set"
 
     args = parts # allowed to be empty
     result = {}

@@ -3,18 +3,16 @@
 LLM-D Project CI Operations
 """
 
-import sys
-import subprocess
-import time
-from pathlib import Path
-import types
+import test_llmd, prepare_llmd
+from projects.core.library.cli import safe_cli_command
 
 import logging
 logger = logging.getLogger(__name__)
 
 import click
+import sys
+import types
 
-import test_llmd, prepare_llmd
 
 @click.group()
 @click.pass_context
@@ -26,6 +24,7 @@ def main(ctx):
 
 @main.command()
 @click.pass_context
+@safe_cli_command
 def prepare(ctx):
     """Prepare phase - Set up environment and dependencies."""
     exit_code = prepare_llmd.prepare()
@@ -34,6 +33,7 @@ def prepare(ctx):
 
 @main.command()
 @click.pass_context
+@safe_cli_command
 def test(ctx):
     """Test phase - Execute the main testing logic."""
     exit_code = test_llmd.test()
@@ -42,6 +42,7 @@ def test(ctx):
 
 @main.command()
 @click.pass_context
+@safe_cli_command
 def pre_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
     exit_code = prepare_llmd.cleanup()
@@ -50,6 +51,7 @@ def pre_cleanup(ctx):
 
 @main.command()
 @click.pass_context
+@safe_cli_command
 def post_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
     exit_code = prepare_llmd.cleanup()

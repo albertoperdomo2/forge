@@ -17,6 +17,8 @@ Examples:
     run skeleton validate
 """
 
+# Import CI preparation module
+from projects.core.ci_entrypoint import prepare_ci
 
 import os
 import sys
@@ -27,20 +29,33 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
+import click
+
+def setup_logging():
+    """Set up logging configuration."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(levelname)s: %(message)s',
+        handlers=[logging.StreamHandler(sys.stderr)]
+    )
+
+# Set up logging
+setup_logging()
+logger = logging.getLogger(__name__)
+
 FORGE_HOME = Path(__file__).resolve().parent.parent.parent.parent
 
-EXTRA_PACKAGES = ["fire"]
+EXTRA_PACKAGES = []
 
 def signal_handler_sigint(sig, frame):
     """Handle SIGINT (Ctrl+C) gracefully."""
     print(f"\n🚫 Received SIGINT (Ctrl+C) - Interrupting CI operation...")
 
     # Emergency cleanup of dual output
-    if prepare_ci:
-        try:
-            prepare_ci.shutdown_dual_output()
-        except Exception:
-            pass  # Don't let cleanup errors prevent signal handling
+    try:
+        prepare_ci.shutdown_dual_output()
+    except Exception:
+        pass  # Don't let cleanup errors prevent signal handling
 
     sys.exit(130)  # Standard exit code for SIGINT
 
@@ -50,11 +65,10 @@ def signal_handler_sigterm(sig, frame):
     print(f"\n🛑 Received SIGTERM - Terminating CI operation...")
 
     # Emergency cleanup of dual output
-    if prepare_ci:
-        try:
-            prepare_ci.shutdown_dual_output()
-        except Exception:
-            pass  # Don't let cleanup errors prevent signal handling
+    try:
+        prepare_ci.shutdown_dual_output()
+    except Exception:
+        pass  # Don't let cleanup errors prevent signal handling
 
     sys.exit(143)  # Standard exit code for SIGTERM
 
@@ -72,15 +86,9 @@ def setup_signal_handlers():
         pass
 
 
-def setup_logging():
-    """Set up logging configuration."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(levelname)s: %(message)s',
-        handlers=[logging.StreamHandler(sys.stderr)]
-    )
-
 def install_extra_packages(packages):
+    if not packages:
+        return
 
     print(f"📦 Installing {'/'.join(packages)} packages...")
 
@@ -130,32 +138,23 @@ def install_extra_packages(packages):
     import importlib
     importlib.invalidate_caches()
 
-# Set up logging
-setup_logging()
-logger = logging.getLogger(__name__)
 
-# Set up signal handlers for graceful interruption
-setup_signal_handlers()
+def prepare():
+    # Set up signal handlers for graceful interruption
+    setup_signal_handlers()
 
-# Install click package using uv (as non-root user)
-install_extra_packages(EXTRA_PACKAGES)
-
-import click
-
-# Import CI preparation module
-try:
-    import prepare_ci
-    logger.info("CI preparation module imported successfully")
+    # Install click package using uv (as non-root user)
+    install_extra_packages(EXTRA_PACKAGES)
 
     # Set up ARTIFACT_DIR
     prepare_ci.precheck_artifact_dir()
 
-    # Set up dual output as early as possible
-    prepare_ci.setup_dual_output()
-
-except ImportError as e:
-    logger.warning(f"CI preparation module not available: {e}")
-    prepare_ci = None
+    if os.isatty(sys.stdin.fileno()):
+        # not working very well from a TTY ...
+        logger.info("Running from a TTY, not enabling the dual output")
+    else:
+        # Set up dual output as early as possible
+        prepare_ci.setup_dual_output()
 
 
 def find_project_directory(project_name: str) -> Optional[Path]:
@@ -174,6 +173,30 @@ def find_project_directory(project_name: str) -> Optional[Path]:
 
     if project_dir.exists() and project_dir.is_dir():
         return project_dir
+
+    return None
+
+
+def find_ci_script(project_dir: Path, operation: str) -> Optional[Path]:
+    """
+    Find the appropriate CI script for the operation.
+
+    Args:
+        project_dir: Project directory path
+        operation: Operation to perform (e.g., 'ci')
+
+    Returns:
+        Path to CI script if found, None otherwise
+    """
+    # Check possible locations for CI scripts
+    possible_locations = [
+        # Operation-specific script in orchestration subdirectory
+        project_dir / "orchestration" / f"{operation}.py",
+    ]
+
+    for script_path in possible_locations:
+        if script_path.exists() and os.access(script_path, os.X_OK):
+            return script_path
 
     return None
 
@@ -337,18 +360,30 @@ def parse_cli_help(help_output: str) -> List[str]:
     return operations
 
 
-def execute_project_operation(project: str, operation: str, args: tuple, verbose: bool, dry_run: bool):
+def execute_project_operation(
+        project: str,
+        operation: str,
+        args: tuple,
+        verbose: bool = False,
+        dry_run: bool  = False,
+        do_prepare_ci: bool = True
+):
     """Execute a project operation."""
+
+    if not (isinstance(args, list) or isinstance(args, tuple)):
+        raise ValueError(f"Args={args} must be a list, not {args.__class__.__name__}")
+
+
     if verbose:
         click.echo("")
         click.echo(f"🚀 FORGE CI Orchestration")
         click.echo(f"Project: {project}")
         click.echo(f"Operation: {operation}")
-        click.echo(f"Arguments: {list(args)}")
+        click.echo(f"Arguments: {' '.join(args)}")
         click.echo("")
 
     # Execute CI preparation tasks
-    if prepare_ci:
+    if do_prepare_ci:
         try:
             prepare_ci.prepare(
                 verbose=verbose,
@@ -363,7 +398,7 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
             )
             raise
     else:
-        logger.warning("CI preparation module not available, skipping preparation")
+        logger.warning("CI preparation not enabled, skipping preparation")
 
     # Find project directory
     project_dir = find_project_directory(project)
@@ -386,14 +421,26 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
     # Find CI script
     ci_script = find_ci_script(project_dir, operation)
     if not ci_script:
-        click.echo(
-            click.style(
-                f"❌ ERROR: No CI script found for project '{project}' operation '{operation}'.",
-                fg='red'
-            ),
-            err=True
-        )
-        click.echo(f"🔍 Expected: {project_dir}/orchestration/{operation}.py")
+        script_path = project_dir / "orchestration" / f"{operation}.py"
+
+        if script_path.exists():
+            click.echo(
+                click.style(
+                    f"❌ ERROR: CI script exists but is not executable for project '{project}' operation '{operation}'.",
+                    fg='red'
+                ),
+                err=True
+            )
+            click.echo(f"💡 Fix with: chmod +x {script_path}")
+        else:
+            click.echo(
+                click.style(
+                    f"❌ ERROR: No CI script found for project '{project}' operation '{operation}'.",
+                    fg='red'
+                ),
+                err=True
+            )
+            click.echo(f"🔍 Expected: {script_path}")
         sys.exit(1)
 
     # Convert underscores to hyphens in args for Click compatibility
@@ -441,23 +488,15 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
 
         success = finish_reason == prepare_ci.FinishReason.SUCCESS
         # Post-execution checks and status reporting
-        if prepare_ci:
-            status_message = prepare_ci.postchecks(project, operation, start_time, finish_reason, list(args))
-            msg = click.style(status_message, \
-                              fg='green' if success else 'red')
-        else:
-            # Fallback to simple messages if prepare_ci not available
-            if success:
-                msg = click.style(f"✅ {project} {operation} completed successfully", fg='green')
-            else:
-                msg = click.style(f"❌ {project} {operation} failed with exit code {result.returncode}", fg='red')
+        status_message = prepare_ci.postchecks(project, operation, start_time, finish_reason, list(args))
+        msg = click.style(status_message, \
+                          fg='green' if success else 'red')
 
         click.echo()
         click.echo(msg, err=not success)
 
-        if prepare_ci:
-            # Properly shutdown dual output to flush all buffers and terminate daemon
-            prepare_ci.shutdown_dual_output()
+        # Properly shutdown dual output to flush all buffers and terminate daemon
+        prepare_ci.shutdown_dual_output()
 
         sys.exit(result.returncode)
 
@@ -465,11 +504,10 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
         logging.exception("Unexpected exception")
 
         # Emergency cleanup of dual output to prevent hanging
-        if prepare_ci:
-            try:
-                prepare_ci.shutdown_dual_output()
-            except Exception:
-                pass  # Don't let cleanup errors mask the original error
+        try:
+            prepare_ci.shutdown_dual_output()
+        except Exception:
+            pass  # Don't let cleanup errors mask the original error
 
         click.echo(
             click.style(f"❌ ERROR: Unexpected error during execution", fg='red'),
@@ -501,9 +539,7 @@ def main(project, operation, args, verbose, dry_run):
         run skeleton validate
     """
 
-    if project == "fournos":
-        logger.info("Using project 'fournos_launcher' instead of 'fournos'")
-        project = "fournos_launcher"
+    prepare()
 
     # No arguments - list projects
     if not project:
