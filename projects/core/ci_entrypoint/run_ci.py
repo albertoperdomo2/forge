@@ -36,11 +36,10 @@ def signal_handler_sigint(sig, frame):
     print(f"\n🚫 Received SIGINT (Ctrl+C) - Interrupting CI operation...")
 
     # Emergency cleanup of dual output
-    if prepare_ci:
-        try:
-            prepare_ci.shutdown_dual_output()
-        except Exception:
-            pass  # Don't let cleanup errors prevent signal handling
+    try:
+        prepare_ci.shutdown_dual_output()
+    except Exception:
+        pass  # Don't let cleanup errors prevent signal handling
 
     sys.exit(130)  # Standard exit code for SIGINT
 
@@ -50,11 +49,10 @@ def signal_handler_sigterm(sig, frame):
     print(f"\n🛑 Received SIGTERM - Terminating CI operation...")
 
     # Emergency cleanup of dual output
-    if prepare_ci:
-        try:
-            prepare_ci.shutdown_dual_output()
-        except Exception:
-            pass  # Don't let cleanup errors prevent signal handling
+    try:
+        prepare_ci.shutdown_dual_output()
+    except Exception:
+        pass  # Don't let cleanup errors prevent signal handling
 
     sys.exit(143)  # Standard exit code for SIGTERM
 
@@ -143,19 +141,14 @@ install_extra_packages(EXTRA_PACKAGES)
 import click
 
 # Import CI preparation module
-try:
-    import prepare_ci
-    logger.info("CI preparation module imported successfully")
+from projects.core.ci_entrypoint import prepare_ci
+logger.info("CI preparation module imported successfully")
 
-    # Set up ARTIFACT_DIR
-    prepare_ci.precheck_artifact_dir()
+# Set up ARTIFACT_DIR
+prepare_ci.precheck_artifact_dir()
 
-    # Set up dual output as early as possible
-    prepare_ci.setup_dual_output()
-
-except ImportError as e:
-    logger.warning(f"CI preparation module not available: {e}")
-    prepare_ci = None
+# Set up dual output as early as possible
+prepare_ci.setup_dual_output()
 
 
 def find_project_directory(project_name: str) -> Optional[Path]:
@@ -337,8 +330,16 @@ def parse_cli_help(help_output: str) -> List[str]:
     return operations
 
 
-def execute_project_operation(project: str, operation: str, args: tuple, verbose: bool, dry_run: bool):
+def execute_project_operation(
+        project: str,
+        operation: str,
+        args: tuple,
+        verbose: bool = False,
+        dry_run: bool  = False,
+        do_prepare_ci: bool = True
+):
     """Execute a project operation."""
+
     if verbose:
         click.echo("")
         click.echo(f"🚀 FORGE CI Orchestration")
@@ -348,7 +349,7 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
         click.echo("")
 
     # Execute CI preparation tasks
-    if prepare_ci:
+    if do_prepare_ci:
         try:
             prepare_ci.prepare(
                 verbose=verbose,
@@ -363,7 +364,7 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
             )
             raise
     else:
-        logger.warning("CI preparation module not available, skipping preparation")
+        logger.warning("CI preparation not enabled, skipping preparation")
 
     # Find project directory
     project_dir = find_project_directory(project)
@@ -441,23 +442,15 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
 
         success = finish_reason == prepare_ci.FinishReason.SUCCESS
         # Post-execution checks and status reporting
-        if prepare_ci:
-            status_message = prepare_ci.postchecks(project, operation, start_time, finish_reason, list(args))
-            msg = click.style(status_message, \
-                              fg='green' if success else 'red')
-        else:
-            # Fallback to simple messages if prepare_ci not available
-            if success:
-                msg = click.style(f"✅ {project} {operation} completed successfully", fg='green')
-            else:
-                msg = click.style(f"❌ {project} {operation} failed with exit code {result.returncode}", fg='red')
+        status_message = prepare_ci.postchecks(project, operation, start_time, finish_reason, list(args))
+        msg = click.style(status_message, \
+                          fg='green' if success else 'red')
 
         click.echo()
         click.echo(msg, err=not success)
 
-        if prepare_ci:
-            # Properly shutdown dual output to flush all buffers and terminate daemon
-            prepare_ci.shutdown_dual_output()
+        # Properly shutdown dual output to flush all buffers and terminate daemon
+        prepare_ci.shutdown_dual_output()
 
         sys.exit(result.returncode)
 
@@ -465,11 +458,10 @@ def execute_project_operation(project: str, operation: str, args: tuple, verbose
         logging.exception("Unexpected exception")
 
         # Emergency cleanup of dual output to prevent hanging
-        if prepare_ci:
-            try:
-                prepare_ci.shutdown_dual_output()
-            except Exception:
-                pass  # Don't let cleanup errors mask the original error
+        try:
+            prepare_ci.shutdown_dual_output()
+        except Exception:
+            pass  # Don't let cleanup errors mask the original error
 
         click.echo(
             click.style(f"❌ ERROR: Unexpected error during execution", fg='red'),
