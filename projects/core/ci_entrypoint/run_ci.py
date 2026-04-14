@@ -29,7 +29,7 @@ from typing import List, Optional
 
 FORGE_HOME = Path(__file__).resolve().parent.parent.parent.parent
 
-EXTRA_PACKAGES = ["fire"]
+EXTRA_PACKAGES = []
 
 def signal_handler_sigint(sig, frame):
     """Handle SIGINT (Ctrl+C) gracefully."""
@@ -79,6 +79,8 @@ def setup_logging():
     )
 
 def install_extra_packages(packages):
+    if not packages:
+        return
 
     print(f"📦 Installing {'/'.join(packages)} packages...")
 
