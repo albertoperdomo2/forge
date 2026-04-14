@@ -149,8 +149,12 @@ logger.info("CI preparation module imported successfully")
 # Set up ARTIFACT_DIR
 prepare_ci.precheck_artifact_dir()
 
-# Set up dual output as early as possible
-prepare_ci.setup_dual_output()
+if os.isatty(sys.stdin.fileno()):
+    # not working very well from a TTY ...
+    logger.info("Running from a TTY, not enabling the dual output")
+else:
+    # Set up dual output as early as possible
+    prepare_ci.setup_dual_output()
 
 
 def find_project_directory(project_name: str) -> Optional[Path]:
