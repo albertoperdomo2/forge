@@ -4,15 +4,9 @@ LLM-D Project CI Operations
 
 """
 
-import sys
-import subprocess
-import time
-from pathlib import Path
-import types
-
 import click
 from projects.core.library import ci as ci_lib
-import test_llmd, prepare_llmd
+from . import test_llmd, prepare_llmd
 
 @click.group()
 @click.pass_context
