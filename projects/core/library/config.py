@@ -55,6 +55,12 @@ class Config:
         with open(self.config_path) as config_f:
             self.config = yaml.safe_load(config_f)
 
+        if self.config is None:
+            self.config = {}
+
+        if not isinstance(self.config, dict):
+            raise ValueError(f"YAML loaded from {self.config_path} isn't a dictionnary ({self.config.__class__.__name__})")
+
 
     def ensure_core_fields(self):
         """
