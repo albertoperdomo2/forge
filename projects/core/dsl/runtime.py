@@ -138,6 +138,12 @@ def execute_tasks(function_args: dict = None):
             # Log completion banner if execution was successful
             log_completion_banner(function_args)
 
+            # for the time being, return the shared context.  In the
+            # future we'll return more info about what has been
+            # executed
+            shared_context.__dict__["artifact_dir"] = args.artifact_dir
+
+            return shared_context
         finally:
             # Clean up the file handler to prevent leaks
             dsl_logger = logging.getLogger('projects.core.dsl')
