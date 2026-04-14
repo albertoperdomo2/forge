@@ -1,0 +1,12 @@
+vaults:
+- psap-forge-notifications
+
+skeleton:
+  collect_cluster_info: false
+  namespace: skeleton-dev
+  properties:
+    rate: 1
+    data: prompt_tokens=128
+    max_requests: 30
+  extra_properties: {} # for the preset to give any extra property
+  deep_testing: false

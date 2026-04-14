@@ -1,0 +1,4 @@
+skeleton.deep_testing: true
+skeleton.properties.rate: [1, 64, 128, 256]
+skeleton.properties.data: prompt_tokens=64k
+skeleton.properties.max_requests: 1280
