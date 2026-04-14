@@ -346,12 +346,16 @@ def execute_project_operation(
 ):
     """Execute a project operation."""
 
+    if not (isinstance(args, list) or isinstance(args, tuple)):
+        raise ValueError(f"Args={args} must be a list, not {args.__class__.__name__}")
+
+
     if verbose:
         click.echo("")
         click.echo(f"🚀 FORGE CI Orchestration")
         click.echo(f"Project: {project}")
         click.echo(f"Operation: {operation}")
-        click.echo(f"Arguments: {list(args)}")
+        click.echo(f"Arguments: {' '.join(args)}")
         click.echo("")
 
     # Execute CI preparation tasks
