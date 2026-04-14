@@ -4,9 +4,11 @@ LLM-D Project CI Operations
 
 """
 
-import click
 from projects.core.library import ci as ci_lib
-from . import test_llmd, prepare_llmd
+import test_llmd, prepare_llmd
+
+import types
+import click
 
 @click.group()
 @click.pass_context
