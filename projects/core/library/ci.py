@@ -6,14 +6,15 @@ Provides common CI functionality including error handling, logging,
 and tooling setup for consistent behavior across all projects.
 """
 
+from projects.core.library import env
+from projects.core.dsl import toolbox as dsl_toolbox
+from projects.core.dsl.runtime import TaskExecutionError
+
 import sys
 import traceback
 import logging
 from pathlib import Path
-
-from projects.core.library import env
-from projects.core.dsl import toolbox as dsl_toolbox
-from projects.core.dsl.runtime import TaskExecutionError
+import functools
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,8 @@ def safe_ci_command(command_func):
     Args:
         command_func: Function to execute safely
     """
+
+    @functools.wraps(command_func)
     def wrapper(*args, **kwargs):
         try:
             exit_code = command_func(*args, **kwargs)
@@ -98,12 +101,6 @@ def safe_ci_command(command_func):
         except Exception as e:
             handle_ci_exception(e)
             sys.exit(1)
-
-    # Preserve original function metadata
-    wrapper.__name__ = command_func.__name__
-    wrapper.__doc__ = command_func.__doc__
-    wrapper.__module__ = command_func.__module__
-    wrapper.__qualname__ = command_func.__qualname__
 
     return wrapper
 
@@ -115,17 +112,13 @@ def safe_ci_function(command_func):
     Args:
         command_func: Function to execute safely
     """
+
+    @functools.wraps(command_func)
     def wrapper(*args, **kwargs):
         try:
             return command_func(*args, **kwargs)
         except Exception as e:
             handle_ci_exception(e)
             sys.exit(1)
-
-    # Preserve original function metadata
-    wrapper.__name__ = command_func.__name__
-    wrapper.__doc__ = command_func.__doc__
-    wrapper.__module__ = command_func.__module__
-    wrapper.__qualname__ = command_func.__qualname__
 
     return wrapper

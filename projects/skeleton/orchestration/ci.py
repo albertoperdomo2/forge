@@ -18,7 +18,9 @@ import click
 def main(ctx):
     """Skeleton Example Project CI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
-    test_skeleton.init()
+    # for the time being, FOURNOS doesn't provide the secrets ':-)
+    strict_vault_validation = False
+    test_skeleton.init(strict_vault_validation=strict_vault_validation)
 
 
 @main.command()

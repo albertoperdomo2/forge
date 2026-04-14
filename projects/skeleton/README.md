@@ -1,53 +1,245 @@
 # Skeleton Project
 
-This is a template/skeleton project that demonstrates how to create a new project within the **FORGE** test harness framework.
+**Live demonstration of FORGE framework capabilities**
 
-## Overview
+The Skeleton project is a **working example** that demonstrates all current FORGE capabilities in action. This is not just a template - it's a fully functional project showcasing real-world usage patterns for building test harnesses.
 
-This skeleton shows the essential structure and patterns for building projects that comply with FORGE's constitutional principles:
+## 🎯 What This Project Demonstrates
 
-- **CI-First Testing**: Structured phases ensure consistent CI integration
-- **Observable Measurements**: Command execution logging and timing
-- **Reproducible Results**: Deterministic operations with clear success/failure
-- **Scale-Aware Design**: Efficient synchronous operations
-- **AI Platform Specificity**: OpenShift AI focused testing patterns
+### ⚙️ **Configuration Management**
+- **YAML-based configuration** with environment-specific overrides
+- **Preset system** for reusable configuration packages
+- **CLI configuration overrides** for dynamic testing scenarios
+- **Vault integration** for secure credential management
 
-## Project Structure
+### 🔧 **Task-Based Toolboxes**
+- **Cluster Information Toolbox**: Real cluster data gathering
+- **@task decorators** for structured, observable operations
+- **Context sharing** between tasks for state management
+- **Artifact generation** with organized output files
+
+### 🚀 **CLI & Orchestration**
+- **Click-based CLI** with preset support and configuration overrides
+- **Multi-phase execution** (prepare → test → cleanup)
+- **Error handling** and exit code management
+- **Integration patterns** between CLI, orchestration, and toolboxes
+
+### 📊 **Observable Operations**
+- **Comprehensive logging** with structured output
+- **Artifact collection** in organized directories
+- **Progress reporting** and status indicators
+- **Configuration tracking** and preset application logs
+
+## 🗂️ Project Structure
 
 ```
 skeleton/
 ├── orchestration/
-│   └── ci.py          # Main CI script with Click-based CLI
-├── README.md          # This documentation
-├── config.yaml        # Project configuration (optional)
-├── tests/             # Test scripts and data (optional)
-└── scripts/           # Helper scripts (optional)
+│   ├── cli.py                   # Feature-rich CLI with preset support
+│   ├── ci.py                    # CI entrypoint integration
+│   ├── config.yaml              # Base configuration with vault setup
+│   ├── test_skeleton.py         # Main orchestration logic
+│   ├── prepare_skeleton.py      # Environment preparation
+│   └── presets.d/
+│       ├── presets.yaml         # Collection of reusable presets
+│       └── deep_testing.yaml   # Advanced testing configuration
+└── toolbox/
+    └── cluster_info/
+        └── main.py              # Task-based cluster information gathering
 ```
 
-## Quick Start
+## 🚀 Quick Start Examples
 
-### 1. Run Individual Phases
+### 1. Basic Project Execution
 
 ```bash
-# From the FORGE root directory
-
-# Prepare environment
-./run_ci skeleton ci prepare
-
-# Run tests
-./run_ci skeleton ci test
-
-# Clean up
-./run_ci skeleton ci cleanup
+# Standard phases - demonstrates complete workflow
+./run_ci skeleton ci prepare    # Environment validation
+./run_ci skeleton ci test       # Core functionality
+./run_ci skeleton ci cleanup    # Resource cleanup
 ```
 
-### 2. Development Options
+### 2. CLI with Preset Configuration
 
 ```bash
-# Verbose output
-./run_ci skeleton ci --verbose test
+# Apply presets to modify behavior
+cd projects/skeleton/orchestration
+./cli.py --presets collect_cluster_info test
+./cli.py --presets deep_testing test
+./cli.py --presets collect_cluster_info --presets side_testing test
+```
 
-# See all available commands
+### 3. Direct Toolbox Execution
+
+```bash
+# Run toolbox independently
+cd projects/skeleton/toolbox/cluster_info
+python3 main.py --output-format json
+python3 main.py --output-format yaml
+```
+
+## 🎛️ Configuration & Presets
+
+### Available Presets
+
+| Preset | Purpose | Configuration |
+|--------|---------|---------------|
+| `collect_cluster_info` | Enable cluster data gathering | Sets `skeleton.collect_cluster_info: true` |
+| `side_testing` | Configure side testing parameters | Adds extra properties for load testing |
+| `deep_testing` | Enable comprehensive testing | High-volume testing with multiple rates |
+
+### Configuration Examples
+
+```yaml
+# config.yaml - Base configuration
+skeleton:
+  collect_cluster_info: false    # Control toolbox execution
+  deep_testing: false           # Light vs comprehensive testing
+  namespace: skeleton-dev       # Target namespace
+  properties:
+    rate: 1                     # Request rate
+    max_requests: 30           # Request limit
+    data: prompt_tokens=128    # Test data specification
+```
+
+### CLI Configuration Overrides
+
+```bash
+# Override any configuration value via CLI
+./cli.py --presets deep_testing test                    # Apply preset
+./cli.py test  # Use base configuration
+```
+
+## 🔍 What You'll See
+
+### Sample Output
+
+```bash
+$ ./cli.py --presets collect_cluster_info test
+
+INFO: Applying preset: collect_cluster_info
+INFO: preset[collect_cluster_info] skeleton.collect_cluster_info --> True
+INFO: === Skeleton Project Test Phase ===
+INFO: Running the (fake) light testing ...
+INFO: 
+INFO: Fake test configuration:
+skeleton:
+  collect_cluster_info: true
+  deep_testing: false
+  namespace: skeleton-dev
+  # ... more configuration
+
+INFO: Running cluster information toolbox...
+INFO: Timestamp: 2026-04-14T10:30:45-04:00
+INFO: Current user: forge
+INFO: Cluster nodes captured (3 nodes found)
+INFO: ✅ Cluster information gathering completed successfully
+```
+
+### Generated Artifacts
+
+```
+$ARTIFACT_DIR/artifacts/
+├── current_user.txt           # User information
+├── cluster_nodes.yaml         # Node details (format based on CLI args)
+├── cluster_version.txt        # OpenShift version
+├── cluster_operators.txt      # Operator status
+├── node_resources.txt         # Resource usage
+├── storage_classes.txt        # Available storage
+├── permissions.txt            # User permissions
+└── summary_report.txt         # Consolidated summary
+```
+
+## 🛠️ Advanced Usage Patterns
+
+### 1. Preset Combinations
+
+```bash
+# Combine multiple presets for complex scenarios
+./cli.py --presets collect_cluster_info --presets deep_testing test
+
+# Results in merged configuration:
+# - cluster info gathering enabled
+# - deep testing parameters applied
+# - high request rates and volumes
+```
+
+### 2. Configuration Inspection
+
+```bash
+# View current effective configuration
+./cli.py --presets deep_testing test | grep -A20 "Fake test configuration"
+```
+
+### 3. Vault Integration
+
+The project demonstrates vault usage for secure credential management:
+
+```yaml
+# Vault configuration in config.yaml
+vaults:
+- psap-forge-notifications
+
+notifications:
+  vault:
+    name: psap-forge-notifications
+    github_token_key: github_token
+    slack_webhook_key: slack_webhook_url
+```
+
+## 🏗️ Building Your Own Project
+
+### Key Patterns Demonstrated
+
+1. **Configuration Hierarchy**: Base config → Presets → CLI overrides
+2. **Task Organization**: Structured @task functions with context sharing  
+3. **Error Handling**: Proper exit codes and exception management
+4. **Artifact Management**: Organized output with summary reporting
+5. **CLI Design**: Feature-rich commands with multiple option types
+6. **Integration**: Seamless orchestration ↔ toolbox communication
+
+### Template Usage
+
+Use this project as a **working reference** rather than copying it:
+
+1. **Study the patterns** - See how configuration, presets, and toolboxes work together
+2. **Understand the flow** - From CLI → orchestration → toolbox → artifacts
+3. **Adapt the structure** - Use similar organization for your domain-specific testing
+4. **Leverage the DSL** - @task decorators provide structure and observability
+
+## 🔗 Integration Examples
+
+### CI Pipeline Integration
+
+```bash
+# Automated CI usage
+./run_ci skeleton ci prepare || exit 1
+./run_ci skeleton ci test || exit 1  
+./run_ci skeleton ci cleanup  # Always run cleanup
+
+# With preset application
+cd projects/skeleton/orchestration
+./cli.py --presets production_settings test || exit 1
+```
+
+### Development Workflow
+
+```bash
+# Local development cycle
+./cli.py test                                    # Quick test
+./cli.py --presets collect_cluster_info test    # With cluster info
+./cli.py --presets deep_testing test            # Full validation
+```
+
+## 📚 Learning Path
+
+1. **Run the examples** - See the working system in action
+2. **Examine the configuration** - Understand how presets modify behavior
+3. **Study the toolbox** - Learn the task-based DSL patterns
+4. **Review the CLI** - See advanced Click usage with FORGE integration
+5. **Explore orchestration** - Understand phase organization and error handling
+
+This project demonstrates that FORGE provides a **complete, production-ready framework** for building observable, configurable, and maintainable test harnesses.
 ./run_ci skeleton ci --help
 ```
 

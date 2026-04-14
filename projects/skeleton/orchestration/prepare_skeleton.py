@@ -1,10 +1,31 @@
 import logging
+import os
+import pathlib
+from projects.core.library import env, run, config
+
 logger = logging.getLogger(__name__)
 
 def prepare():
-    logger.info("Hello prepare skeleton")
-    return 0
+    logger.info("=== Skeleton Project Prepare Phase ===")
+
+    try:
+        config_file_content = pathlib.Path(config.project.config_path).read_text()
+        logging.info(f"Configuration file: {config_file_content}")
+
+        logger.info("✅ Prepare phase completed successfully")
+        return 0
+
+    except Exception as e:
+        logger.error(f"❌ Error during prepare phase: {e}")
+        return 1
 
 def cleanup():
-    logger.info("Hello cleanup skeleton")
-    return 0
+    logger.info("=== Skeleton Project Cleanup Phase ===")
+    logger.info("Demonstrating basic cleanup operations")
+
+    try:
+        logger.info("✅ Cleanup phase completed successfully")
+        return 0
+    except Exception as e:
+        logger.error(f"❌ Error during cleanup phase: {e}")
+        return 1
