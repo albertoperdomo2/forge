@@ -324,8 +324,7 @@ def __get_config_path(orchestration_dir):
         raise ValueError(f"Cannot find the source config file at {config_file_src}")
 
     if config_path_final.exists():
-        logging.info(f"Reloading the config file from FORGE project directory {config_file_src} ...")
-        return config_path_final, config_file_src
+        config_path_final.unlink()
 
     logging.info(f"Copying the configuration from {config_file_src} to the artifact dir ...")
     shutil.copyfile(config_file_src, config_path_final)
