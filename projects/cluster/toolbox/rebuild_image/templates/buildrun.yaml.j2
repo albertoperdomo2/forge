@@ -1,0 +1,13 @@
+apiVersion: shipwright.io/v1beta1
+kind: BuildRun
+metadata:
+  generateName: {{ args.build_name }}-rebuild-
+  namespace: {{ args.namespace }}
+  labels:
+    app: rebuild-toolbox
+    original-build: {{ args.build_name }}
+    created-by: forge-rebuild-toolbox
+spec:
+  build:
+    name: {{ args.build_name }}
+  timeout: {{ args.timeout_minutes }}m
