@@ -26,7 +26,6 @@ class CommandResult:
 def run(
         command: str,
         check: bool = True,
-        capture_output: bool = True,
         shell: bool = True,
         stdout_dest: Optional[Union[str, Path]] = None,
         log_stdout: bool = True,
@@ -38,7 +37,6 @@ def run(
     Args:
         command: Command to execute
         check: Raise exception on non-zero exit code
-        capture_output: Capture stdout/stderr
         shell: Execute through shell
         stdout_dest: Optional file path to write stdout to
         log_stdout: Optional. If False, don't log the content of stdout.
@@ -55,7 +53,7 @@ def run(
             command,
             shell=shell,
             check=False,  # We handle check ourselves
-            capture_output=capture_output,
+            capture_output=True,
             text=True
         )
 
@@ -67,28 +65,28 @@ def run(
         )
 
         # Write stdout to file if requested
-        if stdout_dest and cmd_result.stdout:
+        if stdout_dest:
             stdout_path = Path(stdout_dest)
             stdout_path.parent.mkdir(parents=True, exist_ok=True)
             with open(stdout_path, 'w') as f:
                 f.write(cmd_result.stdout)
 
         # Print output in verbose format
-        if result.stdout:
+        if result.stdout and result.stdout.strip():
             if stdout_dest:
                 logger.info(f"| <stdout saved into {stdout_dest}>")
             elif log_stdout:
                 logger.info(f"| <stdout> {result.stdout.strip()}")
             else:
-                logger.info("| <stdout not captured>")
+                logger.info("| <stdout logging skipped>")
 
-        if result.stderr:
+        if result.stderr and result.stderr.strip():
             if log_stderr:
                 logger.info(f"| <stderr> {result.stderr.strip()}")
             else:
-                logger.info("| <stderr not captured>")
+                logger.info("| <stderr logging skipped>")
 
-        if not (result.stdout or result.stderr):
+        if not (result.stdout.strip() or result.stderr.strip()):
             logger.info("| <no output>")
 
         if result.returncode != 0:
