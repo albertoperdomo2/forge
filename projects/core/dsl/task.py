@@ -18,7 +18,8 @@ LINE_WIDTH = 80
 
 # Configure logging to show info messages
 logging.basicConfig(level=logging.INFO, format='%(message)s')
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('DSL')
+logger.propagate = False  # Don't show logger prefix
 
 # Global task registry
 _task_registry: List[dict] = []

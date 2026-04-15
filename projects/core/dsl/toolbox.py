@@ -18,6 +18,10 @@ from projects.core.library import env
 from .cli import create_dynamic_parser
 from .runtime import TaskExecutionError
 
+# Configure clean logging for DSL toolbox
+logger = logging.getLogger('DSL')
+logger.propagate = False  # Don't show logger prefix
+
 
 def _get_positional_args(func: Callable) -> List[str]:
     """
@@ -75,14 +79,14 @@ def run_toolbox_command(command_func: Callable) -> None:
         # Check if this is a TaskExecutionError to provide better formatting
         if isinstance(e, TaskExecutionError):
             for line in get_task_execution_error(e):
-                logging.error(line)
-            logging.error("")
+                logger.error(line)
+            logger.error("")
 
             traceback.print_exception(e.original_exception)
 
         else:
             # Show the full exception with stack trace
-            logging.exception(f"❌ Error: {e}")
+            logger.exception(f"❌ Error: {e}")
         sys.exit(1)
 
 

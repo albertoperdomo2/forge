@@ -146,7 +146,7 @@ def execute_tasks(function_args: dict = None):
             return shared_context
         finally:
             # Clean up the file handler to prevent leaks
-            dsl_logger = logging.getLogger('projects.core.dsl')
+            dsl_logger = logging.getLogger('DSL')
             dsl_logger.removeHandler(file_handler)
             file_handler.close()
 
@@ -287,8 +287,8 @@ def _setup_execution_logging(artifact_dir):
     # Use same format as console output
     file_handler.setFormatter(logging.Formatter('%(message)s'))
 
-    # Add handler to the parent DSL logger so all DSL modules inherit it
-    dsl_logger = logging.getLogger('projects.core.dsl')
+    # Add handler to the DSL logger so all DSL modules inherit it
+    dsl_logger = logging.getLogger('DSL')
     dsl_logger.addHandler(file_handler)
 
     return log_file, file_handler

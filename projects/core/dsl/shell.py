@@ -9,7 +9,8 @@ from projects.core.library.run import SignalError
 
 # Configure logging to show info messages
 logging.basicConfig(level=logging.INFO, format='%(message)s')
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('DSL')
+logger.propagate = False  # Don't show logger prefix
 
 @dataclass
 class CommandResult:
