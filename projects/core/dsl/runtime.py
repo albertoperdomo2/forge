@@ -10,7 +10,6 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List
 
 import projects.core.library.env as env
 from projects.core.library.run import SignalError
@@ -18,7 +17,8 @@ from .log import log_execution_banner, log_completion_banner, logger
 from .context import create_task_parameters
 
 # Import from task.py to avoid circular imports
-from .task import _task_registry, _task_results, ConditionError, RetryFailure
+from .task import ConditionError, RetryFailure
+from .script_manager import get_script_manager
 
 
 class TaskExecutionError(Exception):
@@ -66,6 +66,12 @@ def execute_tasks(function_args: dict = None):
     filename = caller_frame.f_code.co_filename
     command_name = _get_toolbox_function_name(filename)
 
+    # Get relative filename to match task registration
+    try:
+        rel_filename = str(Path(filename).relative_to(env.FORGE_HOME))
+    except ValueError:
+        rel_filename = filename
+
     # Use NextArtifactDir for proper storage management
     with env.NextArtifactDir(command_name) as artifact_dir:
 
@@ -91,16 +97,22 @@ def execute_tasks(function_args: dict = None):
             _generate_execution_metadata(function_args, caller_frame, meta_dir)
             _generate_restart_script(function_args, caller_frame, meta_dir)
 
-            # Separate normal tasks from always tasks
-            normal_tasks = [t for t in _task_registry if not t.get('always_execute', False)]
-            always_tasks = [t for t in _task_registry if t.get('always_execute', False)]
+            # Execute tasks only from the calling file
+            script_manager = get_script_manager()
+            file_tasks = list(script_manager.get_tasks_from_file(rel_filename))
+
+            if not file_tasks:
+                logger.error(f"No tasks found for file: {rel_filename}")
+                log_completion_banner(function_args, status="NO_TASKS")
+                raise RuntimeError(f"No tasks found for file: {rel_filename}")
 
             execution_error = None
 
-            # Execute normal tasks
             try:
-                for task_info in normal_tasks:
-                    _execute_single_task(task_info, args, shared_context)
+                while file_tasks:
+                    current_task_info = file_tasks.pop(0)
+                    _execute_single_task(current_task_info, args, shared_context)
+
             except (KeyboardInterrupt, SignalError):
                 logger.info("")
                 logger.fatal("==> INTERRUPTED: Received KeyboardInterrupt (Ctrl+C)")
@@ -118,21 +130,25 @@ def execute_tasks(function_args: dict = None):
                 # Save error to re-raise after always tasks execute
                 execution_error = e
 
-            # Always execute "always" tasks
-            try:
-                for task_info in always_tasks:
-                    _execute_single_task(task_info, args, shared_context)
-            except Exception as e:
-                # If normal tasks succeeded but always task failed, raise always task error
-                if execution_error is None:
-                    raise
-                # If both failed, log always task error but preserve original error
-                logger.error(f"==> ALWAYS TASK ALSO FAILED: {e}")
-                logger.info("")
+            # Always execute "always" tasks from this file
+            if file_tasks:
+                logging.warning("Executing the @always tasks ...")
+                while file_tasks:
+                    try:
+                        current_task_info = file_tasks.pop(0)
+                        _execute_single_task(task_info, args, shared_context)
+
+                    except Exception as e:
+                        # If normal tasks succeeded but always task failed, raise always task error
+                        if execution_error is None:
+                            execution_error = e
+
+                        logger.error(f"==> ALWAYS TASK ALSO FAILED: {e}")
+                        logger.info("")
 
             # Re-raise original error if normal tasks failed
             if execution_error:
-                log_completion_banner(function_args, status=f"COMPLETED ({execution_error.__class__.__name__})")
+                log_completion_banner(function_args, status=f"FAILED ({execution_error.__class__.__name__})")
                 raise execution_error
 
             # Log completion banner if execution was successful
@@ -235,11 +251,16 @@ def _execute_single_task(task_info, args, shared_context):
         raise task_error
 
 
-def clear_tasks():
-    """Clear the task registry (useful for testing)"""
-    global _task_registry, _task_results
-    _task_registry = []
-    _task_results = {}
+def clear_tasks(file_path=None):
+    """
+    Clear the task registry (useful for testing)
+
+    Args:
+        file_path: If specified, only clear tasks from this file.
+                  If None, clear all tasks from all files.
+    """
+    script_manager = get_script_manager()
+    script_manager.clear_tasks(file_path)
 
 
 def _generate_execution_metadata(function_args: dict, caller_frame, meta_dir):

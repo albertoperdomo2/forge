@@ -9,10 +9,11 @@ import inspect
 import os
 import types
 import yaml
-from typing import List, Callable, Any, Optional
+from typing import Callable, Any, Optional
 
 import projects.core.library.env as env
 from .log import log_task_header, log_execution_banner
+from .script_manager import get_script_manager
 
 LINE_WIDTH = 80
 
@@ -20,10 +21,6 @@ LINE_WIDTH = 80
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger('DSL')
 logger.propagate = False  # Don't show logger prefix
-
-# Global task registry
-_task_registry: List[dict] = []
-_task_results: dict = {}
 
 class ConditionError(Exception): pass
 
@@ -167,21 +164,7 @@ def task_only(decorator_func):
 
     return wrapper
 
-class TaskResult:
-    """Container for task results that can be referenced in conditions"""
-    def __init__(self, task_name: str):
-        self.task_name = task_name
-        self._result = None
-        self._executed = False
-
-    @property
-    def return_value(self):
-        """Get the return value of the task"""
-        return self._result
-
-    def _set_result(self, result):
-        self._result = result
-        self._executed = True
+# TaskResult class moved to script_manager.py
 
 
 def task(func):
@@ -210,8 +193,10 @@ def task(func):
         try:
             result = func(*args, **kwargs)
             # Store result for conditional execution
-            if task_name in _task_results:
-                _task_results[task_name]._set_result(result)
+            script_manager = get_script_manager()
+            task_result = script_manager.get_task_result(task_name)
+            if task_result:
+                task_result._set_result(result)
             return result
         except KeyboardInterrupt:
             raise
@@ -226,7 +211,7 @@ def task(func):
     wrapper.task_name = func.__name__
     wrapper.original_func = func
 
-    # Register the task
+    # Register the task with the script manager
     task_info = {
         'name': func.__name__,
         'func': wrapper,
@@ -235,16 +220,14 @@ def task(func):
         'always_execute': getattr(func, '_always_execute', False)
     }
 
-    _task_registry.append(task_info)
+    script_manager = get_script_manager()
+    script_manager.register_task(task_info, rel_definition_filename)
 
     # Store reference to task_info so other decorators can update it
     wrapper._task_info = task_info
 
-    # Create result container for this task
-    _task_results[func.__name__] = TaskResult(func.__name__)
-
     # Make the result accessible as an attribute of the function
-    wrapper.status = _task_results[func.__name__]
+    wrapper.status = script_manager.get_task_result(func.__name__)
 
     return wrapper
 
