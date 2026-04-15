@@ -1,0 +1,23 @@
+apiVersion: shipwright.io/v1beta1
+kind: Build
+metadata:
+  name: {{ ctx.build_name }}
+  namespace: {{ args.namespace }}
+  labels:
+    app: {{ args.imagestream_name }}
+    created-by: forge-build-toolbox
+spec:
+  source:
+    type: Git
+    git:
+      url: {{ ctx.git_url }}
+      revision: {{ args.commit }}
+  strategy:
+    name: buildah
+    kind: ClusterBuildStrategy
+  paramValues:
+  - name: dockerfile
+    value: {{ args.dockerfile_path }}
+  output:
+    image: image-registry.openshift-image-registry.svc:5000/{{ args.namespace }}/{{ ctx.image_tag }}
+  timeout: {{ args.timeout_minutes }}m

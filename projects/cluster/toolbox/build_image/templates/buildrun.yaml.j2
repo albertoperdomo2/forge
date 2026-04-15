@@ -1,0 +1,11 @@
+apiVersion: shipwright.io/v1beta1
+kind: BuildRun
+metadata:
+  generateName: {{ ctx.build_name }}-
+  namespace: {{ args.namespace }}
+  labels:
+    app: {{ args.imagestream_name }}
+    created-by: forge-build-toolbox
+spec:
+  build:
+    name: {{ ctx.build_name }}
