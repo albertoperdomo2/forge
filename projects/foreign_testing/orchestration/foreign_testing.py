@@ -49,12 +49,25 @@ def prepare():
             shutil.rmtree(dest_path)
         shutil.copytree(src_path, dest_path)
 
-    return 0
+    return repo_dest
 
 
-def submit():
+def submit(project_path=None):
+    """
+    Submit a FOURNOS deployment job
+
+    Args:
+        project_path: Path to the project source directory (will be passed as --project-source)
+    """
+    # Build the command arguments
+    args = ["deploy"]
+
+    if project_path:
+        args = [*["--project-source", str(project_path)], *args]
+        logger.info(f"Submitting deployment with args: {args}")
+
     run_ci.execute_project_operation(
-        "fournos_deploy", "ci", ["deploy"],
+        "fournos_deploy", "ci", args,
         do_prepare_ci=False,
         verbose=True,
     )
