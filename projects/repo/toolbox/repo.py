@@ -1,11 +1,11 @@
+import json
+import logging
 import os
 import pathlib
-import sys
 import subprocess
-import json
-import urllib.request
+import sys
 import urllib.error
-import logging
+import urllib.request
 
 TOOLBOX_THIS_DIR = pathlib.Path(__file__).absolute().parent
 PROJECT_DIR = TOOLBOX_THIS_DIR.parent

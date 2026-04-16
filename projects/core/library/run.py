@@ -1,15 +1,9 @@
-import sys, os, signal
-import traceback
 import logging
-
-logging.getLogger().setLevel(logging.INFO)
-import json
+import os
 import signal
-import itertools
-
 import subprocess
 
-from . import env, config
+logging.getLogger().setLevel(logging.INFO)
 
 
 def init():

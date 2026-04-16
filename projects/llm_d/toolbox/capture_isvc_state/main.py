@@ -5,18 +5,10 @@ LLMInferenceService state capture using task-based DSL
 Replaces llmd_capture_isvc_state Ansible role
 """
 
-from datetime import datetime
-from pathlib import Path
-
-from projects.core.library import env
 from projects.core.dsl import (
-    task,
-    retry,
-    when,
-    always,
     execute_tasks,
-    clear_tasks,
     shell,
+    task,
     toolbox,
 )
 

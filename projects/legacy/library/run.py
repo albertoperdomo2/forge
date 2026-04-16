@@ -1,14 +1,12 @@
-import sys, os, signal
-import traceback
-import logging
-
-logging.getLogger().setLevel(logging.INFO)
-import json
-import signal
 import itertools
+import json
+import logging
+import os
 import pathlib
-
+import signal
 import subprocess
+import sys
+import traceback
 
 try:
     import joblib
@@ -18,7 +16,9 @@ except ImportError:
     )
     joblib = None
 
-from . import env, config
+from . import config, env
+
+logging.getLogger().setLevel(logging.INFO)
 
 FORGE_HOME = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 
@@ -67,7 +67,7 @@ def run_toolbox_from_config(
 
     run_kwargs["cwd"] = str(FORGE_HOME)
 
-    kwargs = dict()
+    kwargs = {}
     if prefix is not None:
         kwargs["prefix"] = prefix
     if suffix is not None:
@@ -99,10 +99,10 @@ def _dict_to_run_toolbox_args(args_dict):
     args = []
     for k, v in args_dict.items():
         if isinstance(v, dict) or isinstance(v, list):
-            val = json.dumps(v)
+            json.dumps(v)
             arg = f'--{k}="{v}"'
         else:
-            val = str(v).replace("'", "'")
+            str(v).replace("'", "'")
             arg = f"--{k}='{v}'"
         args.append(arg)
 
@@ -193,7 +193,7 @@ def run(
     return proc
 
 
-class Parallel(object):
+class Parallel:
     def __init__(self, name, exit_on_exception=True, dedicated_dir=True):
         self.name = name
         self.parallel_tasks = None

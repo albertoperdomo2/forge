@@ -7,11 +7,12 @@ within the FORGE test harness framework. Use this as a starting point for
 building your own projects.
 """
 
-from projects.core.library import ci as ci_lib
-import foreign_testing
+import types
 
 import click
-import types
+import foreign_testing
+
+from projects.core.library import ci as ci_lib
 
 
 @click.group()

@@ -6,11 +6,11 @@ This module handles FOURNOS-specific CI operations including environment
 variable processing and configuration transformation.
 """
 
-import os
-import yaml
 import logging
+import os
 from pathlib import Path
-from typing import Optional
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def process_fournos_environment():
     try:
         # Read and parse the environment file
         env_vars = {}
-        with open(env_config_path, "r") as f:
+        with open(env_config_path) as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
                 if not line or line.startswith("#"):
@@ -115,7 +115,7 @@ def transform_fournos_config_to_variable_overrides(forge_config: dict) -> dict:
     return variable_overrides
 
 
-def parse_and_save_pr_arguments_fournos() -> Optional[Path]:
+def parse_and_save_pr_arguments_fournos() -> Path | None:
     """
     Parse GitHub PR arguments for FOURNOS CI environment.
 
@@ -140,7 +140,7 @@ def parse_and_save_pr_arguments_fournos() -> Optional[Path]:
 
     try:
         # Read and parse the FOURNOS config
-        with open(forge_config_path, "r") as f:
+        with open(forge_config_path) as f:
             forge_config = yaml.safe_load(f)
 
         logger.info(f"Loaded FOURNOS config from {forge_config_path}")

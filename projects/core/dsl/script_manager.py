@@ -4,8 +4,6 @@ ScriptManager - Task registry and state management for DSL framework
 Provides clean separation between task definitions and execution state.
 """
 
-from typing import Dict, List, Optional
-from pathlib import Path
 import logging
 
 logger = logging.getLogger("DSL")
@@ -39,9 +37,9 @@ class ScriptManager:
 
     def __init__(self):
         # Task registry organized by source file path
-        self._task_registry: Dict[str, List[dict]] = {}
+        self._task_registry: dict[str, list[dict]] = {}
         # Task results organized by task name
-        self._task_results: Dict[str, TaskResult] = {}
+        self._task_results: dict[str, TaskResult] = {}
 
     def register_task(self, task_info: dict, source_file: str) -> None:
         """
@@ -62,11 +60,11 @@ class ScriptManager:
 
         logger.debug(f"Registered task '{task_name}' from {source_file}")
 
-    def get_task_result(self, task_name: str) -> Optional[TaskResult]:
+    def get_task_result(self, task_name: str) -> TaskResult | None:
         """Get the result container for a specific task"""
         return self._task_results.get(task_name)
 
-    def get_tasks_from_file(self, source_file: str) -> List[dict]:
+    def get_tasks_from_file(self, source_file: str) -> list[dict]:
         """
         Get tasks from a specific source file
 
@@ -78,7 +76,7 @@ class ScriptManager:
         """
         return self._task_registry.get(source_file, [])
 
-    def clear_tasks(self, source_file: Optional[str] = None) -> None:
+    def clear_tasks(self, source_file: str | None = None) -> None:
         """
         Clear tasks from registry
 
@@ -106,7 +104,7 @@ class ScriptManager:
                 del self._task_registry[source_file]
                 logger.debug(f"Cleared {len(tasks_to_remove)} tasks from {source_file}")
 
-    def get_registry_summary(self) -> Dict[str, int]:
+    def get_registry_summary(self) -> dict[str, int]:
         """
         Get a summary of the current task registry
 

@@ -3,16 +3,12 @@ Task decorator and retry functionality
 """
 
 import functools
-import logging
-import time
 import inspect
+import logging
 import os
-import types
-import yaml
-from typing import Callable, Any, Optional
+import time
 
-import projects.core.library.env as env
-from .log import log_task_header, log_execution_banner
+from .log import log_task_header
 from .script_manager import get_script_manager
 
 LINE_WIDTH = 80
@@ -74,7 +70,6 @@ def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
     retry_delay = retry_config.get("delay", delay)
     retry_backoff = retry_config.get("backoff", backoff)
 
-    last_exception = None
     current_delay = retry_delay
 
     for attempt in range(retry_attempts):

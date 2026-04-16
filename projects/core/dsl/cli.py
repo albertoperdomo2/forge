@@ -5,7 +5,6 @@ CLI argument parsing utilities for the DSL framework
 import argparse
 import inspect
 import re
-from typing import get_type_hints, get_origin, get_args
 
 
 def _parse_docstring_args(docstring: str) -> dict:
@@ -95,7 +94,7 @@ Generated automatically from {func.__name__}() signature.
 
         # Determine argument type from annotation
         if param.annotation != inspect.Parameter.empty:
-            if param.annotation == bool:
+            if param.annotation is bool:
                 # Boolean args are always optional flags
                 cli_name = f"--{param_name.replace('_', '-')}"
                 parser.add_argument(

@@ -3,16 +3,15 @@
 Foreign Testing Project CLI Operations
 """
 
-import foreign_testing
-from projects.core.library.cli import safe_cli_command
-
 import logging
-
-logger = logging.getLogger(__name__)
+import types
 
 import click
-import sys
-import types
+import foreign_testing
+
+from projects.core.library.cli import safe_cli_command
+
+logger = logging.getLogger(__name__)
 
 
 @click.group()

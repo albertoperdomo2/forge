@@ -1,11 +1,12 @@
-import pathlib
-import logging
 import functools
-import tempfile
+import logging
 import os
+import pathlib
+import tempfile
 
-from projects.legacy.library import env, config
 import utils_gethostname
+
+from projects.legacy.library import config, env
 
 TESTING_THIS_DIR = pathlib.Path(__file__).absolute().parent
 

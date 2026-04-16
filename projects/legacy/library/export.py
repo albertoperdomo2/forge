@@ -1,17 +1,18 @@
 #! /usr/bin/env python
 
-import logging
-
-logging.getLogger().setLevel(logging.INFO)
-import os, sys
-import json
-import subprocess
 import functools
+import json
+import logging
+import os
 import pathlib
+import subprocess
+import sys
 
 import fire
 
-from projects.legacy.library import config, run, env
+from projects.legacy.library import config, env, run
+
+logging.getLogger().setLevel(logging.INFO)
 
 
 def init():
@@ -115,5 +116,5 @@ if __name__ == "__main__":
         sys.exit(1)
     except KeyboardInterrupt:
         print()  # empty line after ^C
-        logging.error(f"Interrupted.")
+        logging.error("Interrupted.")
         sys.exit(1)

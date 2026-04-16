@@ -8,12 +8,13 @@ This module provides:
 - Integration with existing secret dereferencing system
 """
 
-import os
-import yaml
 import logging
-from pathlib import Path
-from typing import Dict, List, Optional, Set, TYPE_CHECKING
+import os
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional
+
+import yaml
 
 if TYPE_CHECKING:
     pass
@@ -29,7 +30,7 @@ class VaultContent:
 
     name: str
     description: str
-    filename: Optional[str] = None
+    filename: str | None = None
     _vault: Optional["VaultDefinition"] = None
 
     def __post_init__(self):
@@ -38,7 +39,7 @@ class VaultContent:
             self.filename = self.name
 
     @property
-    def file_path(self) -> Optional[Path]:
+    def file_path(self) -> Path | None:
         """Get the full absolute path to this content file"""
         if self._vault is None:
             return None
@@ -57,10 +58,10 @@ class VaultDefinition:
     name: str
     env_key: str
     description: str
-    content: Dict[str, VaultContent]
+    content: dict[str, VaultContent]
 
     @property
-    def secret_dir(self) -> Optional[Path]:
+    def secret_dir(self) -> Path | None:
         """Get the secret directory path from environment"""
         if self.env_key not in os.environ:
             return None
@@ -72,7 +73,7 @@ class VaultManager:
 
     def __init__(self, vault_definitions_dir: Path = None):
         self.vault_definitions_dir = vault_definitions_dir or env.FORGE_HOME / "vaults"
-        self._vault_cache: Dict[str, VaultDefinition] = {}
+        self._vault_cache: dict[str, VaultDefinition] = {}
         self._load_vault_definitions()
 
     def _load_vault_definitions(self):
@@ -93,7 +94,7 @@ class VaultManager:
 
     def _load_vault_definition(self, vault_file: Path) -> VaultDefinition:
         """Load a single vault definition from a YAML file"""
-        with open(vault_file, "r") as f:
+        with open(vault_file) as f:
             data = yaml.safe_load(f)
 
         # Vault name is derived from filename (without .yaml extension)
@@ -130,11 +131,11 @@ class VaultManager:
 
         return vault_def
 
-    def get_vault(self, vault_name: str) -> Optional[VaultDefinition]:
+    def get_vault(self, vault_name: str) -> VaultDefinition | None:
         """Get a vault definition by name"""
         return self._vault_cache.get(vault_name)
 
-    def list_vaults(self) -> List[str]:
+    def list_vaults(self) -> list[str]:
         """List all available vault names"""
         return list(self._vault_cache.keys())
 
@@ -262,7 +263,7 @@ class VaultManager:
 
         return all_valid
 
-    def load_project_vault_requirements(self, project_name: str) -> List[Dict]:
+    def load_project_vault_requirements(self, project_name: str) -> list[dict]:
         """Load vault requirements for a specific project"""
         vaults_file = (
             env.FORGE_HOME / "projects" / project_name / "orchestration" / "vaults.yaml"
@@ -272,7 +273,7 @@ class VaultManager:
             return []
 
         try:
-            with open(vaults_file, "r") as f:
+            with open(vaults_file) as f:
                 data = yaml.safe_load(f)
 
             # Handle both list format and dict format
@@ -292,9 +293,7 @@ class VaultManager:
             )
             return []
 
-    def get_vault_content_path(
-        self, vault_name: str, content_name: str
-    ) -> Optional[Path]:
+    def get_vault_content_path(self, vault_name: str, content_name: str) -> Path | None:
         """
         Get the full path to a specific piece of vault content
 
@@ -330,7 +329,7 @@ class VaultManager:
 
 
 def _filter_and_validate_vaults(
-    vault_manager: VaultManager, vaults: List[str], strict: bool = True
+    vault_manager: VaultManager, vaults: list[str], strict: bool = True
 ):
     """
     Filter vault manager to only include specified vaults and validate them
@@ -385,10 +384,10 @@ def _filter_and_validate_vaults(
 
 
 # Global vault manager instance
-_vault_manager: Optional[VaultManager] = None
+_vault_manager: VaultManager | None = None
 
 
-def init(vaults: List[str] = None, strict: bool = True):
+def init(vaults: list[str] = None, strict: bool = True):
     """Initialize the vault manager
 
     - Initialize the vault manager
@@ -427,7 +426,7 @@ def validate_project_vaults(project_name: str, strict: bool = True) -> bool:
     return get_vault_manager().validate_project_vaults(project_name, strict=strict)
 
 
-def get_vault_content_path(vault_name: str, content_name: str) -> Optional[Path]:
+def get_vault_content_path(vault_name: str, content_name: str) -> Path | None:
     """Convenience function to get vault content path"""
 
     return get_vault_manager().get_vault_content_path(vault_name, content_name)

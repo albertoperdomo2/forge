@@ -5,16 +5,9 @@
 # extending class from /usr/lib/python3.8/site-packages/ansible/plugins/callback/__init__.py
 
 # Make coding more python3-ish
-from __future__ import absolute_import, division, print_function
 
-__metaclass__ = type
 
-import os
 import json
-
-import logging
-import logging.handlers
-
 import socket
 
 from ansible.plugins.callback import CallbackBase
@@ -51,12 +44,10 @@ class CallbackModule(CallbackBase):
     CALLBACK_NEEDS_WHITELIST = True
 
     def __init__(self):
-        super(CallbackModule, self).__init__()
+        super().__init__()
 
     def set_options(self, task_keys=None, var_options=None, direct=None):
-        super(CallbackModule, self).set_options(
-            task_keys=task_keys, var_options=var_options, direct=direct
-        )
+        super().set_options(task_keys=task_keys, var_options=var_options, direct=direct)
 
         self.logfile = self.get_option("logfile")
 

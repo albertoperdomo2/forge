@@ -7,11 +7,13 @@ within the FORGE test harness framework. Use this as a starting point for
 building your own projects.
 """
 
-from projects.core.library import ci as ci_lib
-import test_skeleton, prepare_skeleton
-
 import types
+
 import click
+import prepare_skeleton
+import test_skeleton
+
+from projects.core.library import ci as ci_lib
 
 
 @click.group()

@@ -2,13 +2,10 @@
 Task-based DSL for FORGE operations
 """
 
-from .task import task, retry, when, always
-from .runtime import execute_tasks, clear_tasks
+from . import context, shell, template, toolbox
+from .runtime import clear_tasks, execute_tasks
 from .script_manager import get_script_manager, reset_script_manager
-from . import shell
-from . import toolbox
-from . import template
-from . import context
+from .task import always, retry, task, when
 
 __all__ = [
     "always",

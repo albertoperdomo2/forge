@@ -6,21 +6,23 @@ This module handles all preparation tasks needed before executing CI operations,
 including parsing GitHub PR arguments and setting up the execution environment.
 """
 
-import os
-import sys
 import logging
-import yaml
+import os
+import shutil
+import subprocess
+import sys
 import threading
 import time
-import subprocess
-import glob
-import json
-import shutil
-import requests
 from datetime import datetime
-from pathlib import Path
-from typing import Optional, List
 from enum import StrEnum
+from pathlib import Path
+
+import requests
+import yaml
+
+import projects.core.ci_entrypoint.fournos as fournos
+import projects.core.ci_entrypoint.github.pr_args as github_pr_args
+import projects.core.notifications.send as send
 
 IS_LIGHTWEIGHT_IMAGE = os.environ.get("FORGE_LIGHT_IMAGE")
 
@@ -37,10 +39,6 @@ class FinishReason(StrEnum):
 
 # Set up logging
 logger = logging.getLogger(__name__)
-
-import projects.core.ci_entrypoint.fournos as fournos
-import projects.core.ci_entrypoint.github.pr_args as github_pr_args
-import projects.core.notifications.send as send
 
 # Dual output global state
 _dual_output_state = None
@@ -190,7 +188,7 @@ def shutdown_dual_output():
 
 
 # PR arguments
-def parse_and_save_pr_arguments() -> Optional[Path]:
+def parse_and_save_pr_arguments() -> Path | None:
     """
     Parse GitHub PR arguments and save to variable overrides file.
 
@@ -211,7 +209,7 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
         return parse_and_save_pr_arguments_ocpci()
 
 
-def parse_and_save_pr_arguments_ocpci() -> Optional[Path]:
+def parse_and_save_pr_arguments_ocpci() -> Path | None:
     """
     Parse GitHub PR arguments for OpenShift CI environment.
 
@@ -319,7 +317,7 @@ def precheck_artifact_dir() -> bool:
     logger.info(f"Using ARTIFACT_DIR={default_dir} as default artifacts directory.")
 
 
-def ci_banner(project: str, operation: str, args: List[str]):
+def ci_banner(project: str, operation: str, args: list[str]):
     """
     Display CI execution banner with git information.
 
@@ -331,10 +329,10 @@ def ci_banner(project: str, operation: str, args: List[str]):
 
     base_sha = os.environ.get("PULL_BASE_SHA", "main")
     if base_sha == "main":
-        logger.warning(f"PULL_BASE_SHA not set. Showing the last commits from main.")
+        logger.warning("PULL_BASE_SHA not set. Showing the last commits from main.")
     pull_sha = os.environ.get("PULL_PULL_SHA", "")
     if not pull_sha:
-        logger.warning(f"PULL_PULL_SHA not set. Showing the last commits from main.")
+        logger.warning("PULL_PULL_SHA not set. Showing the last commits from main.")
 
     logger.info(
         f"Git command will be: git show --quiet --oneline {base_sha}..{pull_sha}"
@@ -545,7 +543,7 @@ def prepare(
     verbose: bool = False,
     project: str = "",
     operation: str = "",
-    args: List[str] = None,
+    args: list[str] = None,
 ):
     """
     Execute all CI preparation tasks.
@@ -657,17 +655,17 @@ def send_notification(
         else:
             logger.info("Notifications sent successfully")
 
-    except Exception as e:
-        logger.exception(f"Failed to send notifications")
+    except Exception:
+        logger.exception("Failed to send notifications")
         # Don't fail the entire job if notifications fail
 
 
 def postchecks(
     project: str,
     operation: str,
-    start_time: Optional[float],
+    start_time: float | None,
     finish_reason: FinishReason,
-    args: Optional[List[str]] = None,
+    args: list[str] | None = None,
 ) -> str:
     """
     Post-execution checks and status reporting.

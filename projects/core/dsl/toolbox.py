@@ -6,15 +6,17 @@ Provides common functionality for toolbox command entry points,
 including argument parsing, environment setup, and error handling.
 """
 
-import sys
-import logging
 import inspect
+import logging
 import subprocess
-from typing import Callable, List, Optional
+import sys
 import traceback
+from collections.abc import Callable
+
 import yaml
 
 from projects.core.library import env
+
 from .cli import create_dynamic_parser
 from .runtime import TaskExecutionError
 
@@ -23,7 +25,7 @@ logger = logging.getLogger("DSL")
 logger.propagate = False  # Don't show logger prefix
 
 
-def _get_positional_args(func: Callable) -> List[str]:
+def _get_positional_args(func: Callable) -> list[str]:
     """
     Introspect a function to determine which parameters should be positional.
 
@@ -105,12 +107,12 @@ def get_task_execution_error(e):
     yield f"~~ TASK: {e.task_name}: {e.task_description}"
     yield f"~~ ARTIFACT_DIR: {e.artifact_dir}"
     yield f"~~ LOG_FILE: {e.artifact_dir}/task.log"
-    yield f"~~ ARGS:"
+    yield "~~ ARGS:"
     for line in yaml.dump(
         clean_args(e.task_args), default_flow_style=False, sort_keys=False
     ).splitlines():
         yield f"~~     {line}"
-    yield f"~~ CONTEXT:"
+    yield "~~ CONTEXT:"
     for line in yaml.dump(
         clean_args(e.task_context), default_flow_style=False, sort_keys=False
     ).splitlines():

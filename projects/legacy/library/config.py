@@ -1,20 +1,19 @@
+import copy
 import logging
-
-logging.getLogger().setLevel(logging.INFO)
-import os, sys
+import os
 import pathlib
-import yaml
+import re
 import shutil
 import subprocess
+import sys
 import threading
-import re
-from collections import defaultdict
-import jsonpath_ng
-import copy
 
-from . import env
-from . import run
-from . import common
+import jsonpath_ng
+import yaml
+
+from . import common, env, run
+
+logging.getLogger().setLevel(logging.INFO)
 
 TOPSAIL_DIR = pathlib.Path(common.__file__).parents[3]
 VARIABLE_OVERRIDES_FILENAME = "000__ci_metadata/variable_overrides.yaml"
@@ -23,7 +22,7 @@ PR_ARG_KEY = "PR_POSITIONAL_ARG_"
 project = None  # the project config will be populated in init()
 
 
-class TempValue(object):
+class TempValue:
     def __init__(self, config, key, value):
         self.config = config
         self.key = key
@@ -117,7 +116,7 @@ class Config:
             raise ValueError(f"Preset '{name}' does not exists")
 
         presets = self.get_config("ci_presets.names", print=False) or []
-        if not name in presets:
+        if name not in presets:
             self.set_config("ci_presets.names", presets + [name])
 
         for key, value in values.items():
@@ -147,7 +146,7 @@ class Config:
                 return default_value
 
             logging.error(f"get_config: {jsonpath} --> {ex}")
-            raise KeyError(f"Key '{jsonpath}' not found in {self.config_path}")
+            raise KeyError(f"Key '{jsonpath}' not found in {self.config_path}") from ex
 
         if isinstance(value, str) and value.startswith("*$@"):
             print = False
@@ -371,7 +370,6 @@ class Config:
 
 
 def _set_config_environ(testing_dir):
-    reloading = False
     config_path_final = pathlib.Path(env.ARTIFACT_DIR / "config.yaml")
 
     config_file_src = None
@@ -423,9 +421,11 @@ def get_command_arg(group, command, arg, prefix=None, suffix=None, mute=False):
             prefix=prefix,
             suffix=suffix,
             check=True,
-            run_kwargs=dict(
-                capture_stdout=True, capture_stderr=True, log_command=(not mute)
-            ),
+            run_kwargs={
+                "capture_stdout": True,
+                "capture_stderr": True,
+                "log_command": (not mute),
+            },
         )
     except subprocess.CalledProcessError as e:
         logging.error(e.stderr.strip().decode("ascii", "ignore"))
@@ -448,7 +448,7 @@ def get_jsonpath(config, jsonpath):
 def test_skip_list():
     if len(sys.argv) < 2:
         logging.info(
-            f"test_skip_list: cannot determinate the current subcommand. Not processing the skip list."
+            "test_skip_list: cannot determinate the current subcommand. Not processing the skip list."
         )
         return
 

@@ -1,7 +1,6 @@
-import subprocess
 import logging
+import subprocess
 from dataclasses import dataclass
-from typing import Optional, Union
 from pathlib import Path
 
 import projects.core.library.env as env
@@ -31,7 +30,7 @@ def run(
     command: str,
     check: bool = True,
     shell: bool = True,
-    stdout_dest: Optional[Union[str, Path]] = None,
+    stdout_dest: str | Path | None = None,
     log_stdout: bool = True,
     log_stderr: bool = True,
 ) -> CommandResult:

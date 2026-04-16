@@ -1,19 +1,20 @@
 #!/usr/bin/env python
 
-import sys, os, shlex
-import subprocess
-import fire
-import pathlib
 import logging
+import os
+import pathlib
+import shlex
+import subprocess
+import sys
+
+import fire
+
+from projects.jump_ci.testing import tunnelling, utils
+from projects.legacy.library import config, configure_logging, env, run
 
 logging.getLogger().setLevel(logging.INFO)
-import yaml
-
-from projects.legacy.library import env, config, run, configure_logging
 
 configure_logging()
-
-from projects.jump_ci.testing import utils, prepare_jump_ci, tunnelling
 
 LOCK_DIR_PREFIX = "/tmp/topsail"
 
@@ -62,13 +63,13 @@ def test_jump_ci_skip_list(current_subcommand):
 
 
 def rewrite_variables_overrides(variable_overrides_dict, nb_args_to_eat):
-    new_variable_overrides = dict()
+    new_variable_overrides = {}
 
     old_args = (variable_overrides_dict["PR_POSITIONAL_ARGS"] or "").split()
     # remove the first args of the jump-ci test (project and cluster)
     new_args = old_args[nb_args_to_eat:]
 
-    new_args_str = new_variable_overrides[f"PR_POSITIONAL_ARGS"] = " ".join(new_args)
+    new_args_str = new_variable_overrides["PR_POSITIONAL_ARGS"] = " ".join(new_args)
     new_variable_overrides["PR_POSITIONAL_ARGS"] = variable_overrides_dict[
         "PR_POSITIONAL_ARG_0"
     ]
@@ -127,10 +128,10 @@ def jump_ci(command):
 
         secrets_path_env_key = config.project.get_config("secrets.dir.env_key")
 
-        extra_env = dict(
-            FORGE_JUMP_CI="true",
-            FORGE_JUMP_CI_INSIDE_JUMP_HOST="true",
-        )
+        extra_env = {
+            "FORGE_JUMP_CI": "true",
+            "FORGE_JUMP_CI_INSIDE_JUMP_HOST": "true",
+        }
 
         def prepare_env_file(_extra_env):
             env_fd_path, env_file = utils.get_tmp_fd()
@@ -175,7 +176,7 @@ def jump_ci(command):
 
         if test_args is not None and not project:
             logging.fatal(
-                f"The --project flag must be specificed when --test_args is passed"
+                "The --project flag must be specificed when --test_args is passed"
             )
             raise SystemExit(1)
 
@@ -192,10 +193,10 @@ def jump_ci(command):
             if test_args is None:
                 test_args = " ".join(config_test_args)
 
-            variables_overrides_dict = dict(
-                PR_POSITIONAL_ARGS=test_args,
-                PR_POSITIONAL_ARG_0="jump-ci",
-            )
+            variables_overrides_dict = {
+                "PR_POSITIONAL_ARGS": test_args,
+                "PR_POSITIONAL_ARG_0": "jump-ci",
+            }
             idx = 0
             for idx, arg in enumerate(test_args.split()):
                 variables_overrides_dict[f"PR_POSITIONAL_ARG_{idx + 1}"] = arg
@@ -233,7 +234,7 @@ def jump_ci(command):
             )
 
         for idx, multi_run_args in enumerate(
-            (config.project.get_config("multi_run.args") or [...])
+            config.project.get_config("multi_run.args") or [...]
         ):
             multi_run_args_dict = {}
             multi_run_dirname = None
@@ -247,7 +248,7 @@ def jump_ci(command):
                 )
                 multi_run_dirname = f"multi_run__{'_'.join(multi_run_args_lst)}"
 
-                with open(env.ARTIFACT_DIR / "multi_run_args.list", "a+") as f:
+                with open(env.ARTIFACT_DIR / "multi_run_args.list", "a+"):
                     print(f"{multi_run_dirname}: {multi_run_args}")
 
                 for idx, multi_run_arg in enumerate(multi_run_args_lst):
@@ -296,7 +297,7 @@ def jump_ci(command):
                         f"Test step '{command}' on cluster '{cluster}' succeeded."
                     )
                     failed = False
-                except subprocess.CalledProcessError as e:
+                except subprocess.CalledProcessError:
                     logging.fatal(
                         f"Test step '{command}' on cluster '{cluster}' FAILED."
                     )

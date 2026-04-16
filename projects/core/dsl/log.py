@@ -2,12 +2,11 @@
 Logging utilities for the DSL framework
 """
 
-import logging
 import inspect
-import os
+import logging
 from pathlib import Path
+
 import projects.core.library.env as env
-import projects.core.library.config as config
 
 LINE_WIDTH = 80
 

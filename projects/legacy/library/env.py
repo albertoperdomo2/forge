@@ -1,9 +1,9 @@
+import logging
 import os
 import pathlib
+import threading
 import time
 import traceback
-import logging
-import threading
 
 ###
 # The code below required to properly set the ARTIFACT_DIR in the
@@ -14,16 +14,16 @@ import threading
 
 class MyThread(threading.Thread):
     def __init__(self, *args, **kwargs):
-        super(MyThread, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.parent_artifact_dict = None
 
     def start(self):
         self.parent_artifact_dict = get_tls_artifact_dir()
-        super(MyThread, self).start()
+        super().start()
 
     def run(self):
         _set_tls_artifact_dir(self.parent_artifact_dict)
-        super(MyThread, self).run()
+        super().run()
 
 
 threading.Thread = MyThread
@@ -81,7 +81,7 @@ def NextArtifactDir(name, *, lock=None, counter_p=None):
     return TempArtifactDir(dirname)
 
 
-class TempArtifactDir(object):
+class TempArtifactDir:
     def __init__(self, dirname):
         self.dirname = pathlib.Path(dirname)
         self.previous_dirname = None

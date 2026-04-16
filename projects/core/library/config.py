@@ -1,29 +1,26 @@
-import logging
-
-logging.getLogger().setLevel(logging.INFO)
-import os, sys
-import pathlib
-import yaml
-import shutil
-import subprocess
-import functools
-import types
-import re
-from collections import defaultdict
-import inspect
 import copy
+import functools
+import inspect
+import logging
+import os
+import pathlib
+import re
+import shutil
+import types
 
 import jsonpath_ng
+import yaml
 
 from . import env
-from . import run
+
+logging.getLogger().setLevel(logging.INFO)
 
 VARIABLE_OVERRIDES_FILENAME = "000__ci_metadata/variable_overrides.yaml"
 
 project = None  # the project config will be populated in init()
 
 
-class TempValue(object):
+class TempValue:
     """This context changes temporarily the value of a configuration field"""
 
     def __init__(self, config, key, value):
@@ -209,7 +206,7 @@ class Config:
                 jsonpath_ng.parse(jsonpath).find(self.config)[0].value
             )  # raises an IndexError if jsonpath isn't found
             return True
-        except IndexError as ex:
+        except IndexError:
             return False
 
     def get_config(
@@ -226,7 +223,7 @@ class Config:
                 return default_value
 
             logging.error(f"get_config: {jsonpath} --> {ex}")
-            raise KeyError(f"Key '{jsonpath}' not found in {self.config_path}")
+            raise KeyError(f"Key '{jsonpath}' not found in {self.config_path}") from ex
 
         if isinstance(value, str) and value.startswith("*$@"):
             print = False
@@ -402,7 +399,7 @@ def init(orchestration_dir, *, apply_config_overrides=True):
 
     project = Config(config_path)
 
-    repo_var_overrides = env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
+    env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
 
     if not apply_config_overrides:
         logging.info(

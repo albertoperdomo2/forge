@@ -3,19 +3,17 @@
 Fournos launcher project CLI Operations
 """
 
-import sys
-import types
-import shlex
-
 import logging
-
-logger = logging.getLogger(__name__)
+import shlex
+import types
 
 import click
 
-from projects.fournos_launcher.orchestration import submit as submit_mod
 from projects.core.library import config
 from projects.core.library.cli import safe_cli_command
+from projects.fournos_launcher.orchestration import submit as submit_mod
+
+logger = logging.getLogger(__name__)
 
 
 @click.group()

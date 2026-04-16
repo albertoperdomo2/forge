@@ -7,26 +7,18 @@ Creates and manages Shipwright builds for container images. Ensures ImageStream 
 creates the build definition, triggers the build, and waits for completion.
 """
 
-from projects.core.library import env
+import json
+import logging
+
 from projects.core.dsl import (
-    task,
-    retry,
-    when,
     always,
     execute_tasks,
-    clear_tasks,
+    retry,
     shell,
-    toolbox,
+    task,
     template,
+    toolbox,
 )
-
-
-from datetime import datetime
-from pathlib import Path
-import time
-import json
-
-import logging
 
 logger = logging.getLogger("TOOLBOX")
 
@@ -137,7 +129,7 @@ def create_shipwright_build(args, ctx):
     template.render_template_to_file("build.yaml.j2", build_manifest_file)
 
     # Check if build already exists and delete if it does
-    delete_result = shell.run(
+    shell.run(
         f"oc delete build {ctx.build_name} -n {args.namespace} --ignore-not-found",
     )
 
@@ -274,7 +266,7 @@ def capture_build_artifacts(args, ctx):
 def generate_build_summary(args, ctx):
     """Generate a summary of the build process"""
 
-    summary_file = args.artifact_dir / "artifacts" / "build_summary.txt"
+    args.artifact_dir / "artifacts" / "build_summary.txt"
 
     logger.info("=== Shipwright Build Summary ===")
     logger.info(f"Generated at: {getattr(ctx, 'build_timestamp', 'unknown')}")

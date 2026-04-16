@@ -5,11 +5,8 @@ Jump CI Project CI Operations
 This is the JumpCI CI entrypoint. It's used to run TOPSAIL-ng remotely inside a VPN cluster"""
 
 import sys
-import subprocess
-import time
-import os
-from pathlib import Path
 import traceback
+from pathlib import Path
 
 import click
 
@@ -21,10 +18,9 @@ if str(testing_dir) not in sys.path:
 # Import jump CI testing functionality
 try:
     import prepare_jump_ci as prepare_jump_ci_mod
-    import utils
     from test import JumpCi
 except ImportError as e:
-    raise RuntimeError(f"Jump CI testing functionality not available: {e}")
+    raise RuntimeError(f"Jump CI testing functionality not available: {e}") from e
 
 
 def log(message: str, level: str = "info"):

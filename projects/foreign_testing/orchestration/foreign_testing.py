@@ -1,12 +1,12 @@
-import pathlib
 import logging
-
-logger = logging.getLogger(__name__)
 import os
+import pathlib
 import shutil
 
-from projects.core.library import env, config, run
 from projects.core.ci_entrypoint import run_ci
+from projects.core.library import config, env, run
+
+logger = logging.getLogger(__name__)
 
 
 def init():

@@ -1,17 +1,16 @@
-import itertools
-import subprocess
-import os
-import time
-import sys
-import pathlib
-import yaml
-import tempfile
 import functools
-import inspect
-import shutil
-import shlex
 import importlib
 import logging
+import os
+import pathlib
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+import yaml
 
 from projects.legacy.library import config
 
@@ -112,7 +111,7 @@ def AnsibleConstant(description, name, value):
         if not hasattr(fct, "ansible_constants"):
             fct.ansible_constants = []
         fct.ansible_constants.append(
-            dict(description=description, name=name, value=value)
+            {"description": description, "name": name, "value": value}
         )
 
         return fct
@@ -283,18 +282,18 @@ class RunAnsibleRole:
         # the play file must be in the directory where the 'roles' are
         tmp_play_file = tempfile.NamedTemporaryFile(
             "w+",
-            prefix="tmp_play_{}_".format(artifact_extra_logs_dir.name),
+            prefix=f"tmp_play_{artifact_extra_logs_dir.name}_",
             suffix=".yaml",
             dir=os.getcwd(),
             delete=False,
         )
 
         generated_play = [
-            dict(
-                name=f"Run {self.role_name} role",
-                roles=[self.role_name],
-                vars=self.ansible_vars,
-            )
+            {
+                "name": f"Run {self.role_name} role",
+                "roles": [self.role_name],
+                "vars": self.ansible_vars,
+            }
         ]
 
         remote_hostname = env.get("TOPSAIL_REMOTE_HOSTNAME")

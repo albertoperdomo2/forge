@@ -1,9 +1,9 @@
-import os
-import logging
 import json
+import logging
+import os
 
-from projects.legacy.library import env, config, run
-from projects.jump_ci.testing import utils, tunnelling
+from projects.jump_ci.testing import tunnelling, utils
+from projects.legacy.library import config, run
 
 
 @utils.entrypoint()
@@ -100,10 +100,10 @@ def prepare(
 
     # Clone the Git Repository
     # Build the image
-    prepare_topsail_args = dict(
-        cluster=cluster,
-        lock_owner=utils.get_lock_owner(),
-    )
+    prepare_topsail_args = {
+        "cluster": cluster,
+        "lock_owner": utils.get_lock_owner(),
+    }
 
     if os.environ.get("OPENSHIFT_CI") == "true":
         if os.environ.get("OPENSHIFT_CI_TOPSAIL_FOREIGN_TESTING"):
@@ -127,12 +127,12 @@ def prepare(
             repo_name = os.environ["REPO_NAME"]
             git_ref = os.environ["PULL_PULL_SHA"]
 
-        prepare_topsail_args |= dict(
-            repo_owner=repo_owner,
-            repo_name=repo_name,
-            git_ref=git_ref,
-            pr_number=os.environ.get("PULL_NUMBER"),
-        )
+        prepare_topsail_args |= {
+            "repo_owner": repo_owner,
+            "repo_name": repo_name,
+            "git_ref": git_ref,
+            "pr_number": os.environ.get("PULL_NUMBER"),
+        }
     elif any([pr_number, git_ref]):
         if not all([repo_owner, repo_name, pr_number]):
             logging.fatal(
@@ -140,12 +140,12 @@ def prepare(
             )
             raise SystemExit(1)
 
-        prepare_topsail_args |= dict(
-            repo_owner=repo_owner,
-            repo_name=repo_name,
-            pr_number=pr_number,
-            git_ref=git_ref,
-        )
+        prepare_topsail_args |= {
+            "repo_owner": repo_owner,
+            "repo_name": repo_name,
+            "pr_number": pr_number,
+            "git_ref": git_ref,
+        }
 
     else:
         logging.fatal(

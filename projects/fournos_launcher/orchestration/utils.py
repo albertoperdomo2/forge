@@ -1,14 +1,12 @@
-import pathlib
 import logging
-
-logger = logging.getLogger(__name__)
-
+import os
 import shutil
 import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
-import os
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_oc_available():

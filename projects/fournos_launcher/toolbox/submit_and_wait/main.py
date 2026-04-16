@@ -5,23 +5,18 @@ FOURNOS job submission and monitoring using task-based DSL
 Parameters are passed from the entrypoint that reads the configuration
 """
 
-import sys
-import time
 import logging
 from datetime import datetime
 from pathlib import Path
 
-from projects.core.library import env
 from projects.core.dsl import (
-    task,
-    retry,
-    when,
     always,
     execute_tasks,
-    clear_tasks,
+    retry,
     shell,
-    toolbox,
+    task,
     template,
+    toolbox,
 )
 from projects.core.dsl.utils.k8s import sanitize_k8s_name
 
@@ -110,7 +105,7 @@ def validate_inputs(args, ctx):
     if not isinstance(args.env, dict):
         raise ValueError("env should be a dict")
 
-    return f"Inputs validated"
+    return "Inputs validated"
 
 
 @task

@@ -2,23 +2,24 @@
 Runtime execution engine for the DSL framework
 """
 
-import sys
 import inspect
-import types
-import yaml
 import logging
 import os
+import types
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 import projects.core.library.env as env
 from projects.core.library.run import SignalError
-from .log import log_execution_banner, log_completion_banner, logger
+
 from .context import create_task_parameters
+from .log import log_completion_banner, log_execution_banner, logger
+from .script_manager import get_script_manager
 
 # Import from task.py to avoid circular imports
 from .task import ConditionError, RetryFailure
-from .script_manager import get_script_manager
 
 
 class TaskExecutionError(Exception):
@@ -82,7 +83,7 @@ def execute_tasks(function_args: dict = None):
         rel_filename = filename
 
     # Use NextArtifactDir for proper storage management
-    with env.NextArtifactDir(command_name) as artifact_dir:
+    with env.NextArtifactDir(command_name):
         # Convert function arguments to namespace object and add artifact_dir
         args = types.SimpleNamespace(**(function_args or {}))
         args.artifact_dir = env.ARTIFACT_DIR
@@ -146,7 +147,7 @@ def execute_tasks(function_args: dict = None):
                 while file_tasks:
                     try:
                         current_task_info = file_tasks.pop(0)
-                        _execute_single_task(task_info, args, shared_context)
+                        _execute_single_task(current_task_info, args, shared_context)
 
                     except Exception as e:
                         # If normal tasks succeeded but always task failed, raise always task error
@@ -210,7 +211,7 @@ def _execute_single_task(task_info, args, shared_context):
                 f"==> Task: {task_name} ({task_func.__doc__ or 'No description'})"
             )
             logger.info("")
-            raise ConditionError(e)
+            raise ConditionError(e) from e
 
     # Execute the task
     try:
@@ -269,8 +270,7 @@ def _execute_single_task(task_info, args, shared_context):
             task_location=task_location,
             artifact_dir=str(env.ARTIFACT_DIR),
         )
-        # Don't use 'from None' - preserve the original stack trace
-        raise task_error
+        raise task_error from e
 
 
 def clear_tasks(file_path=None):
@@ -351,7 +351,6 @@ def _generate_restart_script(function_args: dict, caller_frame, meta_dir):
     script_content += f'python "{rel_filename}"'
 
     # Add arguments, each on a new line with proper indentation
-    args_added = False
     for key, value in function_args.items():
         if (
             key not in ["function_args"] and value is not None
@@ -359,10 +358,8 @@ def _generate_restart_script(function_args: dict, caller_frame, meta_dir):
             if isinstance(value, bool):
                 if value:  # Only add flag if True
                     script_content += " \\\n    " + f"--{key.replace('_', '-')}"
-                    args_added = True
             else:
                 script_content += " \\\n    " + f'--{key.replace("_", "-")} "{value}"'
-                args_added = True
 
     script_content += "\n"
 

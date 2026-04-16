@@ -1,15 +1,14 @@
-import pathlib
+import atexit
 import logging
 import os
-import functools
-import atexit
-import time
+import pathlib
 import subprocess
+import time
+
 import yaml
 
-from projects.legacy.library import env, config, run, configure_logging
-
 from projects.jump_ci.testing import utils
+from projects.legacy.library import config, run
 
 extra_vars_file = None
 
@@ -110,7 +109,7 @@ def open_tunnel(
     bastion_host_port=22,
     verbose=False,
     keep_open=True,
-    ssh_flags=[],
+    ssh_flags=None,
 ):
     """
     Tests the tunnel to access the jump host.
@@ -128,6 +127,8 @@ def open_tunnel(
       ssh_flags: extra flags to pass to SSH
     """
 
+    if ssh_flags is None:
+        ssh_flags = []
     secret_dir = pathlib.Path(os.environ[secret_env_key])
 
     private_key_path = secret_dir / private_key_filename

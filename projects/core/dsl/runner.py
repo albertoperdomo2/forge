@@ -2,10 +2,9 @@
 Command runner for DSL tasks
 """
 
-import subprocess
 import logging
+import subprocess
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger("DSL")
 logger.propagate = False  # Don't show logger prefix

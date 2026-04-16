@@ -1,12 +1,12 @@
-from projects.core.library import env, config, run, vault
-from projects.skeleton.toolbox.cluster_info.main import run as cluster_info
-
-import pathlib
 import logging
-
-logger = logging.getLogger(__name__)
+import pathlib
 
 import yaml
+
+from projects.core.library import config, env, run, vault
+from projects.skeleton.toolbox.cluster_info.main import run as cluster_info
+
+logger = logging.getLogger(__name__)
 
 
 def init(strict_vault_validation=True):
@@ -38,7 +38,7 @@ def test():
     skeleton_config = config.project.get_config("skeleton", print=False)
 
     yaml_cfg = yaml.dump(
-        dict(skeleton=skeleton_config),
+        {"skeleton": skeleton_config},
         indent=4,
         default_flow_style=False,
         sort_keys=False,

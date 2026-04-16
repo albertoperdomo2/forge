@@ -7,25 +7,18 @@ Triggers a rebuild of an existing Shipwright Build by creating a BuildRun
 and waiting for completion.
 """
 
-from projects.core.library import env
+import json
+import logging
+
 from projects.core.dsl import (
-    task,
-    retry,
-    when,
     always,
     execute_tasks,
-    clear_tasks,
+    retry,
     shell,
-    toolbox,
+    task,
     template,
+    toolbox,
 )
-
-from datetime import datetime
-from pathlib import Path
-import time
-import json
-
-import logging
 
 
 # Set up clean logger without prefix

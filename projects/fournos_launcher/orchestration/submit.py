@@ -1,15 +1,13 @@
-import pathlib
 import logging
-
-logger = logging.getLogger(__name__)
-
 import os
+import pathlib
 
-from projects.core.library import env, config, run, vault
-
+from projects.core.library import config, env, run, vault
 from projects.fournos_launcher.toolbox.submit_and_wait.main import (
     run as submit_and_wait,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def init():

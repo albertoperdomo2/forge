@@ -1,7 +1,8 @@
-import requests
 import json
 import logging
 from datetime import datetime
+
+import requests
 
 from . import gen_jwt
 
@@ -18,7 +19,7 @@ def get_user_token(pem_file, client_id, org, repo):
 
     jwt = gen_jwt.generate_encoded_jwt(pem_file, client_id)
 
-    headers = dict(Authorization=f"Bearer {jwt}") | COMMON_HEADERS
+    headers = {"Authorization": f"Bearer {jwt}"} | COMMON_HEADERS
 
     # Get the installation ID
 
@@ -48,9 +49,9 @@ def get_user_token(pem_file, client_id, org, repo):
 
 
 def send_notification(org, repo, user_token, pr_number, message):
-    headers = dict(Authorization=f"Bearer {user_token}") | COMMON_HEADERS
+    headers = {"Authorization": f"Bearer {user_token}"} | COMMON_HEADERS
 
-    data = dict(body=message)
+    data = {"body": message}
     data_str = json.dumps(data)
 
     return requests.post(

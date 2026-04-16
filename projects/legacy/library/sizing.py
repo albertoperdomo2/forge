@@ -1,13 +1,12 @@
 #! /usr/bin/env python
 
 import logging
-
-logging.getLogger().setLevel(logging.INFO)
-
-import types
+import math
 import os
 import pathlib
-import math
+import types
+
+logging.getLogger().setLevel(logging.INFO)
 
 MACHINES_FILE = (
     pathlib.Path(os.path.dirname(os.path.realpath(__file__))) / "sizing.machines"

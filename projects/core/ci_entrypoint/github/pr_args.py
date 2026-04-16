@@ -11,12 +11,12 @@ Converts the bash script pr_args.sh to Python with enhanced error handling and s
 import json
 import logging
 import os
-import re
 import sys
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any, Callable
-import urllib.request
 import urllib.error
+import urllib.request
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
 REQUIRED_AUTHOR_ASSOCIATION = "CONTRIBUTOR"
 
@@ -33,7 +33,7 @@ def setup_logging():
     )
 
 
-def get_directive_handlers() -> Dict[str, Callable[[str], Dict[str, Any]]]:
+def get_directive_handlers() -> dict[str, Callable[[str], dict[str, Any]]]:
     """
     Get a mapping of directive prefixes to their handler functions.
 
@@ -51,7 +51,7 @@ def get_directive_handlers() -> Dict[str, Callable[[str], Dict[str, Any]]]:
     }
 
 
-def handle_test_directive(line: str) -> Dict[str, Any]:
+def handle_test_directive(line: str) -> dict[str, Any]:
     """
     Handle /test directive for test commands and generate PR positional arguments.
 
@@ -105,7 +105,7 @@ def handle_test_directive(line: str) -> Dict[str, Any]:
     return result
 
 
-def handle_var_directive(line: str) -> Dict[str, Any]:
+def handle_var_directive(line: str) -> dict[str, Any]:
     """
     Handle /var directive for setting variables.
 
@@ -136,10 +136,10 @@ def handle_var_directive(line: str) -> Dict[str, Any]:
             # Fallback for other formats
             return {var_content: var_content}
     except Exception as e:
-        raise Exception(f"Invalid /var directive: {line} - {e}")
+        raise Exception(f"Invalid /var directive: {line} - {e}") from e
 
 
-def handle_skip_directive(line: str) -> Dict[str, Any]:
+def handle_skip_directive(line: str) -> dict[str, Any]:
     """
     Handle /skip directive for disabling test executions.
 
@@ -160,7 +160,7 @@ def handle_skip_directive(line: str) -> Dict[str, Any]:
     return result
 
 
-def handle_only_directive(line: str) -> Dict[str, Any]:
+def handle_only_directive(line: str) -> dict[str, Any]:
     """
     Handle /only directive for enabling only specific test executions.
 
@@ -179,7 +179,7 @@ def handle_only_directive(line: str) -> Dict[str, Any]:
     return result
 
 
-def handle_project_directive(line: str) -> Dict[str, Any]:
+def handle_project_directive(line: str) -> dict[str, Any]:
     """
     Handle /project directive for setting project override.
 
@@ -195,7 +195,7 @@ def handle_project_directive(line: str) -> Dict[str, Any]:
     return {"project.name": project_name}
 
 
-def handle_cluster_directive(line: str) -> Dict[str, Any]:
+def handle_cluster_directive(line: str) -> dict[str, Any]:
     """
     Handle /cluster directive for setting cluster override.
 
@@ -211,7 +211,7 @@ def handle_cluster_directive(line: str) -> Dict[str, Any]:
     return {"cluster.name": cluster_name}
 
 
-def get_directive_prefixes() -> List[str]:
+def get_directive_prefixes() -> list[str]:
     """
     Get a list of supported directive prefixes.
 
@@ -221,7 +221,7 @@ def get_directive_prefixes() -> List[str]:
     return list(get_directive_handlers().keys())
 
 
-def get_supported_directives() -> Dict[str, str]:
+def get_supported_directives() -> dict[str, str]:
     """
     Get a dictionary of supported directives and their comprehensive descriptions.
 
@@ -268,7 +268,7 @@ def get_supported_directives() -> Dict[str, str]:
     }
 
 
-def parse_directives(text: str) -> Tuple[Dict[str, Any], List[str]]:
+def parse_directives(text: str) -> tuple[dict[str, Any], list[str]]:
     """
     Parse all directives from the given text using handler mapping.
 
@@ -314,7 +314,7 @@ def parse_directives(text: str) -> Tuple[Dict[str, Any], List[str]]:
                 config.update(result)
                 found_directives.append(line)
             except Exception as e:
-                raise ValueError(f"Error parsing directive '{line}': {e}")
+                raise ValueError(f"Error parsing directive '{line}': {e}") from e
         else:
             # Unknown directive - log warning but still track it
             logging.warning(f"Unknown directive ignored: {line}")
@@ -326,7 +326,7 @@ def parse_directives(text: str) -> Tuple[Dict[str, Any], List[str]]:
     return config, found_directives
 
 
-def fetch_url(url: str, cache_file: Optional[Path] = None) -> Dict[str, Any]:
+def fetch_url(url: str, cache_file: Path | None = None) -> dict[str, Any]:
     """
     Fetch JSON data from URL with optional caching.
 
@@ -344,7 +344,7 @@ def fetch_url(url: str, cache_file: Optional[Path] = None) -> Dict[str, Any]:
     # Check cache first
     if cache_file and cache_file.exists():
         logging.info(f"Using cached file: {cache_file}")
-        with open(cache_file, "r") as f:
+        with open(cache_file) as f:
             return json.load(f)
 
     # Fetch from URL
@@ -362,16 +362,16 @@ def fetch_url(url: str, cache_file: Optional[Path] = None) -> Dict[str, Any]:
         return data
 
     except urllib.error.URLError as e:
-        raise RuntimeError(f"Failed to fetch {url}: {e}")
+        raise RuntimeError(f"Failed to fetch {url}: {e}") from e
 
 
 def parse_pr_arguments(
     repo_owner: str,
     repo_name: str,
     pull_number: int,
-    test_name: Optional[str] = None,
-    shared_dir: Optional[Path] = None,
-) -> Tuple[Dict[str, Any], List[str]]:
+    test_name: str | None = None,
+    shared_dir: Path | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     """
     Parse GitHub PR arguments and configuration from comments.
 

@@ -5,18 +5,20 @@ This module provides helpers for loading and rendering Jinja2 templates
 in FORGE toolbox tasks.
 """
 
-import jinja2
 import inspect
-import yaml
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
+
+import jinja2
+import yaml
+
 from .log import logger
 
 
 def render_template(
     template_name: str,
-    context: Optional[Dict[str, Any]] = None,
-    templates_dir: Optional[Path] = None,
+    context: dict[str, Any] | None = None,
+    templates_dir: Path | None = None,
 ) -> str:
     """
     Render a Jinja2 template with the given context
@@ -119,7 +121,7 @@ def render_template(
         template = env.get_template(template_name)
         return template.render(context)
     except jinja2.TemplateNotFound as e:
-        available_templates = [t for t in templates_dir.glob("*.j2")]
+        available_templates = list(templates_dir.glob("*.j2"))
         raise FileNotFoundError(
             f"Template '{template_name}' not found in {templates_dir}. "
             f"Available templates: {[t.name for t in available_templates]}"
@@ -128,7 +130,7 @@ def render_template(
         raise RuntimeError(f"Template rendering error in '{template_name}': {e}") from e
 
 
-def _get_task_context() -> Dict[str, Any]:
+def _get_task_context() -> dict[str, Any]:
     """
     Auto-detect args and context from the calling task function
 
@@ -166,8 +168,8 @@ def _get_task_context() -> Dict[str, Any]:
 def render_template_to_file(
     template_name: str,
     output_file: Path,
-    extra_context: Optional[Dict[str, Any]] = None,
-    templates_dir: Optional[Path] = None,
+    extra_context: dict[str, Any] | None = None,
+    templates_dir: Path | None = None,
 ) -> Path:
     """
     Render a template directly to a file with automatic args/context detection
@@ -208,7 +210,7 @@ def render_template_to_file(
     return output_file
 
 
-def get_templates_dir(relative_to_file: Optional[str] = None) -> Path:
+def get_templates_dir(relative_to_file: str | None = None) -> Path:
     """
     Get the templates directory relative to a file
 
@@ -229,7 +231,7 @@ def get_templates_dir(relative_to_file: Optional[str] = None) -> Path:
     return Path(relative_to_file).parent / "templates"
 
 
-def list_templates(templates_dir: Optional[Path] = None) -> list[str]:
+def list_templates(templates_dir: Path | None = None) -> list[str]:
     """
     List available templates in a directory
 

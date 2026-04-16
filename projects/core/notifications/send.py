@@ -1,12 +1,13 @@
-import os
-import logging
-import pathlib
-import json
-import yaml
 import html
+import json
+import logging
+import os
+import pathlib
 
-import projects.core.notifications.slack.api as slack_api
+import yaml
+
 import projects.core.notifications.github.api as github_api
+import projects.core.notifications.slack.api as slack_api
 
 GITHUB_APP_PEM_FILE = "topsail-bot.2024-09-18.private-key.pem"
 GITHUB_APP_CLIENT_ID_FILE = "topsail-bot.clientid"
@@ -118,9 +119,9 @@ def send_job_completion_notification_to_github(
 
     if dry_run:
         logging.info(f"Github notification:\n{message}")
-        logging.info(f"***")
-        logging.info(f"***")
-        logging.info(f"***\n")
+        logging.info("***")
+        logging.info("***")
+        logging.info("***\n")
 
         return True
 
@@ -172,7 +173,7 @@ def get_common_message(
 • Link to the {get_link("reports index", "reports_index.html")}.
 """
     else:
-        message += f"""
+        message += """
 • No reports index generated...
 """
 
@@ -309,7 +310,7 @@ def send_job_completion_notification_to_slack(
             channel_message = get_slack_channel_message(anchor, pr_data)
 
         if dry_run:
-            logging.info(f"Posting Slack channel notification ...")
+            logging.info("Posting Slack channel notification ...")
         else:
             channel_msg_ts, ok = slack_api.send_message(client, message=channel_message)
             if not ok:
@@ -322,9 +323,9 @@ def send_job_completion_notification_to_slack(
 
     if dry_run:
         logging.info(f"Slack thread notification:\n{thread_message}")
-        logging.info(f"***")
-        logging.info(f"***")
-        logging.info(f"***\n")
+        logging.info("***")
+        logging.info("***")
+        logging.info("***\n")
 
         return True
 
@@ -372,7 +373,7 @@ def get_ci_base_link(is_raw_file=False, is_dir=False):
             link_path = f"pr-logs/pull/{github_org}_{github_repo}/{pull_number}/{job}/{build_id}"
 
         return (
-            f"https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/"
+            "https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/test-platform-results/"
             + link_path
             + f"/artifacts/{test_name}/{test_path}",
             "",

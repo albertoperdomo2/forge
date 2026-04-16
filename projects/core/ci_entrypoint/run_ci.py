@@ -18,18 +18,17 @@ Examples:
 """
 
 # Import CI preparation module
-from projects.core.ci_entrypoint import prepare_ci
-
-import os
-import sys
-import subprocess
 import logging
+import os
 import signal
+import subprocess
+import sys
 import time
 from pathlib import Path
-from typing import List, Optional
 
 import click
+
+from projects.core.ci_entrypoint import prepare_ci
 
 
 def setup_logging():
@@ -52,7 +51,7 @@ EXTRA_PACKAGES = []
 
 def signal_handler_sigint(sig, frame):
     """Handle SIGINT (Ctrl+C) gracefully."""
-    print(f"\n🚫 Received SIGINT (Ctrl+C) - Interrupting CI operation...")
+    print("\n🚫 Received SIGINT (Ctrl+C) - Interrupting CI operation...")
 
     # Emergency cleanup of dual output
     try:
@@ -65,7 +64,7 @@ def signal_handler_sigint(sig, frame):
 
 def signal_handler_sigterm(sig, frame):
     """Handle SIGTERM gracefully."""
-    print(f"\n🛑 Received SIGTERM - Terminating CI operation...")
+    print("\n🛑 Received SIGTERM - Terminating CI operation...")
 
     # Emergency cleanup of dual output
     try:
@@ -124,7 +123,7 @@ def install_extra_packages(packages):
             print()
         except subprocess.CalledProcessError as pip_error:
             print(f"❌ Failed to install {'/'.join(packages)}: {pip_error}")
-            raise RuntimeError("failed to install the extra packages")
+            raise RuntimeError("failed to install the extra packages") from pip_error
 
     # Ensure user site-packages is in path
     import site
@@ -171,7 +170,7 @@ def prepare():
         prepare_ci.setup_dual_output()
 
 
-def find_project_directory(project_name: str) -> Optional[Path]:
+def find_project_directory(project_name: str) -> Path | None:
     """
     Find the directory for the specified project.
 
@@ -191,7 +190,7 @@ def find_project_directory(project_name: str) -> Optional[Path]:
     return None
 
 
-def find_ci_script(project_dir: Path, operation: str) -> Optional[Path]:
+def find_ci_script(project_dir: Path, operation: str) -> Path | None:
     """
     Find the appropriate CI script for the operation.
 
@@ -215,31 +214,7 @@ def find_ci_script(project_dir: Path, operation: str) -> Optional[Path]:
     return None
 
 
-def find_ci_script(project_dir: Path, operation: str) -> Optional[Path]:
-    """
-    Find the appropriate CI script for the operation.
-
-    Args:
-        project_dir: Project directory path
-        operation: Operation to perform (e.g., 'ci')
-
-    Returns:
-        Path to CI script if found, None otherwise
-    """
-    # Check possible locations for CI scripts
-    possible_locations = [
-        # Operation-specific script in orchestration subdirectory
-        project_dir / "orchestration" / f"{operation}.py",
-    ]
-
-    for script_path in possible_locations:
-        if script_path.exists() and os.access(script_path, os.X_OK):
-            return script_path
-
-    return None
-
-
-def get_available_projects() -> List[str]:
+def get_available_projects() -> list[str]:
     """Get list of available projects."""
 
     projects_dir = FORGE_HOME / "projects"
@@ -331,7 +306,7 @@ def show_project_operations(project: str):
     for operation_name, file_path in sorted(python_files):
         operation_files.append((operation_name, file_path))
 
-    for operation_name, file_path in operation_files:
+    for operation_name, _file_path in operation_files:
         click.echo(f"   📝 {operation_name}.py")
 
     click.echo(f"Usage: run {project} <filename_without_py>")
@@ -341,7 +316,7 @@ def show_project_operations(project: str):
         click.echo(f"   run {project} {operation_name}")
 
 
-def parse_cli_help(help_output: str) -> List[str]:
+def parse_cli_help(help_output: str) -> list[str]:
     """Parse CLI help output to extract available commands."""
     operations = []
     in_commands_section = False
@@ -387,7 +362,7 @@ def execute_project_operation(
 
     if verbose:
         click.echo("")
-        click.echo(f"🚀 FORGE CI Orchestration")
+        click.echo("🚀 FORGE CI Orchestration")
         click.echo(f"Project: {project}")
         click.echo(f"Operation: {operation}")
         click.echo(f"Arguments: {' '.join(args)}")
@@ -419,11 +394,11 @@ def execute_project_operation(
 
         available_projects = get_available_projects()
         if available_projects:
-            click.echo(f"\n📂 Available projects:")
+            click.echo("\n📂 Available projects:")
             for proj in available_projects:
                 click.echo(f"   • {proj}")
         else:
-            click.echo(f"📂 No projects found in projects/ directory")
+            click.echo("📂 No projects found in projects/ directory")
 
         sys.exit(1)
 
@@ -459,7 +434,7 @@ def execute_project_operation(
     cmd = [sys.executable, str(ci_script)] + click_args
 
     if verbose or dry_run:
-        click.echo(f"\n🔧 Execution Details:")
+        click.echo("\n🔧 Execution Details:")
         click.echo(f"   Command: {' '.join(cmd)}")
         click.echo(f"   Working Directory: {Path.cwd()}")
         click.echo(f"   Script: {ci_script}")
@@ -472,8 +447,8 @@ def execute_project_operation(
             )
 
     if dry_run:
-        click.echo(f"\n🧪 DRY RUN: Would execute the above command")
-        click.echo(f"✨ Use --verbose to see execution details without --dry-run")
+        click.echo("\n🧪 DRY RUN: Would execute the above command")
+        click.echo("✨ Use --verbose to see execution details without --dry-run")
         return
 
     # Execute the command
@@ -519,7 +494,7 @@ def execute_project_operation(
 
         sys.exit(result.returncode)
 
-    except Exception as e:
+    except Exception:
         logging.exception("Unexpected exception")
 
         # Emergency cleanup of dual output to prevent hanging
@@ -529,7 +504,7 @@ def execute_project_operation(
             pass  # Don't let cleanup errors mask the original error
 
         click.echo(
-            click.style(f"❌ ERROR: Unexpected error during execution", fg="red"),
+            click.style("❌ ERROR: Unexpected error during execution", fg="red"),
             err=True,
         )
         sys.exit(1)

@@ -1,14 +1,13 @@
 import os
 
-from ansible.plugins.callback.default import CallbackModule as default_CallbackModule
-from ansible import constants as C
 import ansible.executor
 
 # extends this class: https://github.com/ansible/ansible/blob/devel/lib/ansible/plugins/callback/default.py
-
 # mute this log message:
 # "Friday 05 April 2024  15:01:14 +0200 (0:00:04.215)       0:00:04.504 **********"
 import ansible_collections.ansible.posix.plugins.callback.profile_roles as profile_roles_mod
+from ansible import constants as C
+from ansible.plugins.callback.default import CallbackModule as default_CallbackModule
 
 profile_roles_mod.tasktime = lambda: ""
 
@@ -103,13 +102,13 @@ class CallbackModule(default_CallbackModule):
 
         str_cmd = cmd if isinstance(cmd, str) else " ".join(cmd)
 
-        self._display.display(f"", color=color)
+        self._display.display("", color=color)
         if "\n" in str_cmd:
             self._display.display(f"<command>\n{str_cmd}\n</command>", color=color)
         else:
             self._display.display(f"<command> {str_cmd}", color=color)
 
-        self._display.display(f"", color=color)
+        self._display.display("", color=color)
 
     def v2_runner_on_skipped(self, result):
         self._print_task_banner(result._task, head=True)
