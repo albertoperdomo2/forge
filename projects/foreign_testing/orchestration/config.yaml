@@ -4,3 +4,8 @@ foreign_testing:
   openshift-psap/fournos:
     project_mappings:
       fournos_deploy: tests/forge/deploy
+    launch:
+      project: fournos_deploy
+      operation: ci
+      args:
+      - deploy

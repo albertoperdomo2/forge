@@ -15,16 +15,14 @@ def init():
     config.init(pathlib.Path(__file__).parent)
 
 
-def prepare():
-    foreign_repo_id = os.environ.get("PSAP_FORGE_FOREIGN_TESTING")
-    repo_owner = os.environ.get("REPO_OWNER")
-    repo_name = os.environ.get("REPO_NAME")
-    pull_pull_sha = os.environ.get("PULL_PULL_SHA")
-
+def get_project_config(foreign_repo_id=None):
     if not foreign_repo_id:
-        raise ValueError(
-            "PSAP_FORGE_FOREIGN_TESTING must be set (and point to `foreign_testing.$NAME` field)"
-        )
+        foreign_repo_id = os.environ.get("PSAP_FORGE_FOREIGN_TESTING")
+
+        if not foreign_repo_id:
+            raise ValueError(
+                "PSAP_FORGE_FOREIGN_TESTING must be set (and point to `foreign_testing.$NAME` field)"
+            )
 
     foreign_repo_configs = config.project.get_config("foreign_testing")
     foreign_repo_config = foreign_repo_configs.get(foreign_repo_id, None)
@@ -32,6 +30,16 @@ def prepare():
         raise ValueError(
             f"PSAP_FORGE_FOREIGN_TESTING must point to `foreign_testing.{foreign_repo_id}` field"
         )
+
+    return foreign_repo_config
+
+
+def prepare():
+    foreign_repo_config = get_project_config()
+
+    repo_owner = os.environ.get("REPO_OWNER")
+    repo_name = os.environ.get("REPO_NAME")
+    pull_pull_sha = os.environ.get("PULL_PULL_SHA")
 
     repo_dest = env.FORGE_HOME / "foreign_testing" / repo_name
     run.run(f'git clone "https://github.com/{repo_owner}/{repo_name}" "{repo_dest}"')
@@ -67,19 +75,24 @@ def submit(project_path=None):
         project_path: Path to the project source directory (will be passed as --project-source)
     """
     # Build the command arguments
-    args = ["deploy"]
+    foreign_repo_config = get_project_config()
 
+    project = foreign_repo_config["launch"]["project"]
+    operation = foreign_repo_config["launch"]["operation"]
+    config_args = foreign_repo_config["launch"]["args"]
+
+    launch_args = list(config_args)
 
     if project_path:
         if not project_path.exists():
             raise ValueError(f"Received a project path that doesn't exist: {project_path}")
-        args = [*["--project-source", str(project_path)], *args]
-        logger.info(f"Submitting deployment with args: {args}")
+        launch_args = [*["--project-source", str(project_path)], *launch_args]
+        logger.info(f"Submitting deployment with args: {launch_args}")
 
     run_ci.execute_project_operation(
-        "fournos_deploy",
-        "ci",
-        args,
+        project,
+        operation,
+        launch_args,
         do_prepare_ci=False,
         verbose=True,
     )
