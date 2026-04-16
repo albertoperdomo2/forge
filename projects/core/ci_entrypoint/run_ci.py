@@ -54,10 +54,7 @@ def signal_handler_sigint(sig, frame):
     print("\n🚫 Received SIGINT (Ctrl+C) - Interrupting CI operation...")
 
     # Emergency cleanup of dual output
-    try:
-        prepare_ci.shutdown_dual_output()
-    except Exception:
-        pass  # Don't let cleanup errors prevent signal handling
+    prepare_ci.shutdown_dual_output()
 
     sys.exit(130)  # Standard exit code for SIGINT
 
@@ -67,10 +64,7 @@ def signal_handler_sigterm(sig, frame):
     print("\n🛑 Received SIGTERM - Terminating CI operation...")
 
     # Emergency cleanup of dual output
-    try:
-        prepare_ci.shutdown_dual_output()
-    except Exception:
-        pass  # Don't let cleanup errors prevent signal handling
+    prepare_ci.shutdown_dual_output()
 
     sys.exit(143)  # Standard exit code for SIGTERM
 
