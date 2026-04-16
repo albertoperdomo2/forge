@@ -83,7 +83,6 @@ def submit(project_path=None):
 
     launch_args = list(config_args)
 
-
     if project_path:
         if not project_path.exists():
             raise ValueError(f"Received a project path that doesn't exist: {project_path}")
