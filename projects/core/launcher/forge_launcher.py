@@ -72,9 +72,7 @@ class ForgeLauncher:
                     if self.verbose:
                         click.echo(f"📄 Loaded custom config from {CONFIG_FILE}")
             except Exception as e:
-                click.echo(
-                    f"⚠️  Warning: Failed to load config {CONFIG_FILE}: {e}", err=True
-                )
+                click.echo(f"⚠️  Warning: Failed to load config {CONFIG_FILE}: {e}", err=True)
 
         # Expand environment variables
         for key, value in config.items():
@@ -90,9 +88,7 @@ class ForgeLauncher:
 
         # Always resolve relative to forge_home unless it's already absolute
         if not os.path.isabs(container_file_path):
-            config["container_file"] = os.path.join(
-                config["forge_home"], container_file_path
-            )
+            config["container_file"] = os.path.join(config["forge_home"], container_file_path)
         else:
             config["container_file"] = container_file_path
 
@@ -140,9 +136,7 @@ class ForgeLauncher:
         # Add configurable environment variables (exported from current environment)
         exported_vars = self.config.get("exported_env_vars", [])
         if self.verbose:
-            click.echo(
-                f"📋 Configured environment variables to export: {exported_vars}"
-            )
+            click.echo(f"📋 Configured environment variables to export: {exported_vars}")
 
         for var in exported_vars:
             if var in os.environ:
@@ -330,9 +324,7 @@ USER 1001
                         if line.strip():
                             click.echo(f"   {line}")
 
-                overlay_proc = subprocess.Popen(
-                    overlay_cmd, stdin=subprocess.PIPE, text=True
-                )
+                overlay_proc = subprocess.Popen(overlay_cmd, stdin=subprocess.PIPE, text=True)
                 overlay_proc.communicate(overlay_dockerfile)
 
                 if overlay_proc.returncode != 0:
@@ -525,11 +517,7 @@ def status(ctx):
     click.echo()
 
     # Overall readiness check
-    ready = (
-        forge_home.exists()
-        and launcher._image_exists()
-        and launcher._container_exists()
-    )
+    ready = forge_home.exists() and launcher._image_exists() and launcher._container_exists()
 
     if ready:
         click.echo("🚀 Status: ✅ Ready for development!")
@@ -642,9 +630,7 @@ def config(ctx, set_config, set_env, pass_env, edit):
                 config["exported_env_vars"].append(pass_env)
                 success_msg = f"✅ Added {pass_env} to exported environment variables"
             else:
-                success_msg = (
-                    f"ℹ️  {pass_env} is already in exported environment variables"
-                )
+                success_msg = f"ℹ️  {pass_env} is already in exported environment variables"
 
         # Save config
         try:
@@ -687,15 +673,9 @@ def config(ctx, set_config, set_env, pass_env, edit):
         click.echo()
         click.echo("💡 Usage examples:")
         click.echo("   config --set forge_home /path/to/forge      # Config settings")
-        click.echo(
-            "   config --set-env CUSTOM_VAR custom_value        # Custom env vars"
-        )
-        click.echo(
-            "   config --pass-env MY_TOKEN                      # Export host env var"
-        )
-        click.echo(
-            "   config --edit                                   # Edit config file"
-        )
+        click.echo("   config --set-env CUSTOM_VAR custom_value        # Custom env vars")
+        click.echo("   config --pass-env MY_TOKEN                      # Export host env var")
+        click.echo("   config --edit                                   # Edit config file")
 
 
 if __name__ == "__main__":

@@ -61,15 +61,11 @@ def run(
         args["check"] = True
     if stdin_file:
         if not hasattr(stdin_file, "fileno"):
-            raise ValueError(
-                "Argument 'stdin_file' must be an open file (with a file descriptor)"
-            )
+            raise ValueError("Argument 'stdin_file' must be an open file (with a file descriptor)")
         args["stdin"] = stdin_file
 
     if protect_shell:
-        command = (
-            f"set -o errexit;set -o pipefail;set -o nounset;set -o errtrace;{command}"
-        )
+        command = f"set -o errexit;set -o pipefail;set -o nounset;set -o errtrace;{command}"
 
     proc = subprocess.run(command, **args)
 

@@ -110,9 +110,7 @@ def create_buildrun(args, ctx):
     """Create BuildRun to trigger the rebuild"""
 
     # Render BuildRun manifest from template
-    buildrun_manifest_file = (
-        args.artifact_dir / "src" / f"{args.build_name}-buildrun.yaml"
-    )
+    buildrun_manifest_file = args.artifact_dir / "src" / f"{args.build_name}-buildrun.yaml"
     template.render_template_to_file("buildrun.yaml.j2", buildrun_manifest_file)
 
     # Create the BuildRun (use create because of generateName)
@@ -149,17 +147,13 @@ def wait_for_completion(args, ctx):
         # Build completed (either success or failure)
         shell.run(
             f"oc get buildruns.shipwright.io {ctx.buildrun_name} -n {args.namespace} -oyaml",
-            stdout_dest=args.artifact_dir
-            / "artifacts"
-            / f"{ctx.buildrun_name}-final-status.yaml",
+            stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.buildrun_name}-final-status.yaml",
         )
 
         # Get build logs for debugging
         shell.run(
             f"oc logs {ctx.buildrun_name} -n {args.namespace}",
-            stdout_dest=args.artifact_dir
-            / "artifacts"
-            / f"{ctx.buildrun_name}-build.log",
+            stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.buildrun_name}-build.log",
             check=False,
         )
 
@@ -170,12 +164,8 @@ def wait_for_completion(args, ctx):
                 check=False,
                 log_stdout=False,
             )
-            failure_message = (
-                result.stdout.strip() if result.success else "Unknown failure"
-            )
-            raise RuntimeError(
-                f"BuildRun {ctx.buildrun_name} failed: {failure_message}"
-            )
+            failure_message = result.stdout.strip() if result.success else "Unknown failure"
+            raise RuntimeError(f"BuildRun {ctx.buildrun_name} failed: {failure_message}")
 
         return f"BuildRun {ctx.buildrun_name} completed successfully"
 
@@ -198,9 +188,7 @@ def capture_artifacts(args, ctx):
         # Get BuildRun YAML for detailed inspection
         shell.run(
             f"oc get buildruns.shipwright.io {buildrun_name} -n {args.namespace} -o yaml",
-            stdout_dest=args.artifact_dir
-            / "artifacts"
-            / f"{buildrun_name}-buildrun.yaml",
+            stdout_dest=args.artifact_dir / "artifacts" / f"{buildrun_name}-buildrun.yaml",
             check=False,
         )
     else:
@@ -209,9 +197,7 @@ def capture_artifacts(args, ctx):
     # Get Shipwright Build definition
     shell.run(
         f"oc get builds.shipwright.io {args.build_name} -n {args.namespace} -o yaml",
-        stdout_dest=args.artifact_dir
-        / "artifacts"
-        / f"{args.build_name}-build-definition.yaml",
+        stdout_dest=args.artifact_dir / "artifacts" / f"{args.build_name}-build-definition.yaml",
         check=False,
     )
 

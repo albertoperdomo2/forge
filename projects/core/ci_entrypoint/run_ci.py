@@ -272,9 +272,7 @@ def show_project_operations(project: str):
     # Find project directory
     project_dir = find_project_directory(project)
     if not project_dir:
-        click.echo(
-            click.style(f"❌ ERROR: Project '{project}' not found.", fg="red"), err=True
-        )
+        click.echo(click.style(f"❌ ERROR: Project '{project}' not found.", fg="red"), err=True)
         return
 
     python_files = []
@@ -378,9 +376,7 @@ def execute_project_operation(
                 args=list(args),
             )
         except:
-            click.echo(
-                click.style("❌ ERROR: CI preparation failed", fg="red"), err=True
-            )
+            click.echo(click.style("❌ ERROR: CI preparation failed", fg="red"), err=True)
             raise
     else:
         logger.warning("CI preparation not enabled, skipping preparation")
@@ -388,9 +384,7 @@ def execute_project_operation(
     # Find project directory
     project_dir = find_project_directory(project)
     if not project_dir:
-        click.echo(
-            click.style(f"❌ ERROR: Project '{project}' not found.", fg="red"), err=True
-        )
+        click.echo(click.style(f"❌ ERROR: Project '{project}' not found.", fg="red"), err=True)
 
         available_projects = get_available_projects()
         if available_projects:
@@ -439,12 +433,8 @@ def execute_project_operation(
         click.echo(f"   Working Directory: {Path.cwd()}")
         click.echo(f"   Script: {ci_script}")
         if any("_" in arg for arg in args):
-            converted_args = [
-                f"'{arg}' -> '{arg.replace('_', '-')}'" for arg in args if "_" in arg
-            ]
-            click.echo(
-                f"   Note: Converted underscores to hyphens: {', '.join(converted_args)}"
-            )
+            converted_args = [f"'{arg}' -> '{arg.replace('_', '-')}'" for arg in args if "_" in arg]
+            click.echo(f"   Note: Converted underscores to hyphens: {', '.join(converted_args)}")
 
     if dry_run:
         click.echo("\n🧪 DRY RUN: Would execute the above command")
@@ -514,12 +504,8 @@ def execute_project_operation(
 @click.argument("project", required=False)
 @click.argument("operation", required=False)
 @click.argument("args", nargs=-1)
-@click.option(
-    "--verbose", "-v", is_flag=True, help="Enable verbose output", default=True
-)
-@click.option(
-    "--dry-run", is_flag=True, help="Show what would be executed without running it"
-)
+@click.option("--verbose", "-v", is_flag=True, help="Enable verbose output", default=True)
+@click.option("--dry-run", is_flag=True, help="Show what would be executed without running it")
 def main(project, operation, args, verbose, dry_run):
     """
     FORGE CI Orchestration Entrypoint.

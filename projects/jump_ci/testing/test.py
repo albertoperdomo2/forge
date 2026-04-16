@@ -70,12 +70,8 @@ def rewrite_variables_overrides(variable_overrides_dict, nb_args_to_eat):
     new_args = old_args[nb_args_to_eat:]
 
     new_args_str = new_variable_overrides["PR_POSITIONAL_ARGS"] = " ".join(new_args)
-    new_variable_overrides["PR_POSITIONAL_ARGS"] = variable_overrides_dict[
-        "PR_POSITIONAL_ARG_0"
-    ]
-    new_variable_overrides["PR_POSITIONAL_ARG_0"] = variable_overrides_dict[
-        "PR_POSITIONAL_ARG_0"
-    ]
+    new_variable_overrides["PR_POSITIONAL_ARGS"] = variable_overrides_dict["PR_POSITIONAL_ARG_0"]
+    new_variable_overrides["PR_POSITIONAL_ARG_0"] = variable_overrides_dict["PR_POSITIONAL_ARG_0"]
 
     logging.info(f"New args to execute on the jump host: {new_args_str}")
 
@@ -159,30 +155,20 @@ def jump_ci(command):
         )
 
         config_test_args = (
-            config.project.get_config("project.args", None)
-            if test_args is None
-            else None
+            config.project.get_config("project.args", None) if test_args is None else None
         )
 
-        if (
-            test_args is None
-            and not variable_overrides_file.exists()
-            and not config_test_args
-        ):
+        if test_args is None and not variable_overrides_file.exists() and not config_test_args:
             logging.fatal(
                 f"File '{variable_overrides_file}' does not exist, neither --test_args nor project.args have been passed. Please specify one of them :/"
             )
             raise SystemExit(1)
 
         if test_args is not None and not project:
-            logging.fatal(
-                "The --project flag must be specificed when --test_args is passed"
-            )
+            logging.fatal("The --project flag must be specificed when --test_args is passed")
             raise SystemExit(1)
 
-        run.run_toolbox(
-            "jump_ci", "ensure_lock", cluster=cluster, owner=utils.get_lock_owner()
-        )
+        run.run_toolbox("jump_ci", "ensure_lock", cluster=cluster, owner=utils.get_lock_owner())
 
         cluster_lock_dir = f"{LOCK_DIR_PREFIX}_{cluster}"
 
@@ -211,9 +197,7 @@ def jump_ci(command):
                 raise SystemExit(1)
 
             nb_args_to_eat = 0
-            if config.project.get_config(
-                "rewrite_variables_overrides.cluster_found_in_pr_args"
-            ):
+            if config.project.get_config("rewrite_variables_overrides.cluster_found_in_pr_args"):
                 nb_args_to_eat = 1
 
             if not project:
@@ -226,25 +210,19 @@ def jump_ci(command):
                     )
                 nb_args_to_eat += 1
 
-            variables_overrides_dict, next_pr_positional_arg_count = (
-                rewrite_variables_overrides(
-                    config.project.get_config("overrides"),
-                    nb_args_to_eat,
-                )
+            variables_overrides_dict, next_pr_positional_arg_count = rewrite_variables_overrides(
+                config.project.get_config("overrides"),
+                nb_args_to_eat,
             )
 
-        for idx, multi_run_args in enumerate(
-            config.project.get_config("multi_run.args") or [...]
-        ):
+        for idx, multi_run_args in enumerate(config.project.get_config("multi_run.args") or [...]):
             multi_run_args_dict = {}
             multi_run_dirname = None
             test_artifacts_dirname = "test-artifacts"
 
             if multi_run_args is not ...:
                 multi_run_args_lst = (
-                    multi_run_args
-                    if isinstance(multi_run_args, list)
-                    else [multi_run_args]
+                    multi_run_args if isinstance(multi_run_args, list) else [multi_run_args]
                 )
                 multi_run_dirname = f"multi_run__{'_'.join(multi_run_args_lst)}"
 
@@ -256,15 +234,9 @@ def jump_ci(command):
                         f"PR_POSITIONAL_ARG_{next_pr_positional_arg_count + idx}"
                     ] = multi_run_arg
 
-            with (
-                env.NextArtifactDir(multi_run_dirname)
-                if multi_run_dirname
-                else open("/dev/null")
-            ):
+            with env.NextArtifactDir(multi_run_dirname) if multi_run_dirname else open("/dev/null"):
                 if multi_run_dirname:
-                    test_artifacts_dirname = (
-                        f"{env.ARTIFACT_DIR.name}/{test_artifacts_dirname}"
-                    )
+                    test_artifacts_dirname = f"{env.ARTIFACT_DIR.name}/{test_artifacts_dirname}"
 
                 if step_dir := os.environ.get("FORGE_OPENSHIFT_CI_STEP_DIR"):
                     # see "jump_ci retrieve_artifacts" below
@@ -282,9 +254,7 @@ def jump_ci(command):
                     project=project,
                     step=command,
                     env_file=env_fd_path,
-                    variables_overrides_dict=(
-                        variables_overrides_dict | multi_run_args_dict
-                    ),
+                    variables_overrides_dict=(variables_overrides_dict | multi_run_args_dict),
                     secrets_path_env_key=secrets_path_env_key,
                 )
                 env_file.close()
@@ -293,14 +263,10 @@ def jump_ci(command):
                     tunnelling.run_with_ansible_ssh_conf(
                         f"bash {cluster_lock_dir}/test/{command}/entrypoint.sh"
                     )
-                    logging.info(
-                        f"Test step '{command}' on cluster '{cluster}' succeeded."
-                    )
+                    logging.info(f"Test step '{command}' on cluster '{cluster}' succeeded.")
                     failed = False
                 except subprocess.CalledProcessError:
-                    logging.fatal(
-                        f"Test step '{command}' on cluster '{cluster}' FAILED."
-                    )
+                    logging.fatal(f"Test step '{command}' on cluster '{cluster}' FAILED.")
                     failed = True
                 except run.SignalError as e:
                     logging.error(f"Caught signal {e.sig}. Aborting.")

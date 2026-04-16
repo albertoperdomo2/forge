@@ -24,15 +24,11 @@ def test():
     else:
         logger.warning("Running the (fake) light testing ...")
 
-    client_id = vault.get_vault_content_path(
-        "psap-forge-notifications", "topsail-bot.clientid"
-    )
+    client_id = vault.get_vault_content_path("psap-forge-notifications", "topsail-bot.clientid")
     if not client_id:
         logger.warning("`client_id` secret not available.")
     else:
-        logger.warning(
-            f"`client_id` secret available. Size: {client_id.stat().st_size}b"
-        )
+        logger.warning(f"`client_id` secret available. Size: {client_id.stat().st_size}b")
         del client_id
 
     skeleton_config = config.project.get_config("skeleton", print=False)
@@ -61,14 +57,10 @@ def test():
 
     cluster_nodes_dest = getattr(result, "cluster_nodes_dest", None)
     if not cluster_nodes_dest:
-        logger.warning(
-            "⚠️ Cluster information gathering didn't generate the cluster node file"
-        )
+        logger.warning("⚠️ Cluster information gathering didn't generate the cluster node file")
         return 1
 
     logger.info("✅ Cluster information gathering completed successfully")
-    logger.info(
-        f"Check {cluster_nodes_dest.parent} directory for detailed cluster information."
-    )
+    logger.info(f"Check {cluster_nodes_dest.parent} directory for detailed cluster information.")
 
     return 0

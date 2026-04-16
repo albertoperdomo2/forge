@@ -18,18 +18,14 @@ def lock_cluster(cluster=None):
         config.project.set_config("ssh_tunnel.enabled", "true")
 
         if config.project.get_config("cluster.name", print=False) is None:
-            override_cluster = config.project.get_config(
-                "overrides.PR_POSITIONAL_ARG_1", None
-            )
+            override_cluster = config.project.get_config("overrides.PR_POSITIONAL_ARG_1", None)
             if not override_cluster:
                 raise ValueError(
                     "Expected to find the cluster name in overrides.PR_POSITIONAL_ARG_1 (1st test argument) or cluster.name, but none of them were set ..."
                 )
 
             config.project.set_config("cluster.name", override_cluster)
-            config.project.set_config(
-                "rewrite_variables_overrides.cluster_found_in_pr_args", True
-            )
+            config.project.set_config("rewrite_variables_overrides.cluster_found_in_pr_args", True)
 
     if cluster is None:
         cluster = config.project.get_config("cluster.name")
@@ -37,13 +33,9 @@ def lock_cluster(cluster=None):
     # Open the tunnel
     tunnelling.prepare()
 
-    run.run_toolbox(
-        "jump_ci", "take_lock", cluster=cluster, owner=utils.get_lock_owner()
-    )
+    run.run_toolbox("jump_ci", "take_lock", cluster=cluster, owner=utils.get_lock_owner())
 
-    tunnelling.run_with_ansible_ssh_conf(
-        f"podman container rm --force 'topsail-on-{cluster}'"
-    )
+    tunnelling.run_with_ansible_ssh_conf(f"podman container rm --force 'topsail-on-{cluster}'")
 
 
 @utils.entrypoint()
@@ -60,13 +52,9 @@ def unlock_cluster(cluster=None):
     if cluster is None:
         cluster = config.project.get_config("cluster.name")
 
-    tunnelling.run_with_ansible_ssh_conf(
-        f"podman container rm --force 'topsail-on-{cluster}'"
-    )
+    tunnelling.run_with_ansible_ssh_conf(f"podman container rm --force 'topsail-on-{cluster}'")
 
-    run.run_toolbox(
-        "jump_ci", "release_lock", cluster=cluster, owner=utils.get_lock_owner()
-    )
+    run.run_toolbox("jump_ci", "release_lock", cluster=cluster, owner=utils.get_lock_owner())
 
 
 @utils.entrypoint()
@@ -94,9 +82,7 @@ def prepare(
         cluster = config.project.get_config("cluster.name")
 
     # Lock the cluster
-    run.run_toolbox(
-        "jump_ci", "ensure_lock", cluster=cluster, owner=utils.get_lock_owner()
-    )
+    run.run_toolbox("jump_ci", "ensure_lock", cluster=cluster, owner=utils.get_lock_owner())
 
     # Clone the Git Repository
     # Build the image
@@ -119,9 +105,7 @@ def prepare(
             job_spec = json.loads(os.environ["JOB_SPEC"])
             repo_owner = os.environ["REPO_OWNER"] = job_spec["extra_refs"][0]["org"]
             repo_name = os.environ["REPO_NAME"] = job_spec["extra_refs"][0]["repo"]
-            git_ref = os.environ["PULL_PULL_SHA"] = job_spec["extra_refs"][0][
-                "base_ref"
-            ]
+            git_ref = os.environ["PULL_PULL_SHA"] = job_spec["extra_refs"][0]["base_ref"]
         else:
             repo_owner = os.environ["REPO_OWNER"]
             repo_name = os.environ["REPO_NAME"]
@@ -148,9 +132,7 @@ def prepare(
         }
 
     else:
-        logging.fatal(
-            "No flag provided and couldn't determine the CI environment ... Aborting."
-        )
+        logging.fatal("No flag provided and couldn't determine the CI environment ... Aborting.")
         logging.info("Outside of the CI, please pass at least --pr-number")
         raise SystemExit(1)
 

@@ -28,9 +28,7 @@ INTERESTING_MODULE_PROPS = {
 class CallbackModule(default_CallbackModule):
     def __display_result(self, result, color, ignore_errors=None, loop_idx=0):
         if ignore_errors not in (None, False):
-            self._display.display(
-                f"==> FAILED | ignore_errors={ignore_errors}", color=color
-            )
+            self._display.display(f"==> FAILED | ignore_errors={ignore_errors}", color=color)
 
         try:
             if result._result["msg"].strip():
@@ -40,9 +38,7 @@ class CallbackModule(default_CallbackModule):
 
         try:
             if result._result.get("rc", 0) != 0:
-                self._display.display(
-                    f"return code: {result._result['rc']}", color=color
-                )
+                self._display.display(f"return code: {result._result['rc']}", color=color)
         except KeyError:
             pass
 
@@ -71,9 +67,7 @@ class CallbackModule(default_CallbackModule):
                         continue
 
                 if not isinstance(v, dict):
-                    self._display.display(
-                        f"{'  ' * depth}- {k}:\t{v}", color=C.COLOR_VERBOSE
-                    )
+                    self._display.display(f"{'  ' * depth}- {k}:\t{v}", color=C.COLOR_VERBOSE)
                 else:
                     self._display.display(f"{'  ' * depth}- {k}", color=C.COLOR_VERBOSE)
                     print_result_as_dict(k, v, depth + 1)
@@ -139,9 +133,7 @@ class CallbackModule(default_CallbackModule):
         del result._result[
             "unreachable"
         ]  # no need for `__display_result` to tell that, we already do it here
-        self._display.display(
-            f"----- HOST UNREACHABLE ({result._host})----", C.COLOR_ERROR
-        )
+        self._display.display(f"----- HOST UNREACHABLE ({result._host})----", C.COLOR_ERROR)
         self.__display_result(result, C.COLOR_VERBOSE, False)
         self._display.display("----- HOST UNREACHABLE ----", C.COLOR_ERROR)
 

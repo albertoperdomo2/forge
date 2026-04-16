@@ -173,15 +173,11 @@ def run(
         args["check"] = True
     if stdin_file:
         if not hasattr(stdin_file, "fileno"):
-            raise ValueError(
-                "Argument 'stdin_file' must be an open file (with a file descriptor)"
-            )
+            raise ValueError("Argument 'stdin_file' must be an open file (with a file descriptor)")
         args["stdin"] = stdin_file
 
     if protect_shell:
-        command = (
-            f"set -o errexit;set -o pipefail;set -o nounset;set -o errtrace;{command}"
-        )
+        command = f"set -o errexit;set -o pipefail;set -o nounset;set -o errtrace;{command}"
 
     proc = subprocess.run(command, **args)
 
@@ -207,9 +203,7 @@ class Parallel:
 
     def delayed(self, function, *args, **kwargs):
         self.parallel_tasks += (
-            [joblib.delayed(function)(*args, **kwargs)]
-            if joblib
-            else [(function, args, kwargs)]
+            [joblib.delayed(function)(*args, **kwargs)] if joblib else [(function, args, kwargs)]
         )
 
     def __exit__(self, ex_type, ex_value, exc_traceback):
@@ -229,9 +223,7 @@ class Parallel:
                 if joblib:
                     joblib.Parallel(n_jobs=-1, backend="threading")(self.parallel_tasks)
                 else:
-                    logging.info(
-                        "joblib not available, running the delayed function sequentially."
-                    )
+                    logging.info("joblib not available, running the delayed function sequentially.")
 
                     for function, args, kwargs in self.parallel_tasks:
                         function(*args, **kwargs)

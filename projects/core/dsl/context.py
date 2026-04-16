@@ -24,9 +24,7 @@ class ReadOnlyArgs:
         raise AttributeError(f"'ReadOnlyArgs' object has no attribute '{name}'")
 
     def __setattr__(self, name: str, value: Any) -> None:
-        raise AttributeError(
-            f"Cannot modify readonly args. Attempted to set '{name}' = {value}"
-        )
+        raise AttributeError(f"Cannot modify readonly args. Attempted to set '{name}' = {value}")
 
     def __delattr__(self, name: str) -> None:
         raise AttributeError(f"Cannot delete attribute '{name}' from readonly args")

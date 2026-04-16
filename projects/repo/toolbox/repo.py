@@ -40,9 +40,7 @@ class Repo:
         try:
             # Extract PR number from GITHUB_REF (format: refs/pull/123/merge)
             pr_number = github_ref.split("/")[2]
-            pr_url = (
-                f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}"
-            )
+            pr_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}"
 
             logger.info(f"Fetching the PR from '{pr_url}' ...")
 

@@ -252,9 +252,7 @@ class Config:
 
     def save_config(self):
         with open(self.config_path, "w") as f:
-            yaml.dump(
-                self.config, f, indent=4, default_flow_style=False, sort_keys=False
-            )
+            yaml.dump(self.config, f, indent=4, default_flow_style=False, sort_keys=False)
 
     def resolve_reference(self, value, handled_secretly=False):
         if not isinstance(value, str):
@@ -312,9 +310,7 @@ class Config:
 
         # --- #
 
-        new_value = (
-            simple_dereference() if value.startswith("@") else multi_dereference()
-        )
+        new_value = simple_dereference() if value.startswith("@") else multi_dereference()
 
         if not handled_secretly:
             logging.info(f"resolve_reference: {value} ==> '{new_value}'")
@@ -347,9 +343,7 @@ def __get_config_path(orchestration_dir):
     if config_path_final.exists():
         config_path_final.unlink()
 
-    logging.info(
-        f"Copying the configuration from {config_file_src} to the artifact dir ..."
-    )
+    logging.info(f"Copying the configuration from {config_file_src} to the artifact dir ...")
     shutil.copyfile(config_file_src, config_path_final)
 
     return config_path_final, config_file_src
@@ -361,10 +355,7 @@ REQUIRES_ANNOTATION_ARG_NAME = "_cfg"
 # annotation
 def requires(**config_kwargs):
     def decorator(func):
-        if (
-            REQUIRES_ANNOTATION_ARG_NAME
-            not in inspect.signature(func).parameters.keys()
-        ):
+        if REQUIRES_ANNOTATION_ARG_NAME not in inspect.signature(func).parameters.keys():
             raise SyntaxError(
                 f"Function '{func.__name__}' must accept "
                 f"a {REQUIRES_ANNOTATION_ARG_NAME} parameter."

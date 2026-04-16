@@ -65,9 +65,7 @@ def check_whoami(args, ctx):
 def get_cluster_nodes(args, ctx):
     """List all available nodes in the cluster"""
 
-    ctx.cluster_nodes_dest = (
-        args.artifact_dir / "artifacts" / f"cluster_nodes.{ctx.ext}"
-    )
+    ctx.cluster_nodes_dest = args.artifact_dir / "artifacts" / f"cluster_nodes.{ctx.ext}"
     # Get nodes with wide output for more information
     shell.run(
         f"oc get nodes {ctx.output_format}",

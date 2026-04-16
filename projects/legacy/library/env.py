@@ -103,11 +103,7 @@ class TempArtifactDir:
             with open(get_tls_artifact_dir() / "FAILURE", "a") as f:
                 print(f"{ex_type.__name__}: {ex_value}", file=f)
                 print(
-                    "".join(
-                        traceback.format_exception(
-                            None, value=ex_value, tb=exc_traceback
-                        )
-                    ),
+                    "".join(traceback.format_exception(None, value=ex_value, tb=exc_traceback)),
                     file=f,
                 )
 

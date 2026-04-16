@@ -60,9 +60,7 @@ def log_execution_banner(function_args: dict = None, log_file: str = None):
 
     # Print execution header
     logger.info("")
-    logger.info(
-        "==============================================================================="
-    )
+    logger.info("===============================================================================")
     logger.info(f"| FILE: {rel_filename}")
     logger.info(f"| COMMAND: {function_name}")
 
@@ -80,9 +78,7 @@ def log_execution_banner(function_args: dict = None, log_file: str = None):
 
     logger.info(f"| ARTIFACT_DIR: {env.ARTIFACT_DIR}")
     logger.info(f"| LOG_FILE: {log_file}")
-    logger.info(
-        "==============================================================================="
-    )
+    logger.info("===============================================================================")
     logger.info("")
 
 
@@ -102,16 +98,12 @@ def log_completion_banner(function_args: dict = None, status: str = "SUCCESS"):
 
     # Print completion header
     logger.info("")
-    logger.info(
-        "==============================================================================="
-    )
+    logger.info("===============================================================================")
     logger.info(f"| {rel_filename}")
     logger.info(f"| STATUS: {status}")
     logger.info(f"| COMMAND: {function_name}")
     logger.info(f"| ARTIFACTS: {env.ARTIFACT_DIR}")
-    logger.info(
-        "==============================================================================="
-    )
+    logger.info("===============================================================================")
     logger.info("")
 
 

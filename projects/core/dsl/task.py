@@ -81,9 +81,7 @@ def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
                 if attempt < retry_attempts - 1:  # Not the last attempt
                     logger.info("")
                     logger.info("~" * LINE_WIDTH)
-                    logger.info(
-                        f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}"
-                    )
+                    logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
                     logger.warning(
                         f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} (returned: {result})"
                     )
@@ -95,9 +93,7 @@ def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
 
                     current_delay *= retry_backoff
                 else:
-                    logger.error(
-                        f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts}"
-                    )
+                    logger.error(f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts}")
                     logger.info("")
                     raise RetryFailure(
                         f"All {retry_attempts} attempts failed for task {func.__name__} : {func.__doc__ or 'No description'} (last result: {result})"
@@ -202,9 +198,7 @@ def task(func):
         task_name = func.__name__
 
         # Log task header using definition location
-        log_task_header(
-            task_name, func.__doc__, rel_definition_filename, definition_line_no
-        )
+        log_task_header(task_name, func.__doc__, rel_definition_filename, definition_line_no)
 
         try:
             result = func(*args, **kwargs)
@@ -217,9 +211,7 @@ def task(func):
         except KeyboardInterrupt:
             raise
         except Exception as e:
-            logger.error(
-                f"==> TASK FAILED: {task_name}: {func.__doc__ or 'No description'}"
-            )
+            logger.error(f"==> TASK FAILED: {task_name}: {func.__doc__ or 'No description'}")
             logger.error(f"==> {e.__class__.__name__}: {e}")
             logger.info("")
             raise
@@ -234,9 +226,7 @@ def task(func):
         "name": func.__name__,
         "func": wrapper,
         "condition": getattr(func, "_when_condition", None),
-        "retry_config": getattr(
-            func, "_retry_config", None
-        ),  # May be updated by @retry
+        "retry_config": getattr(func, "_retry_config", None),  # May be updated by @retry
         "always_execute": getattr(func, "_always_execute", False),
     }
 

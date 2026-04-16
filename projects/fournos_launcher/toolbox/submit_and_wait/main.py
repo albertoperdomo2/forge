@@ -146,9 +146,7 @@ def create_job_manifest(args, ctx):
     """Create FOURNOS job manifest"""
 
     # Render job manifest from template
-    ctx.manifest_file = (
-        args.artifact_dir / "src" / f"{ctx.final_job_name}-manifest.yaml"
-    )
+    ctx.manifest_file = args.artifact_dir / "src" / f"{ctx.final_job_name}-manifest.yaml"
     shell.mkdir(ctx.manifest_file.parent)
 
     template.render_template_to_file("job.yaml.j2", ctx.manifest_file)
@@ -181,9 +179,7 @@ def wait_for_job_completion(args, ctx):
     if not status_result.success:
         # Check if it's a "not found" error (permanent failure) vs temporary error
         if "not found" in status_result.stderr.lower():
-            raise RuntimeError(
-                f"Job {ctx.final_job_name} not found in namespace {args.namespace}"
-            )
+            raise RuntimeError(f"Job {ctx.final_job_name} not found in namespace {args.namespace}")
 
         # Other errors might be temporary, retry
         logger.info(
@@ -203,14 +199,8 @@ def wait_for_job_completion(args, ctx):
             check=False,
             log_stdout=False,
         )
-        failure_msg = (
-            failure_result.stdout.strip()
-            if failure_result.success
-            else "Unknown failure"
-        )
-        raise RuntimeError(
-            f"Job {ctx.final_job_name} failed: {failure_msg}"
-        )  # Abort on failure
+        failure_msg = failure_result.stdout.strip() if failure_result.success else "Unknown failure"
+        raise RuntimeError(f"Job {ctx.final_job_name} failed: {failure_msg}")  # Abort on failure
     elif status in ["Running", "Pending", "Admitted"]:
         logger.info(f"Job {ctx.final_job_name} status: {status}. Keep waiting.")
         return False  # Retry
@@ -226,9 +216,7 @@ def capture_final_job_status(args, ctx):
     # Get full job details
     shell.run(
         f"oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o yaml",
-        stdout_dest=args.artifact_dir
-        / "artifacts"
-        / f"{ctx.final_job_name}-final-status.yaml",
+        stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.final_job_name}-final-status.yaml",
         check=False,
     )
 

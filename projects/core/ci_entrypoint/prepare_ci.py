@@ -126,9 +126,7 @@ def setup_dual_output():
                     if ready:
                         # Data available, read a line
                         try:
-                            line = os.read(read_fd, 4096).decode(
-                                "utf-8", errors="replace"
-                            )
+                            line = os.read(read_fd, 4096).decode("utf-8", errors="replace")
                             if not line:  # EOF
                                 break
                             terminal.write(line)
@@ -137,9 +135,7 @@ def setup_dual_output():
                             log_file.flush()
                         except (OSError, ValueError) as e:
                             # Pipe was closed, exit gracefully
-                            logging.exception(
-                                f"Dual output thread file operations failed: {e}"
-                            )
+                            logging.exception(f"Dual output thread file operations failed: {e}")
                             break
                     # If no data, loop continues and checks stop_event
             except Exception as e:
@@ -242,9 +238,7 @@ def parse_and_save_pr_arguments_ocpci() -> Path | None:
     shared_dir_str = os.environ.get("SHARED_DIR")
     shared_dir = Path(shared_dir_str) if shared_dir_str else None
 
-    logger.info(
-        f"Parsing GitHub PR arguments for {repo_owner}/{repo_name}#{pull_number}"
-    )
+    logger.info(f"Parsing GitHub PR arguments for {repo_owner}/{repo_name}#{pull_number}")
 
     try:
         # Save to YAML file
@@ -302,13 +296,9 @@ def precheck_artifact_dir() -> bool:
         return
 
     if os.environ.get("OPENSHIFT_CI") == "true":
-        raise RuntimeError(
-            "ARTIFACT_DIR not set, cannot proceed without it in OpenShift CI."
-        )
+        raise RuntimeError("ARTIFACT_DIR not set, cannot proceed without it in OpenShift CI.")
 
-    logger.info(
-        "ARTIFACT_DIR not set, but not running in a CI. Creating a directory for it ..."
-    )
+    logger.info("ARTIFACT_DIR not set, but not running in a CI. Creating a directory for it ...")
 
     # Create default ARTIFACT_DIR
     default_dir = f"/tmp/forge_{datetime.now().strftime('%Y%m%d')}"
@@ -334,9 +324,7 @@ def ci_banner(project: str, operation: str, args: list[str]):
     if not pull_sha:
         logger.warning("PULL_PULL_SHA not set. Showing the last commits from main.")
 
-    logger.info(
-        f"Git command will be: git show --quiet --oneline {base_sha}..{pull_sha}"
-    )
+    logger.info(f"Git command will be: git show --quiet --oneline {base_sha}..{pull_sha}")
 
     try:
         result = subprocess.run(
@@ -405,13 +393,9 @@ def system_prechecks() -> bool:
             text=True,
             timeout=10,
         )
-        forge_version = (
-            result.stdout.strip() if result.returncode == 0 else "git missing"
-        )
+        forge_version = result.stdout.strip() if result.returncode == 0 else "git missing"
         (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
-        (artifact_path / CI_METADATA_DIRNAME / "forge.git_version").write_text(
-            forge_version + "\n"
-        )
+        (artifact_path / CI_METADATA_DIRNAME / "forge.git_version").write_text(forge_version + "\n")
         logger.info(
             f"Saving FORGE git version into {artifact_path}/{CI_METADATA_DIRNAME}/forge.git_version"
         )
@@ -461,10 +445,10 @@ def download_pr_information():
     repo_owner = os.environ.get("REPO_OWNER", DEFAULT_REPO_OWNER)
     repo_name = os.environ.get("REPO_NAME", DEFAULT_REPO_NAME)
 
-    pr_url = (
-        f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pull_number}"
+    pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pull_number}"
+    pr_comments_url = (
+        f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pull_number}/comments"
     )
-    pr_comments_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pull_number}/comments"
 
     try:
         # Ensure metadata directory exists
@@ -475,9 +459,7 @@ def download_pr_information():
             response = requests.get(pr_url, timeout=30)
             response.raise_for_status()
 
-            with open(
-                artifact_path / CI_METADATA_DIRNAME / "pull_request.json", "w"
-            ) as f:
+            with open(artifact_path / CI_METADATA_DIRNAME / "pull_request.json", "w") as f:
                 f.write(response.text)
         except requests.exceptions.RequestException as e:
             logger.warning(f"Failed to download the PR from {pr_url}: {e}")
@@ -487,18 +469,12 @@ def download_pr_information():
             response = requests.get(pr_comments_url, timeout=30)
             response.raise_for_status()
 
-            with open(
-                artifact_path / CI_METADATA_DIRNAME / "pull_request-comments.json", "w"
-            ) as f:
+            with open(artifact_path / CI_METADATA_DIRNAME / "pull_request-comments.json", "w") as f:
                 f.write(response.text)
 
-            logger.info(
-                f"Downloaded PR #{pull_number} information from {repo_owner}/{repo_name}"
-            )
+            logger.info(f"Downloaded PR #{pull_number} information from {repo_owner}/{repo_name}")
         except requests.exceptions.RequestException as e:
-            logger.warning(
-                f"Failed to download the PR comments from {pr_comments_url}: {e}"
-            )
+            logger.warning(f"Failed to download the PR comments from {pr_comments_url}: {e}")
 
     except Exception as e:
         logger.warning(f"Could not download PR information: {e}")
@@ -600,9 +576,7 @@ def format_duration(duration_seconds: int) -> str:
     return f"after {hours:02d} hours {minutes:02d} minutes {seconds:02d} seconds"
 
 
-def send_notification(
-    project: str, operation: str, finish_reason: FinishReason, duration: str
-):
+def send_notification(project: str, operation: str, finish_reason: FinishReason, duration: str):
     if project == "jump_ci":
         logger.info("No need to send notification in the JumpCI project")
         return
@@ -610,7 +584,9 @@ def send_notification(
     try:
         # Determine notification parameters
         success = finish_reason == FinishReason.SUCCESS
-        notification_status = f"Test of '{project} {operation}' {('succeeded' if success else 'failed')}{duration}"
+        notification_status = (
+            f"Test of '{project} {operation}' {('succeeded' if success else 'failed')}{duration}"
+        )
 
         if project == "foreign_testing":
             # never submit for the time being
@@ -634,9 +610,7 @@ def send_notification(
         slack_notifications = True
 
         # Check for dry run mode
-        dry_run = (
-            os.environ.get("FORGE_NOTIFICATION_DRY_RUN", "false").lower() == "true"
-        )
+        dry_run = os.environ.get("FORGE_NOTIFICATION_DRY_RUN", "false").lower() == "true"
 
         logger.info(
             f"Sending notifications - finish_reason: {finish_reason} | GitHub: {github_notifications}, Slack: {slack_notifications}, dry_run: {dry_run}"

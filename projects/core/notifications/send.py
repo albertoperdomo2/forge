@@ -112,9 +112,7 @@ def send_job_completion_notification_to_github(
 
     user_token = github_api.get_user_token(pem_file, client_id, org, repo)
     if not user_token:
-        logging.error(
-            "github: Couldn't fetch the user token. Is the app installed in the repo?"
-        )
+        logging.error("github: Couldn't fetch the user token. Is the app installed in the repo?")
         return
 
     if dry_run:
@@ -154,9 +152,7 @@ def get_github_notification_message(finish_reason: str, status: str, pr_number: 
     )
 
 
-def get_common_message(
-    finish_reason: str, status: str, get_link, get_italics, get_bold
-):
+def get_common_message(finish_reason: str, status: str, get_link, get_italics, get_bold):
     message = ""
 
     message += f"""\
@@ -166,9 +162,7 @@ def get_common_message(
     message += f"""
 • Link to the {get_link("test results", "", is_dir=True)}.
 """
-    if (
-        pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "reports_index.html"
-    ).exists():
+    if (pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "reports_index.html").exists():
         message += f"""
 • Link to the {get_link("reports index", "reports_index.html")}.
 """
@@ -194,9 +188,7 @@ def get_common_message(
 • No test configuration (`variable_overrides.yaml`) available.
 """
 
-    if (
-        failures := pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "FAILURES"
-    ).exists():
+    if (failures := pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "FAILURES").exists():
         with open(failures) as f:
             DEFAULT_HEAD = 10
             lines = f.readlines()
@@ -239,9 +231,7 @@ def get_slack_thread_message(finish_reason, status):
     def get_bold(text):
         return f"*{text}*"
 
-    status_icon = (
-        ":done-circle-check:" if finish_reason == "success" else ":no-red-circle:"
-    )
+    status_icon = ":done-circle-check:" if finish_reason == "success" else ":no-red-circle:"
 
     return get_common_message(
         finish_reason, f"{status_icon} {status}", get_link, get_italics, get_bold
@@ -329,9 +319,7 @@ def send_job_completion_notification_to_slack(
 
         return True
 
-    _, ok = slack_api.send_message(
-        client, message=thread_message, main_ts=channel_msg_ts
-    )
+    _, ok = slack_api.send_message(client, message=thread_message, main_ts=channel_msg_ts)
 
     return ok
 
@@ -344,9 +332,7 @@ def get_pr_number():
         return os.environ.get("PULL_NUMBER")
 
     else:
-        logging.warning(
-            "Test not running from a well-known CI engine, cannot extract a PR number."
-        )
+        logging.warning("Test not running from a well-known CI engine, cannot extract a PR number.")
         return
 
 
@@ -398,9 +384,7 @@ def get_github_secrets(secret_dir, secret_env_key):
     client_id_file = secret_dir / GITHUB_APP_CLIENT_ID_FILE
 
     if not pem_file.exists():
-        logging.warning(
-            f"Github App private key does not exists ({pem_file}) in {secret_env_key}"
-        )
+        logging.warning(f"Github App private key does not exists ({pem_file}) in {secret_env_key}")
         return None, None
 
     if not client_id_file.exists():
@@ -419,8 +403,7 @@ def get_slack_secrets(secret_dir, secret_env_key):
 
     if not token_file.exists():
         logging.warning(
-            f"{token_file.name} not found in {secret_env_key}. "
-            "Cannot send the Slack notification"
+            f"{token_file.name} not found in {secret_env_key}. Cannot send the Slack notification"
         )
         return None
 
@@ -454,9 +437,7 @@ total_points: 6
 def send_cpt_notification(regression_summary_path, title, slack, dry_run):
     summary_path = pathlib.Path(regression_summary_path)
     if not summary_path.exists():
-        logging.fatal(
-            f"Regression summary doesn't exist :/ ({regression_summary_path})"
-        )
+        logging.fatal(f"Regression summary doesn't exist :/ ({regression_summary_path})")
         return True
 
     try:
@@ -472,9 +453,7 @@ def send_cpt_notification(regression_summary_path, title, slack, dry_run):
 
     failed = False
     if slack:
-        failed = send_cpt_notification_to_slack(
-            secret_dir, secret_env_key, title, summary, dry_run
-        )
+        failed = send_cpt_notification_to_slack(secret_dir, secret_env_key, title, summary, dry_run)
 
     return failed
 
@@ -489,18 +468,14 @@ def send_cpt_notification_to_slack(secret_dir, secret_env_key, title, summary, d
         logging.fatal("Couldn't get the slack client ...")
         return True
     safe_title = html.escape(title)
-    channel_msg_ts, channel_message = slack_api.search_channel_message(
-        client, safe_title
-    )
+    channel_msg_ts, channel_message = slack_api.search_channel_message(client, safe_title)
 
     if not channel_msg_ts:
         channel_message = f"🧵 Thread for `{title}` continuous performance testing"
         if dry_run:
             logging.info(f"Posting Slack channel notification ...\n{channel_message}")
         else:
-            channel_msg_ts, channel_ok = slack_api.send_message(
-                client, message=channel_message
-            )
+            channel_msg_ts, channel_ok = slack_api.send_message(client, message=channel_message)
 
     try:
         thread_message = get_slack_cpt_message(summary)
@@ -512,9 +487,7 @@ def send_cpt_notification_to_slack(secret_dir, secret_env_key, title, summary, d
         logging.info(f"Posting Slack thread notification ...\n{thread_message}")
         ok = True
     else:
-        _, ok = slack_api.send_message(
-            client, message=thread_message, main_ts=channel_msg_ts
-        )
+        _, ok = slack_api.send_message(client, message=thread_message, main_ts=channel_msg_ts)
 
     return not ok
 
@@ -529,9 +502,7 @@ def get_slack_cpt_message(summary):
     def get_bold(text):
         return f"*{text}*"
 
-    status_icon = (
-        ":no-red-circle:" if summary.get("failures") else ":done-circle-check:"
-    )
+    status_icon = ":no-red-circle:" if summary.get("failures") else ":done-circle-check:"
 
     return f"""{status_icon} {get_bold(summary["message"])}
 

@@ -73,9 +73,7 @@ def get_kubernetes_node_name() -> str | None:
         request.add_header("Authorization", f"Bearer {TOKEN}")
 
         # Make the API call with SSL verification and timeout
-        with urllib.request.urlopen(
-            request, timeout=5, context=ssl_context
-        ) as response:
+        with urllib.request.urlopen(request, timeout=5, context=ssl_context) as response:
             response_data = response.read()
             pod_data = json.loads(response_data.decode("utf-8"))
 
@@ -89,9 +87,7 @@ def get_kubernetes_node_name() -> str | None:
             return None
 
     except urllib.error.HTTPError as e:
-        logging.error(
-            f"Failed to query Kubernetes API at {URL}. HTTP Error {e.code}: {e.reason}"
-        )
+        logging.error(f"Failed to query Kubernetes API at {URL}. HTTP Error {e.code}: {e.reason}")
         return None
     except urllib.error.URLError as e:
         logging.error(f"Failed to query Kubernetes API at {URL}. URL Error: {e.reason}")

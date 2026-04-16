@@ -62,9 +62,7 @@ def export_artifacts(artifacts_dirname, test_step=None):
         run_id = f"prow/{pull_number}/{build_id}"
 
     elif os.environ.get("PERFLAB_CI") == "true":
-        logging.warning(
-            "No way to get the run identifiers from Jenkins in the PERFLAB_CI"
-        )
+        logging.warning("No way to get the run identifiers from Jenkins in the PERFLAB_CI")
 
         build_number = os.environ["JENKINS_BUILD_NUMBER"]
         job = os.environ["JENKINS_JOB"]  # "job/ExternalTeams/job/RHODS/job/topsail"

@@ -106,9 +106,7 @@ class VaultManager:
             if isinstance(content_def, dict):
                 # New format with file mapping and description
                 filename = content_def.get("file", content_name)
-                description = content_def.get(
-                    "description", ""
-                )  # Don't provide default
+                description = content_def.get("description", "")  # Don't provide default
             else:
                 # Legacy format - content_def is the description
                 filename = content_name
@@ -252,9 +250,7 @@ class VaultManager:
         for vault_requirement in project_vaults:
             vault_name = vault_requirement.get("name")
             if not vault_name:
-                logger.error(
-                    f"Project '{project_name}' has vault requirement without 'name' field"
-                )
+                logger.error(f"Project '{project_name}' has vault requirement without 'name' field")
                 all_valid = False
                 continue
 
@@ -265,9 +261,7 @@ class VaultManager:
 
     def load_project_vault_requirements(self, project_name: str) -> list[dict]:
         """Load vault requirements for a specific project"""
-        vaults_file = (
-            env.FORGE_HOME / "projects" / project_name / "orchestration" / "vaults.yaml"
-        )
+        vaults_file = env.FORGE_HOME / "projects" / project_name / "orchestration" / "vaults.yaml"
 
         if not vaults_file.exists():
             return []
@@ -282,15 +276,11 @@ class VaultManager:
             elif isinstance(data, dict) and "vaults" in data:
                 return data["vaults"]
             else:
-                logger.warning(
-                    f"Project vault file has unexpected format: {vaults_file}"
-                )
+                logger.warning(f"Project vault file has unexpected format: {vaults_file}")
                 return []
 
         except Exception as e:
-            logger.error(
-                f"Failed to load project vault requirements from {vaults_file}: {e}"
-            )
+            logger.error(f"Failed to load project vault requirements from {vaults_file}: {e}")
             return []
 
     def get_vault_content_path(self, vault_name: str, content_name: str) -> Path | None:
@@ -309,9 +299,7 @@ class VaultManager:
             return None
 
         if content_name not in vault.content:
-            logger.error(
-                f"Content '{content_name}' not defined in vault '{vault_name}'"
-            )
+            logger.error(f"Content '{content_name}' not defined in vault '{vault_name}'")
             return None
 
         content_def = vault.content[content_name]
@@ -358,9 +346,7 @@ def _filter_and_validate_vaults(
             del vault_manager._vault_cache[vault_name]
             logger.debug(f"Removed unnecessary vault: {vault_name}")
 
-    logger.info(
-        f"Filtered to {len(requested_vaults)} requested vaults: {sorted(requested_vaults)}"
-    )
+    logger.info(f"Filtered to {len(requested_vaults)} requested vaults: {sorted(requested_vaults)}")
 
     # Validate that the requested vaults match their specifications
     validation_failed = False

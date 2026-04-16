@@ -111,9 +111,7 @@ class ScriptManager:
         Returns:
             Dictionary mapping source files to task counts
         """
-        return {
-            file_path: len(tasks) for file_path, tasks in self._task_registry.items()
-        }
+        return {file_path: len(tasks) for file_path, tasks in self._task_registry.items()}
 
     def has_tasks(self) -> bool:
         """Check if any tasks are registered"""

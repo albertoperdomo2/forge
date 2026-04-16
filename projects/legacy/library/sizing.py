@@ -8,9 +8,7 @@ import types
 
 logging.getLogger().setLevel(logging.INFO)
 
-MACHINES_FILE = (
-    pathlib.Path(os.path.dirname(os.path.realpath(__file__))) / "sizing.machines"
-)
+MACHINES_FILE = pathlib.Path(os.path.dirname(os.path.realpath(__file__))) / "sizing.machines"
 
 
 def parse_machines():
@@ -104,9 +102,7 @@ def main(machine_type, user_count, cpu, memory):
         logging.info(
             "See https://docs.openshift.com/container-platform/4.12/storage/persistent_storage/persistent-storage-aws.html"
         )
-        logging.info(
-            "See https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/volume_limits.html"
-        )
+        logging.info("See https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/volume_limits.html")
 
     return machine_count
 

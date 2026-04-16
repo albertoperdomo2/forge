@@ -134,9 +134,7 @@ def execute_tasks(function_args: dict = None):
                 # Log error but continue to always tasks
                 logger.info("")
                 logger.fatal(f"==> {e.__class__.__name__}: {e}")
-                log_completion_banner(
-                    function_args, status=f"EXCEPTION ({e.__class__.__name__})"
-                )
+                log_completion_banner(function_args, status=f"EXCEPTION ({e.__class__.__name__})")
 
                 # Save error to re-raise after always tasks execute
                 execution_error = e
@@ -207,9 +205,7 @@ def _execute_single_task(task_info, args, shared_context):
             logger.error(
                 f"==> CONDITION EXCEPTION raised by {task_name}: {e.__class__.__name__}: {e}"
             )
-            logger.error(
-                f"==> Task: {task_name} ({task_func.__doc__ or 'No description'})"
-            )
+            logger.error(f"==> Task: {task_name} ({task_func.__doc__ or 'No description'})")
             logger.info("")
             raise ConditionError(e) from e
 
@@ -256,9 +252,7 @@ def _execute_single_task(task_info, args, shared_context):
             )
             pass  # Use absolute path if file is outside FORGE_HOME
 
-        task_location = (
-            f"{co_filename}:{task_func.original_func.__code__.co_firstlineno}"
-        )
+        task_location = f"{co_filename}:{task_func.original_func.__code__.co_firstlineno}"
 
         # Wrap in custom exception with context
         task_error = TaskExecutionError(

@@ -28,9 +28,7 @@ def prepare(
     SECRET_ENV_KEY = config.project.get_config("secrets.dir.env_key")
     PRIVATE_KEY_FILENAME = config.project.get_config("secrets.private_key_filename")
     BASTION_HOST_FILENAME = config.project.get_config("secrets.bastion_host_filename")
-    BASTION_HOST_USER_FILENAME = config.project.get_config(
-        "secrets.bastion_host_user_filename"
-    )
+    BASTION_HOST_USER_FILENAME = config.project.get_config("secrets.bastion_host_user_filename")
     JUMP_HOST_FILENAME = config.project.get_config("secrets.jump_host_filename")
     SSH_FLAGS = config.project.get_config("ssh.flags")
 
@@ -42,9 +40,7 @@ def prepare(
     with open(pathlib.Path(os.environ[SECRET_ENV_KEY]) / BASTION_HOST_FILENAME) as f:
         bastion_host = f.readline().strip()
 
-    with open(
-        pathlib.Path(os.environ[SECRET_ENV_KEY]) / BASTION_HOST_USER_FILENAME
-    ) as f:
+    with open(pathlib.Path(os.environ[SECRET_ENV_KEY]) / BASTION_HOST_USER_FILENAME) as f:
         bastion_user = f.readline().strip()
 
     if config.project.get_config("ssh_tunnel.enabled"):
@@ -68,9 +64,7 @@ def prepare(
         remote_hostname = "localhost"
         remote_host_port = LOCAL_HOST_PORT
     else:
-        logging.info(
-            "ssh_tunnel.enabled is disabled, connecting directly to the bastion"
-        )
+        logging.info("ssh_tunnel.enabled is disabled, connecting directly to the bastion")
         remote_hostname = bastion_host
         remote_host_port = 22
         # probe_ssh_endpoint(

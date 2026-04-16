@@ -72,15 +72,11 @@ def AnsibleRole(role_name):
 
             run_ansible_role.role_name = role_name
             run_ansible_role.ansible_constants = getattr(fct, "ansible_constants", {})
-            run_ansible_role.ansible_mapped_params = getattr(
-                fct, "ansible_mapped_params", False
-            )
+            run_ansible_role.ansible_mapped_params = getattr(fct, "ansible_mapped_params", False)
             run_ansible_role.ansible_skip_config_generation = getattr(
                 fct, "ansible_skip_config_generation", False
             )
-            run_ansible_role.ansible_gather_facts = getattr(
-                fct, "ansible_gather_facts", False
-            )
+            run_ansible_role.ansible_gather_facts = getattr(fct, "ansible_gather_facts", False)
 
             if not run_ansible_role.group:
                 run_ansible_role.group = fct.__qualname__.partition(".")[0].lower()
@@ -110,9 +106,7 @@ def AnsibleConstant(description, name, value):
     def decorator(fct):
         if not hasattr(fct, "ansible_constants"):
             fct.ansible_constants = []
-        fct.ansible_constants.append(
-            {"description": description, "name": name, "value": value}
-        )
+        fct.ansible_constants.append({"description": description, "name": name, "value": value})
 
         return fct
 
@@ -166,18 +160,14 @@ class RunAnsibleRole:
                 f"{self.role_name}_{k}": v for k, v in py_params.items() if k != "self"
             }
             for constant in self.ansible_constants:
-                self.ansible_vars[f"{self.role_name}_{constant['name']}"] = constant[
-                    "value"
-                ]
+                self.ansible_vars[f"{self.role_name}_{constant['name']}"] = constant["value"]
 
         # do not modify the `os.environ` of this Python process
         env = os.environ.copy()
 
         if env.get("ARTIFACT_DIR") is None:
             topsail_base_dir = pathlib.Path(env.get("TOPSAIL_BASE_DIR", "/tmp"))
-            env["ARTIFACT_DIR"] = str(
-                topsail_base_dir / f"topsail_{time.strftime('%Y%m%d')}"
-            )
+            env["ARTIFACT_DIR"] = str(topsail_base_dir / f"topsail_{time.strftime('%Y%m%d')}")
 
         artifact_dir = pathlib.Path(env["ARTIFACT_DIR"])
         artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -194,13 +184,9 @@ class RunAnsibleRole:
 
             previous_extra_count = len(list(artifact_dir.glob("*__*")))
 
-            name = (
-                f"{previous_extra_count:03d}__{prefix}{artifact_base_dirname}{suffix}"
-            )
+            name = f"{previous_extra_count:03d}__{prefix}{artifact_base_dirname}{suffix}"
 
-            env["ARTIFACT_EXTRA_LOGS_DIR"] = str(
-                pathlib.Path(env["ARTIFACT_DIR"]) / name
-            )
+            env["ARTIFACT_EXTRA_LOGS_DIR"] = str(pathlib.Path(env["ARTIFACT_DIR"]) / name)
 
         artifact_extra_logs_dir = pathlib.Path(env["ARTIFACT_EXTRA_LOGS_DIR"])
         artifact_extra_logs_dir.mkdir(parents=True, exist_ok=True)
@@ -235,9 +221,7 @@ class RunAnsibleRole:
 
         if env.get("ANSIBLE_CACHE_PLUGIN_CONNECTION") is None:
             env["ANSIBLE_CACHE_PLUGIN_CONNECTION"] = str(artifact_dir / "ansible_facts")
-        print(
-            f"Using '{env['ANSIBLE_CACHE_PLUGIN_CONNECTION']}' to store ansible facts."
-        )
+        print(f"Using '{env['ANSIBLE_CACHE_PLUGIN_CONNECTION']}' to store ansible facts.")
         pathlib.Path(env["ANSIBLE_CACHE_PLUGIN_CONNECTION"]).parent.mkdir(
             parents=True, exist_ok=True
         )
@@ -248,9 +232,7 @@ class RunAnsibleRole:
         if current_roles_path := env.get("ANSIBLE_ROLES_PATH"):
             topsail_roles_list += [current_roles_path]
 
-        topsail_roles_list += [
-            str(entry) for entry in (TOPSAIL_DIR / "projects").glob("*/toolbox")
-        ]
+        topsail_roles_list += [str(entry) for entry in (TOPSAIL_DIR / "projects").glob("*/toolbox")]
 
         env["ANSIBLE_ROLES_PATH"] = os.pathsep.join(topsail_roles_list)
         self.ansible_vars["roles_path"] = env["ANSIBLE_ROLES_PATH"]
@@ -274,9 +256,7 @@ class RunAnsibleRole:
         print(f"Using '{env['ANSIBLE_CONFIG']}' as ansible configuration file.")
 
         if env.get("ANSIBLE_JSON_TO_LOGFILE") is None:
-            env["ANSIBLE_JSON_TO_LOGFILE"] = str(
-                artifact_extra_logs_dir / "_ansible.log.json"
-            )
+            env["ANSIBLE_JSON_TO_LOGFILE"] = str(artifact_extra_logs_dir / "_ansible.log.json")
         print(f"Using '{env['ANSIBLE_JSON_TO_LOGFILE']}' as ansible json log file.")
 
         # the play file must be in the directory where the 'roles' are

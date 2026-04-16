@@ -181,9 +181,7 @@ class Config:
             logging.info(f"set_config: {jsonpath} --> {value}")
 
         with open(self.config_path, "w") as f:
-            yaml.dump(
-                self.config, f, indent=4, default_flow_style=False, sort_keys=False
-            )
+            yaml.dump(self.config, f, indent=4, default_flow_style=False, sort_keys=False)
 
         if (
             (shared_dir := os.environ.get("SHARED_DIR"))
@@ -191,9 +189,7 @@ class Config:
             and shared_dir_path.exists()
         ):
             with open(shared_dir_path / "config.yaml", "w") as f:
-                yaml.dump(
-                    self.config, f, indent=4, default_flow_style=False, sort_keys=False
-                )
+                yaml.dump(self.config, f, indent=4, default_flow_style=False, sort_keys=False)
 
     def save_config_overrides(self):
         variable_overrides_path = env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
@@ -228,13 +224,9 @@ class Config:
             job_name_safe = os.environ.get("JOB_NAME_SAFE", ...)
 
             if job_name_safe is ...:
-                raise RuntimeError(
-                    "Running in OpenShift CI but JOB_NAME_SAFE not set :/"
-                )
+                raise RuntimeError("Running in OpenShift CI but JOB_NAME_SAFE not set :/")
 
-            if job_name_safe != name_suffix and not job_name_safe.endswith(
-                f"-{name_suffix}"
-            ):
+            if job_name_safe != name_suffix and not job_name_safe.endswith(f"-{name_suffix}"):
                 return False
 
             logging.info(
@@ -260,9 +252,7 @@ class Config:
             check=False,
         )
         if platform_type_cmd.returncode != 0:
-            logging.warning(
-                f"Failed to get the platform type: {platform_type_cmd.stderr.strip()}"
-            )
+            logging.warning(f"Failed to get the platform type: {platform_type_cmd.stderr.strip()}")
             logging.warning("Ignoring the metal profile check.")
             return False
 
@@ -287,9 +277,7 @@ class Config:
             "oc get nodes -oname", capture_stdout=True, capture_stderr=True, check=False
         )
         if cluster_nodes_cmd.returncode != 0:
-            logging.warning(
-                f"Failed to get the cluster nodes: {cluster_nodes_cmd.stderr.strip()}"
-            )
+            logging.warning(f"Failed to get the cluster nodes: {cluster_nodes_cmd.stderr.strip()}")
             logging.warning("Ignoring the cluster profile check.")
             return False
 
@@ -359,9 +347,7 @@ class Config:
 
         # --- #
 
-        new_value = (
-            simple_dereference() if value.startswith("@") else multi_dereference()
-        )
+        new_value = simple_dereference() if value.startswith("@") else multi_dereference()
 
         if not handled_secretly:
             logging.info(f"resolve_reference: {value} ==> '{new_value}'")
@@ -380,9 +366,7 @@ def _set_config_environ(testing_dir):
         )
 
     elif (
-        shared_dir_file_src := pathlib.Path(
-            os.environ.get("SHARED_DIR", "/not-a-directory")
-        )
+        shared_dir_file_src := pathlib.Path(os.environ.get("SHARED_DIR", "/not-a-directory"))
         / "config.yaml"
     ) and shared_dir_file_src.exists():
         config_file_src = shared_dir_file_src
@@ -396,14 +380,10 @@ def _set_config_environ(testing_dir):
     os.environ["TOPSAIL_FROM_CONFIG_FILE"] = str(config_path_final)
 
     if "TOPSAIL_FROM_COMMAND_ARGS_FILE" not in os.environ:
-        os.environ["TOPSAIL_FROM_COMMAND_ARGS_FILE"] = str(
-            testing_dir / "command_args.yml.j2"
-        )
+        os.environ["TOPSAIL_FROM_COMMAND_ARGS_FILE"] = str(testing_dir / "command_args.yml.j2")
 
     if not pathlib.Path(config_file_src) == config_path_final:
-        logging.info(
-            f"Copying the configuration from {config_file_src} to the artifact dir ..."
-        )
+        logging.info(f"Copying the configuration from {config_file_src} to the artifact dir ...")
         shutil.copyfile(config_file_src, config_path_final)
 
     return config_path_final
@@ -435,9 +415,7 @@ def get_command_arg(group, command, arg, prefix=None, suffix=None, mute=False):
 
 
 def set_jsonpath(config, jsonpath, value):
-    get_jsonpath(
-        config, jsonpath
-    )  # will raise an exception if the jsonpath does not exist
+    get_jsonpath(config, jsonpath)  # will raise an exception if the jsonpath does not exist
     jsonpath_ng.parse(jsonpath).update(config, value)
 
 
@@ -518,9 +496,7 @@ def init(testing_dir, apply_preset_from_pr_args=False, apply_config_overrides=Tr
     repo_var_overrides = TOPSAIL_DIR / VARIABLE_OVERRIDES_FILENAME
 
     if repo_var_overrides.exists():
-        logging.info(
-            f"Found '{repo_var_overrides}', apply the variables overrides from it."
-        )
+        logging.info(f"Found '{repo_var_overrides}', apply the variables overrides from it.")
         project.apply_config_overrides(variable_overrides_path=repo_var_overrides)
 
     ci_presets_to_apply = project.get_config("ci_presets.to_apply", [], warn=False)
@@ -538,9 +514,7 @@ def init(testing_dir, apply_preset_from_pr_args=False, apply_config_overrides=Tr
 
     if repo_var_overrides.exists():
         # reapply to force overrides on top of presets
-        project.apply_config_overrides(
-            variable_overrides_path=repo_var_overrides, log=False
-        )
+        project.apply_config_overrides(variable_overrides_path=repo_var_overrides, log=False)
 
     project.apply_config_overrides()
 

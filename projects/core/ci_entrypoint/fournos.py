@@ -33,9 +33,7 @@ def process_fournos_environment():
     env_config_path = artifact_path / "forge_config.env"
 
     if not env_config_path.exists():
-        logger.warning(
-            "forge_config.env not found, skipping FOURNOS environment processing"
-        )
+        logger.warning("forge_config.env not found, skipping FOURNOS environment processing")
         return
 
     try:
@@ -48,9 +46,7 @@ def process_fournos_environment():
                     continue
 
                 if "=" not in line:
-                    logger.warning(
-                        f"Ignoring invalid line {line_num} in {env_config_path}: {line}"
-                    )
+                    logger.warning(f"Ignoring invalid line {line_num} in {env_config_path}: {line}")
                     continue
 
                 key, value = line.split("=", 1)
@@ -60,9 +56,7 @@ def process_fournos_environment():
                 if key:
                     env_vars[key] = value
 
-        logger.info(
-            f"Loaded {len(env_vars)} environment variables from {env_config_path}"
-        )
+        logger.info(f"Loaded {len(env_vars)} environment variables from {env_config_path}")
 
         # Update environment variables
         for key, value in env_vars.items():
@@ -157,9 +151,7 @@ def parse_and_save_pr_arguments_fournos() -> Path | None:
         logger.info(f"Moved forge_config.yaml to {moved_config_path}")
 
         # Transform forge_config to variable_overrides format
-        variable_overrides = transform_fournos_config_to_variable_overrides(
-            forge_config
-        )
+        variable_overrides = transform_fournos_config_to_variable_overrides(forge_config)
 
         output_file = artifact_path / CI_METADATA_DIRNAME / "variable_overrides.yaml"
         with open(output_file, "w") as f:

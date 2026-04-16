@@ -109,9 +109,7 @@ def ensure_imagestream_exists(args, ctx):
         return f"ImageStream {args.imagestream_name} already exists"
 
     # Render ImageStream manifest from template
-    is_manifest_file = (
-        args.artifact_dir / "src" / f"{args.imagestream_name}-imagestream.yaml"
-    )
+    is_manifest_file = args.artifact_dir / "src" / f"{args.imagestream_name}-imagestream.yaml"
     template.render_template_to_file("imagestream.yaml.j2", is_manifest_file)
 
     # Apply the ImageStream
@@ -146,9 +144,7 @@ def trigger_build(args, ctx):
     """Trigger the Shipwright build"""
 
     # Render BuildRun manifest from template
-    buildrun_manifest_file = (
-        args.artifact_dir / "artifacts" / f"{ctx.build_name}-buildrun.yaml"
-    )
+    buildrun_manifest_file = args.artifact_dir / "artifacts" / f"{ctx.build_name}-buildrun.yaml"
     template.render_template_to_file("buildrun.yaml.j2", buildrun_manifest_file)
 
     # Create the BuildRun (use create instead of apply because of generateName)
@@ -186,17 +182,13 @@ def wait_for_build_completion(args, ctx):
         # Build succeeded
         shell.run(
             f"oc get buildruns.shipwright.io {ctx.buildrun_name} -n {args.namespace} -oyaml",
-            stdout_dest=args.artifact_dir
-            / "artifacts"
-            / f"{ctx.buildrun_name}-final-status.yaml",
+            stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.buildrun_name}-final-status.yaml",
         )
 
         # Get build logs for debugging
         shell.run(
             f"oc logs {ctx.buildrun_name} -n {args.namespace}",
-            stdout_dest=args.artifact_dir
-            / "artifacts"
-            / f"{ctx.buildrun_name}-build.log",
+            stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.buildrun_name}-build.log",
             check=False,
         )
 
@@ -225,18 +217,14 @@ def capture_build_artifacts(args, ctx):
         # Get BuildRun YAML for detailed inspection
         shell.run(
             f"oc get buildruns.shipwright.io {build_run_name} -n {args.namespace} -o yaml",
-            stdout_dest=args.artifact_dir
-            / "artifacts"
-            / f"{build_run_name}-buildrun.yaml",
+            stdout_dest=args.artifact_dir / "artifacts" / f"{build_run_name}-buildrun.yaml",
             check=False,
         )
 
         # Get pod logs for git clone step (if available)
         shell.run(
             f"oc logs {build_run_name} -n {args.namespace} -c step-source-default",
-            stdout_dest=args.artifact_dir
-            / "artifacts"
-            / f"{build_run_name}-source-clone.log",
+            stdout_dest=args.artifact_dir / "artifacts" / f"{build_run_name}-source-clone.log",
             check=False,
         )
     else:
@@ -245,9 +233,7 @@ def capture_build_artifacts(args, ctx):
     # Get Build definition
     shell.run(
         f"oc get builds.shipwright.io {ctx.build_name} -n {args.namespace} -o yaml",
-        stdout_dest=args.artifact_dir
-        / "artifacts"
-        / f"{ctx.build_name}-build-definition.yaml",
+        stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.build_name}-build-definition.yaml",
         check=False,
     )
 

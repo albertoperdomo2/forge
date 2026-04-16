@@ -93,8 +93,7 @@ def capture_related_deployments(args, context):
     """Capture deployments related to the LLMInferenceService"""
     shell.run(
         f'oc get deployments -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -oyaml',
-        stdout_dest=args.artifact_dir
-        / "artifacts/llminferenceservice.deployments.yaml",
+        stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.deployments.yaml",
         check=False,
     )
     return "Related deployments captured"
@@ -105,8 +104,7 @@ def capture_related_replicasets(args, context):
     """Capture replicasets related to the LLMInferenceService"""
     shell.run(
         f'oc get replicasets -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -oyaml',
-        stdout_dest=args.artifact_dir
-        / "artifacts/llminferenceservice.replicasets.yaml",
+        stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.replicasets.yaml",
         check=False,
     )
     return "Related replicasets captured"
@@ -139,8 +137,7 @@ def capture_servicemonitors(args, context):
     """Capture ServiceMonitors for monitoring"""
     shell.run(
         f'oc get servicemonitor -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -oyaml',
-        stdout_dest=args.artifact_dir
-        / "artifacts/llminferenceservice.servicemonitors.yaml",
+        stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.servicemonitors.yaml",
         check=False,
     )
     return "ServiceMonitors captured"
@@ -151,8 +148,7 @@ def capture_podmonitors(args, context):
     """Capture PodMonitors for monitoring"""
     shell.run(
         f'oc get podmonitor -l "app.kubernetes.io/name={args.llmisvc_name}" -n {context.target_namespace} -oyaml',
-        stdout_dest=args.artifact_dir
-        / "artifacts/llminferenceservice.podmonitors.yaml",
+        stdout_dest=args.artifact_dir / "artifacts/llminferenceservice.podmonitors.yaml",
         check=False,
     )
     return "PodMonitors captured"
@@ -247,9 +243,7 @@ def capture_pods_describe(args, context):
     if not pod_names or not result.stdout.strip():
         return "No pods found to describe"
 
-    describe_file = (
-        args.artifact_dir / "artifacts/llminferenceservice.pods.describe.txt"
-    )
+    describe_file = args.artifact_dir / "artifacts/llminferenceservice.pods.describe.txt"
 
     # Capture describe output for each pod
     with open(describe_file, "w") as f:  # Start with empty file

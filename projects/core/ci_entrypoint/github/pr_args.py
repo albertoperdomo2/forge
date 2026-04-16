@@ -89,9 +89,7 @@ def handle_test_directive(line: str) -> dict[str, Any]:
             }
         )
 
-        logging.info(
-            f"Jump CI configuration: target_project={target_project}, args={args}"
-        )
+        logging.info(f"Jump CI configuration: target_project={target_project}, args={args}")
     else:
         # Build result with test info and PR positional arguments
         result.update(
@@ -124,9 +122,7 @@ def handle_var_directive(line: str) -> dict[str, Any]:
 
     # Validate basic YAML format
     if ":" not in var_content:
-        raise Exception(
-            f"Invalid /var directive format: {line} (expected 'key: value')"
-        )
+        raise Exception(f"Invalid /var directive format: {line} (expected 'key: value')")
 
     try:
         if ": " in var_content:
@@ -402,10 +398,10 @@ def parse_pr_arguments(
                 raise Exception("TEST_NAME not defined and not in OpenShift CI")
 
     # Build URLs
-    pr_url = (
-        f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pull_number}"
+    pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pull_number}"
+    pr_comments_url = (
+        f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pull_number}/comments"
     )
-    pr_comments_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pull_number}/comments"
 
     logging.info(f"# PR URL: {pr_url}")
     logging.info(f"# PR comments URL: {pr_comments_url}")
@@ -450,10 +446,7 @@ def parse_pr_arguments(
         comment_body = comment.get("body", "")
 
         # Check if this is from the PR author or a contributor
-        if (
-            author_login == pr_author
-            or author_association == REQUIRED_AUTHOR_ASSOCIATION
-        ):
+        if author_login == pr_author or author_association == REQUIRED_AUTHOR_ASSOCIATION:
             if test_anchor in comment_body:
                 last_user_test_comment = comment_body
                 break
