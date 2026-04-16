@@ -11,9 +11,26 @@ import projects.core.library.config as config
 
 LINE_WIDTH = 80
 
-# Configure logging to show info messages
+def setup_clean_logger(name: str):
+    """Set up logger that shows only the message without prefix"""
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+
+    # Only configure if not already configured
+    if not logger.handlers:
+        # Create console handler with clean format
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(logging.Formatter('%(message)s'))
+
+        logger.addHandler(console_handler)
+
+    logger.propagate = False  # Don't propagate to root logger
+    return logger
+
+# Configure clean logging for DSL operations
 logging.basicConfig(level=logging.INFO, format='%(message)s')
-logger = logging.getLogger(__name__)
+logger = setup_clean_logger('DSL')
 
 
 def log_task_header(task_name: str, task_doc: str, rel_filename: str, line_no: int):
