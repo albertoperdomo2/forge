@@ -159,6 +159,8 @@ def prepare():
     if os.isatty(sys.stdin.fileno()):
         # not working very well from a TTY ...
         logger.info("Running from a TTY, not enabling the dual output")
+    elif (Path(os.environ["ARTIFACT_DIR"]) / "run.log").exists():
+        logger.info("run.log file already exists, not enabling the dual output")
     else:
         # Set up dual output as early as possible
         prepare_ci.setup_dual_output()
