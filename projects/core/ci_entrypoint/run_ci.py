@@ -54,10 +54,7 @@ def signal_handler_sigint(sig, frame):
     print("\n🚫 Received SIGINT (Ctrl+C) - Interrupting CI operation...")
 
     # Emergency cleanup of dual output
-    try:
-        prepare_ci.shutdown_dual_output()
-    except Exception:
-        pass  # Don't let cleanup errors prevent signal handling
+    prepare_ci.shutdown_dual_output()
 
     sys.exit(130)  # Standard exit code for SIGINT
 
@@ -67,10 +64,7 @@ def signal_handler_sigterm(sig, frame):
     print("\n🛑 Received SIGTERM - Terminating CI operation...")
 
     # Emergency cleanup of dual output
-    try:
-        prepare_ci.shutdown_dual_output()
-    except Exception:
-        pass  # Don't let cleanup errors prevent signal handling
+    prepare_ci.shutdown_dual_output()
 
     sys.exit(143)  # Standard exit code for SIGTERM
 
@@ -165,6 +159,8 @@ def prepare():
     if os.isatty(sys.stdin.fileno()):
         # not working very well from a TTY ...
         logger.info("Running from a TTY, not enabling the dual output")
+    elif (Path(os.environ["ARTIFACT_DIR"]) / "run.log").exists():
+        logger.info("run.log file already exists, not enabling the dual output")
     else:
         # Set up dual output as early as possible
         prepare_ci.setup_dual_output()
@@ -399,7 +395,7 @@ def execute_project_operation(
     # Find CI script
     ci_script = find_ci_script(project_dir, operation)
     if not ci_script:
-        script_path = project_dir / "orchestration" / f"{operation}.py"
+        script_path = project_dir.relative_to(FORGE_HOME) / "orchestration" / f"{operation}.py"
 
         if script_path.exists():
             click.echo(
@@ -413,7 +409,7 @@ def execute_project_operation(
         else:
             click.echo(
                 click.style(
-                    f"❌ ERROR: No CI script found for project '{project}' operation '{operation}'.",
+                    f"❌ ERROR: No CI script '{script_path}' found for project '{project}' operation '{operation}'.",
                     fg="red",
                 ),
                 err=True,
@@ -421,20 +417,15 @@ def execute_project_operation(
             click.echo(f"🔍 Expected: {script_path}")
         sys.exit(1)
 
-    # Convert underscores to hyphens in args for Click compatibility
-    click_args = [arg.replace("_", "-") for arg in args]
-
     # Prepare command - don't pass operation as it's just the script name
-    cmd = [sys.executable, str(ci_script)] + click_args
+
+    cmd = [sys.executable, str(ci_script)] + list(args)
 
     if verbose or dry_run:
         click.echo("\n🔧 Execution Details:")
         click.echo(f"   Command: {' '.join(cmd)}")
         click.echo(f"   Working Directory: {Path.cwd()}")
         click.echo(f"   Script: {ci_script}")
-        if any("_" in arg for arg in args):
-            converted_args = [f"'{arg}' -> '{arg.replace('_', '-')}'" for arg in args if "_" in arg]
-            click.echo(f"   Note: Converted underscores to hyphens: {', '.join(converted_args)}")
 
     if dry_run:
         click.echo("\n🧪 DRY RUN: Would execute the above command")

@@ -30,7 +30,8 @@ def main(ctx):
 def submit(ctx):
     """Launch a foreign test."""
     project_path = foreign_testing.prepare()
-
+    if not project_path.exists():
+        raise ValueError(f"Received a project path that doesn't exist: {project_path}")
     return foreign_testing.submit(project_path)
 
 

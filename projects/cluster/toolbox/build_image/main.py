@@ -23,6 +23,62 @@ from projects.core.dsl import (
 logger = logging.getLogger("TOOLBOX")
 
 
+def _capture_all_container_logs(pod_name: str, namespace: str, artifact_dir):
+    """
+    Capture logs from all containers in a pod
+
+    Args:
+        pod_name: Name of the pod
+        namespace: Kubernetes namespace
+        artifact_dir: Directory to save log files
+    """
+    # Get list of all containers in the pod
+    result = shell.run(
+        f"oc get pod {pod_name} -n {namespace} -o jsonpath='{{.spec.containers[*].name}}'",
+        check=False,
+    )
+
+    if not result.success or not result.stdout.strip():
+        logger.warning(f"Could not get container list for pod {pod_name}")
+        return
+
+    container_names = result.stdout.strip().split()
+    logger.info(f"Capturing logs from {len(container_names)} containers: {container_names}")
+
+    # Capture logs for each container
+    for container_name in container_names:
+        log_file = artifact_dir / "artifacts" / f"{pod_name}-{container_name}.log"
+        shell.run(
+            f"oc logs {pod_name} -n {namespace} -c {container_name}",
+            stdout_dest=log_file,
+            check=False,
+        )
+        logger.debug(f"Captured logs for container '{container_name}' to {log_file}")
+
+    # Also capture logs from init containers if any
+    result = shell.run(
+        f"oc get pod {pod_name} -n {namespace} -o jsonpath='{{.spec.initContainers[*].name}}'",
+        check=False,
+    )
+
+    if not result.success or not result.stdout.strip():
+        return
+
+    init_container_names = result.stdout.strip().split()
+    logger.info(
+        f"Capturing logs from {len(init_container_names)} init containers: {init_container_names}"
+    )
+
+    for container_name in init_container_names:
+        log_file = artifact_dir / "artifacts" / f"{pod_name}-init-{container_name}.log"
+        shell.run(
+            f"oc logs {pod_name} -n {namespace} -c {container_name}",
+            stdout_dest=log_file,
+            check=False,
+        )
+        logger.debug(f"Captured init container logs for '{container_name}' to {log_file}")
+
+
 def run(
     repo_name: str,
     commit: str,
@@ -185,12 +241,8 @@ def wait_for_build_completion(args, ctx):
             stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.buildrun_name}-final-status.yaml",
         )
 
-        # Get build logs for debugging
-        shell.run(
-            f"oc logs {ctx.buildrun_name} -n {args.namespace}",
-            stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.buildrun_name}-build.log",
-            check=False,
-        )
+        # Capture logs from all containers in the build pod
+        _capture_all_container_logs(ctx.buildrun_name, args.namespace, args.artifact_dir)
 
         if status == "false":
             raise RuntimeError(f"Build {ctx.buildrun_name} failed")
@@ -221,12 +273,8 @@ def capture_build_artifacts(args, ctx):
             check=False,
         )
 
-        # Get pod logs for git clone step (if available)
-        shell.run(
-            f"oc logs {build_run_name} -n {args.namespace} -c step-source-default",
-            stdout_dest=args.artifact_dir / "artifacts" / f"{build_run_name}-source-clone.log",
-            check=False,
-        )
+        # Capture logs from all containers in the build pod
+        _capture_all_container_logs(build_run_name, args.namespace, args.artifact_dir)
     else:
         logger.warning("No BuildRun name available")
 
