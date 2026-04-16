@@ -422,7 +422,8 @@ def execute_project_operation(
         sys.exit(1)
 
     # Prepare command - don't pass operation as it's just the script name
-    cmd = [sys.executable, str(ci_script)] + click_args
+
+    cmd = [sys.executable, str(ci_script)] + list(args)
 
     if verbose or dry_run:
         click.echo("\n🔧 Execution Details:")
