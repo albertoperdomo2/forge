@@ -22,13 +22,15 @@ import projects.core.library.env as env
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class VaultContent:
     """Represents a single piece of content in a vault"""
+
     name: str
     description: str
     filename: Optional[str] = None
-    _vault: Optional['VaultDefinition'] = None
+    _vault: Optional["VaultDefinition"] = None
 
     def __post_init__(self):
         # Default filename to the content name if not specified
@@ -47,9 +49,11 @@ class VaultContent:
 
         return secret_dir / self.filename
 
+
 @dataclass
 class VaultDefinition:
     """Represents a complete vault definition"""
+
     name: str
     env_key: str
     description: str
@@ -62,6 +66,7 @@ class VaultDefinition:
             return None
         return Path(os.environ[self.env_key])
 
+
 class VaultManager:
     """Manages vault definitions and validation"""
 
@@ -73,7 +78,9 @@ class VaultManager:
     def _load_vault_definitions(self):
         """Load all vault definitions from the vaults directory"""
         if not self.vault_definitions_dir.exists():
-            logger.warning(f"Vault definitions directory does not exist: {self.vault_definitions_dir}")
+            logger.warning(
+                f"Vault definitions directory does not exist: {self.vault_definitions_dir}"
+            )
             return
 
         for vault_file in self.vault_definitions_dir.glob("*.yaml"):
@@ -86,7 +93,7 @@ class VaultManager:
 
     def _load_vault_definition(self, vault_file: Path) -> VaultDefinition:
         """Load a single vault definition from a YAML file"""
-        with open(vault_file, 'r') as f:
+        with open(vault_file, "r") as f:
             data = yaml.safe_load(f)
 
         # Vault name is derived from filename (without .yaml extension)
@@ -94,27 +101,27 @@ class VaultManager:
 
         # Parse content definitions
         content = {}
-        for content_name, content_def in data.get('content', {}).items():
+        for content_name, content_def in data.get("content", {}).items():
             if isinstance(content_def, dict):
                 # New format with file mapping and description
-                filename = content_def.get('file', content_name)
-                description = content_def.get('description', '')  # Don't provide default
+                filename = content_def.get("file", content_name)
+                description = content_def.get(
+                    "description", ""
+                )  # Don't provide default
             else:
                 # Legacy format - content_def is the description
                 filename = content_name
-                description = content_def if content_def else ''
+                description = content_def if content_def else ""
 
             content[content_name] = VaultContent(
-                name=content_name,
-                description=description,
-                filename=filename
+                name=content_name, description=description, filename=filename
             )
 
         vault_def = VaultDefinition(
             name=vault_name,
-            env_key=data['env_key'],
-            description=data.get('description', ''),
-            content=content
+            env_key=data["env_key"],
+            description=data.get("description", ""),
+            content=content,
         )
 
         # Set vault reference on all content items
@@ -207,7 +214,7 @@ class VaultManager:
                 filename = file_path.name
 
                 # Ignore files that start with "secretsync" (automated sync tool files)
-                if filename.startswith('secretsync'):
+                if filename.startswith("secretsync"):
                     logger.debug(f"Ignoring secretsync file: {filename}")
                     continue
 
@@ -242,9 +249,11 @@ class VaultManager:
 
         all_valid = True
         for vault_requirement in project_vaults:
-            vault_name = vault_requirement.get('name')
+            vault_name = vault_requirement.get("name")
             if not vault_name:
-                logger.error(f"Project '{project_name}' has vault requirement without 'name' field")
+                logger.error(
+                    f"Project '{project_name}' has vault requirement without 'name' field"
+                )
                 all_valid = False
                 continue
 
@@ -255,29 +264,37 @@ class VaultManager:
 
     def load_project_vault_requirements(self, project_name: str) -> List[Dict]:
         """Load vault requirements for a specific project"""
-        vaults_file = env.FORGE_HOME / "projects" / project_name / "orchestration" / "vaults.yaml"
+        vaults_file = (
+            env.FORGE_HOME / "projects" / project_name / "orchestration" / "vaults.yaml"
+        )
 
         if not vaults_file.exists():
             return []
 
         try:
-            with open(vaults_file, 'r') as f:
+            with open(vaults_file, "r") as f:
                 data = yaml.safe_load(f)
 
             # Handle both list format and dict format
             if isinstance(data, list):
                 return data
-            elif isinstance(data, dict) and 'vaults' in data:
-                return data['vaults']
+            elif isinstance(data, dict) and "vaults" in data:
+                return data["vaults"]
             else:
-                logger.warning(f"Project vault file has unexpected format: {vaults_file}")
+                logger.warning(
+                    f"Project vault file has unexpected format: {vaults_file}"
+                )
                 return []
 
         except Exception as e:
-            logger.error(f"Failed to load project vault requirements from {vaults_file}: {e}")
+            logger.error(
+                f"Failed to load project vault requirements from {vaults_file}: {e}"
+            )
             return []
 
-    def get_vault_content_path(self, vault_name: str, content_name: str) -> Optional[Path]:
+    def get_vault_content_path(
+        self, vault_name: str, content_name: str
+    ) -> Optional[Path]:
         """
         Get the full path to a specific piece of vault content
 
@@ -293,7 +310,9 @@ class VaultManager:
             return None
 
         if content_name not in vault.content:
-            logger.error(f"Content '{content_name}' not defined in vault '{vault_name}'")
+            logger.error(
+                f"Content '{content_name}' not defined in vault '{vault_name}'"
+            )
             return None
 
         content_def = vault.content[content_name]
@@ -311,9 +330,7 @@ class VaultManager:
 
 
 def _filter_and_validate_vaults(
-        vault_manager: VaultManager,
-        vaults: List[str],
-        strict: bool = True
+    vault_manager: VaultManager, vaults: List[str], strict: bool = True
 ):
     """
     Filter vault manager to only include specified vaults and validate them
@@ -342,7 +359,9 @@ def _filter_and_validate_vaults(
             del vault_manager._vault_cache[vault_name]
             logger.debug(f"Removed unnecessary vault: {vault_name}")
 
-    logger.info(f"Filtered to {len(requested_vaults)} requested vaults: {sorted(requested_vaults)}")
+    logger.info(
+        f"Filtered to {len(requested_vaults)} requested vaults: {sorted(requested_vaults)}"
+    )
 
     # Validate that the requested vaults match their specifications
     validation_failed = False
@@ -364,8 +383,10 @@ def _filter_and_validate_vaults(
 
     return True
 
+
 # Global vault manager instance
 _vault_manager: Optional[VaultManager] = None
+
 
 def init(vaults: List[str] = None, strict: bool = True):
     """Initialize the vault manager

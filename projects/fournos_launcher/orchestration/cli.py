@@ -8,6 +8,7 @@ import types
 import shlex
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 import click
@@ -27,12 +28,16 @@ def main(ctx):
 
 
 @main.command()
-@click.option('--cluster', help='Target cluster name')
-@click.option('--project', help='Project to run (e.g., llm_d)')
-@click.option('--args', help='Arguments to pass to the project (space-separated string)')
-@click.option('--namespace', help='Kubernetes namespace for the FOURNOS job (optional)')
-@click.option('--override', '-o', multiple=True, help='Config overrides in key=value format')
-@click.option('--commit', help='Git commit SHA to set as PULL_PULL_SHA (optional)')
+@click.option("--cluster", help="Target cluster name")
+@click.option("--project", help="Project to run (e.g., llm_d)")
+@click.option(
+    "--args", help="Arguments to pass to the project (space-separated string)"
+)
+@click.option("--namespace", help="Kubernetes namespace for the FOURNOS job (optional)")
+@click.option(
+    "--override", "-o", multiple=True, help="Config overrides in key=value format"
+)
+@click.option("--commit", help="Git commit SHA to set as PULL_PULL_SHA (optional)")
 @click.pass_context
 @safe_cli_command
 def submit(ctx, cluster, project, args, namespace, override, commit):
@@ -46,11 +51,13 @@ def submit(ctx, cluster, project, args, namespace, override, commit):
     # Parse overrides into dict
     extra_overrides = {}
     for override_str in override:
-        if '=' in override_str:
-            key, value = override_str.split('=', 1)
+        if "=" in override_str:
+            key, value = override_str.split("=", 1)
             extra_overrides[key] = value
         else:
-            logger.warning(f"Ignoring invalid override format: {override_str} (expected key=value)")
+            logger.warning(
+                f"Ignoring invalid override format: {override_str} (expected key=value)"
+            )
 
     # Override config values if provided
     if cluster:

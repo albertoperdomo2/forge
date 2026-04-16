@@ -5,6 +5,7 @@ from projects.core.library import env, run, config
 
 logger = logging.getLogger(__name__)
 
+
 def prepare():
     logger.info("=== Skeleton Project Prepare Phase ===")
 
@@ -18,6 +19,7 @@ def prepare():
     except Exception as e:
         logger.error(f"❌ Error during prepare phase: {e}")
         return 1
+
 
 def cleanup():
     logger.info("=== Skeleton Project Cleanup Phase ===")

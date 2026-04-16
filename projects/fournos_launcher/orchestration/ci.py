@@ -3,6 +3,7 @@
 FOURNOS launcher project CI Operations
 
 """
+
 from projects.core.library import ci as ci_lib
 from projects.fournos_launcher.orchestration import submit as submit_mod
 from projects.fournos_launcher.orchestration import utils
@@ -10,6 +11,7 @@ from projects.fournos_launcher.orchestration import utils
 import types
 import click
 import logging
+
 logger = logging.getLogger(__name__)
 
 

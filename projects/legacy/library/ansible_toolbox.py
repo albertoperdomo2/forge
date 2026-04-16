@@ -14,6 +14,7 @@ import importlib
 import logging
 
 from projects.legacy.library import config
+
 TOPSAIL_DIR = pathlib.Path(config.__file__).parents[3]
 
 ANSIBLE_OS_CONFIGS_YAML = """
@@ -38,13 +39,17 @@ class Toolbox:
 
     def __init__(self):
         for toolbox_file in (TOPSAIL_DIR / "projects").glob("*/toolbox/*.py"):
-            if toolbox_file.name.startswith("."): continue
+            if toolbox_file.name.startswith("."):
+                continue
 
-            project_toolbox_module = str(toolbox_file.relative_to(TOPSAIL_DIR).with_suffix("")).replace(os.path.sep, ".")
+            project_toolbox_module = str(
+                toolbox_file.relative_to(TOPSAIL_DIR).with_suffix("")
+            ).replace(os.path.sep, ".")
             mod = importlib.import_module(project_toolbox_module)
             toolbox_name = toolbox_file.with_suffix("").name
 
-            if toolbox_name.startswith("_"): continue
+            if toolbox_name.startswith("_"):
+                continue
 
             if hasattr(mod, "__entrypoint"):
                 self.__dict__[toolbox_name] = getattr(mod, "__entrypoint")
@@ -53,8 +58,9 @@ class Toolbox:
             try:
                 self.__dict__[toolbox_name] = getattr(mod, toolbox_name.title())
             except AttributeError as e:
-                logging.warning(str(e)) # eg: AttributeError: module 'projects.notebooks.toolbox.notebooks' has no attribute 'Notebooks'
-
+                logging.warning(
+                    str(e)
+                )  # eg: AttributeError: module 'projects.notebooks.toolbox.notebooks' has no attribute 'Notebooks'
 
 
 def AnsibleRole(role_name):
@@ -67,9 +73,15 @@ def AnsibleRole(role_name):
 
             run_ansible_role.role_name = role_name
             run_ansible_role.ansible_constants = getattr(fct, "ansible_constants", {})
-            run_ansible_role.ansible_mapped_params = getattr(fct, "ansible_mapped_params", False)
-            run_ansible_role.ansible_skip_config_generation = getattr(fct, "ansible_skip_config_generation", False)
-            run_ansible_role.ansible_gather_facts = getattr(fct, "ansible_gather_facts", False)
+            run_ansible_role.ansible_mapped_params = getattr(
+                fct, "ansible_mapped_params", False
+            )
+            run_ansible_role.ansible_skip_config_generation = getattr(
+                fct, "ansible_skip_config_generation", False
+            )
+            run_ansible_role.ansible_gather_facts = getattr(
+                fct, "ansible_gather_facts", False
+            )
 
             if not run_ansible_role.group:
                 run_ansible_role.group = fct.__qualname__.partition(".")[0].lower()
@@ -89,23 +101,29 @@ def AnsibleMappedParams(fct):
     fct.ansible_mapped_params = True
     return fct
 
+
 def AnsibleSkipConfigGeneration(fct):
     fct.ansible_skip_config_generation = True
     return fct
+
 
 def AnsibleConstant(description, name, value):
     def decorator(fct):
         if not hasattr(fct, "ansible_constants"):
             fct.ansible_constants = []
-        fct.ansible_constants.append(dict(description=description, name=name, value=value))
+        fct.ansible_constants.append(
+            dict(description=description, name=name, value=value)
+        )
 
         return fct
 
     return decorator
 
+
 def AnsibleGatherFacts(fct):
     fct.ansible_gather_facts = True
     return fct
+
 
 class RunAnsibleRole:
     """
@@ -122,11 +140,14 @@ class RunAnsibleRole:
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     """
-    def __init__(self,
-                 ansible_vars: dict = None,
-                 role_name: str = None,
-                 group: str = "",
-                 command: str = ""):
+
+    def __init__(
+        self,
+        ansible_vars: dict = None,
+        role_name: str = None,
+        group: str = "",
+        command: str = "",
+    ):
         self.ansible_vars = ansible_vars or {}
         self.role_name = role_name
         self.group = group
@@ -146,14 +167,18 @@ class RunAnsibleRole:
                 f"{self.role_name}_{k}": v for k, v in py_params.items() if k != "self"
             }
             for constant in self.ansible_constants:
-                self.ansible_vars[f"{self.role_name}_{constant['name']}"] = constant["value"]
+                self.ansible_vars[f"{self.role_name}_{constant['name']}"] = constant[
+                    "value"
+                ]
 
         # do not modify the `os.environ` of this Python process
         env = os.environ.copy()
 
         if env.get("ARTIFACT_DIR") is None:
             topsail_base_dir = pathlib.Path(env.get("TOPSAIL_BASE_DIR", "/tmp"))
-            env["ARTIFACT_DIR"] = str(topsail_base_dir / f"topsail_{time.strftime('%Y%m%d')}")
+            env["ARTIFACT_DIR"] = str(
+                topsail_base_dir / f"topsail_{time.strftime('%Y%m%d')}"
+            )
 
         artifact_dir = pathlib.Path(env["ARTIFACT_DIR"])
         artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -162,14 +187,21 @@ class RunAnsibleRole:
         suffix = env.get("ARTIFACT_TOOLBOX_NAME_SUFFIX", "")
 
         if env.get("ARTIFACT_EXTRA_LOGS_DIR") is None:
-            artifact_base_dirname = f"{self.group}__{self.command}" if self.group and self.command \
+            artifact_base_dirname = (
+                f"{self.group}__{self.command}"
+                if self.group and self.command
                 else "__".join(sys.argv[1:3])
+            )
 
             previous_extra_count = len(list(artifact_dir.glob("*__*")))
 
-            name = f"{previous_extra_count:03d}__{prefix}{artifact_base_dirname}{suffix}"
+            name = (
+                f"{previous_extra_count:03d}__{prefix}{artifact_base_dirname}{suffix}"
+            )
 
-            env["ARTIFACT_EXTRA_LOGS_DIR"] = str(pathlib.Path(env["ARTIFACT_DIR"]) / name)
+            env["ARTIFACT_EXTRA_LOGS_DIR"] = str(
+                pathlib.Path(env["ARTIFACT_DIR"]) / name
+            )
 
         artifact_extra_logs_dir = pathlib.Path(env["ARTIFACT_EXTRA_LOGS_DIR"])
         artifact_extra_logs_dir.mkdir(parents=True, exist_ok=True)
@@ -204,8 +236,12 @@ class RunAnsibleRole:
 
         if env.get("ANSIBLE_CACHE_PLUGIN_CONNECTION") is None:
             env["ANSIBLE_CACHE_PLUGIN_CONNECTION"] = str(artifact_dir / "ansible_facts")
-        print(f"Using '{env['ANSIBLE_CACHE_PLUGIN_CONNECTION']}' to store ansible facts.")
-        pathlib.Path(env["ANSIBLE_CACHE_PLUGIN_CONNECTION"]).parent.mkdir(parents=True, exist_ok=True)
+        print(
+            f"Using '{env['ANSIBLE_CACHE_PLUGIN_CONNECTION']}' to store ansible facts."
+        )
+        pathlib.Path(env["ANSIBLE_CACHE_PLUGIN_CONNECTION"]).parent.mkdir(
+            parents=True, exist_ok=True
+        )
 
         # We configure the roles path dynamically appending them to the defaults
         topsail_roles_list = []
@@ -213,7 +249,9 @@ class RunAnsibleRole:
         if current_roles_path := env.get("ANSIBLE_ROLES_PATH"):
             topsail_roles_list += [current_roles_path]
 
-        topsail_roles_list += [str(entry) for entry in (TOPSAIL_DIR / "projects").glob("*/toolbox")]
+        topsail_roles_list += [
+            str(entry) for entry in (TOPSAIL_DIR / "projects").glob("*/toolbox")
+        ]
 
         env["ANSIBLE_ROLES_PATH"] = os.pathsep.join(topsail_roles_list)
         self.ansible_vars["roles_path"] = env["ANSIBLE_ROLES_PATH"]
@@ -223,19 +261,23 @@ class RunAnsibleRole:
         if (collect_path := env.get("ANSIBLE_COLLECTIONS_PATHS")) is not None:
             current_collections_paths.append(str(collect_path))
         for path in sys.path:
-            collections_path = pathlib.Path(path) / 'ansible_collections'
+            collections_path = pathlib.Path(path) / "ansible_collections"
             if collections_path.exists():
                 current_collections_paths.append(str(collections_path))
         env["ANSIBLE_COLLECTIONS_PATHS"] = os.pathsep.join(current_collections_paths)
         self.ansible_vars["collections_paths"] = env["ANSIBLE_COLLECTIONS_PATHS"]
 
         if env.get("ANSIBLE_CONFIG") is None:
-            env["ANSIBLE_CONFIG"] = str(TOPSAIL_DIR / "projects/legacy/ansible-config" / "ansible.cfg")
+            env["ANSIBLE_CONFIG"] = str(
+                TOPSAIL_DIR / "projects/legacy/ansible-config" / "ansible.cfg"
+            )
 
         print(f"Using '{env['ANSIBLE_CONFIG']}' as ansible configuration file.")
 
         if env.get("ANSIBLE_JSON_TO_LOGFILE") is None:
-            env["ANSIBLE_JSON_TO_LOGFILE"] = str(artifact_extra_logs_dir / "_ansible.log.json")
+            env["ANSIBLE_JSON_TO_LOGFILE"] = str(
+                artifact_extra_logs_dir / "_ansible.log.json"
+            )
         print(f"Using '{env['ANSIBLE_JSON_TO_LOGFILE']}' as ansible json log file.")
 
         # the play file must be in the directory where the 'roles' are
@@ -257,31 +299,39 @@ class RunAnsibleRole:
 
         remote_hostname = env.get("TOPSAIL_REMOTE_HOSTNAME")
         if remote_hostname:
-            print(f"Using TOPSAIL_REMOTE_HOSTNAME={remote_hostname}") # value will be censored by OpenShift
+            print(
+                f"Using TOPSAIL_REMOTE_HOSTNAME={remote_hostname}"
+            )  # value will be censored by OpenShift
             if self.ansible_gather_facts:
                 # gather only env values
                 generated_play[0]["gather_facts"] = True
-                generated_play[0]["gather_subset"] = ['env','!all','!min']
+                generated_play[0]["gather_subset"] = ["env", "!all", "!min"]
             else:
                 generated_play[0]["gather_facts"] = False
 
             # run remotely
             generated_play[0]["hosts"] = "remote"
             inventory_fd, path = tempfile.mkstemp()
-            os.remove(path) # using only the FD. Ensures that the file disappears when this process terminates
-            inventory_f = os.fdopen(inventory_fd, 'w')
+            os.remove(
+                path
+            )  # using only the FD. Ensures that the file disappears when this process terminates
+            inventory_f = os.fdopen(inventory_fd, "w")
 
             host_properties = []
             if remote_username := env.get("TOPSAIL_REMOTE_USERNAME"):
-                print(f"Using TOPSAIL_REMOTE_USERNAME={remote_username}") # value will be censored by OpenShift
+                print(
+                    f"Using TOPSAIL_REMOTE_USERNAME={remote_username}"
+                )  # value will be censored by OpenShift
 
-                host_properties.append("ansible_user="+remote_username)
+                host_properties.append("ansible_user=" + remote_username)
 
             # Configure OS-specific Ansible variables
             if remote_os := env.get("TOPSAIL_REMOTE_OS"):
                 config = ANSIBLE_OS_CONFIGURATIONS.get(remote_os.lower())
                 if not config:
-                    raise ValueError(f"TOPSAIL Ansible OS configuration not found for TOPSAIL_REMOTE_OS={remote_os}")
+                    raise ValueError(
+                        f"TOPSAIL Ansible OS configuration not found for TOPSAIL_REMOTE_OS={remote_os}"
+                    )
                 host_properties.extend(config)
 
             inventory_content = f"""
@@ -305,7 +355,9 @@ class RunAnsibleRole:
                     extra_vars_dict = yaml.safe_load(f)
 
             except yaml.parser.ParserError:
-                logging.fatal(f"Could not parse file TOPSAIL_ANSIBLE_PLAYBOOK_EXTRA_VARS='{extra_vars_fname}' as yaml ...")
+                logging.fatal(
+                    f"Could not parse file TOPSAIL_ANSIBLE_PLAYBOOK_EXTRA_VARS='{extra_vars_fname}' as yaml ..."
+                )
                 raise
 
             if not extra_vars_dict:
@@ -316,14 +368,18 @@ class RunAnsibleRole:
             generated_play[0]["vars"] |= extra_vars_dict
 
         if extra_env_fname := env.get("TOPSAIL_ANSIBLE_PLAYBOOK_EXTRA_ENV"):
-            logging.info("Using the extra environment variables found in TOPSAIL_ANSIBLE_PLAYBOOK_EXTRA_ENV")
+            logging.info(
+                "Using the extra environment variables found in TOPSAIL_ANSIBLE_PLAYBOOK_EXTRA_ENV"
+            )
             try:
                 with open(extra_env_fname) as f:
                     extra_env_dict = yaml.safe_load(f)
 
                 generated_play[0]["environment"] = extra_env_dict
             except yaml.parser.ParserError:
-                logging.fatal(f"Could not parse file TOPSAIL_ANSIBLE_PLAYBOOK_EXTRA_ENV='{extra_env_fname}' as yaml ...")
+                logging.fatal(
+                    f"Could not parse file TOPSAIL_ANSIBLE_PLAYBOOK_EXTRA_ENV='{extra_env_fname}' as yaml ..."
+                )
                 raise
 
         generated_play_path = artifact_extra_logs_dir / "_ansible.play.yaml"
@@ -339,7 +395,6 @@ class RunAnsibleRole:
 
         with open(artifact_extra_logs_dir / "_python.cmd", "w") as f:
             print(" ".join(map(shlex.quote, sys.argv)), file=f)
-
 
         if remote_hostname:
             cmd += ["--inventory", f"/proc/{os.getpid()}/fd/{inventory_fd}"]
@@ -359,10 +414,10 @@ class RunAnsibleRole:
             try:
                 os.remove(tmp_play_file.name)
             except FileNotFoundError:
-                pass # play file was removed, ignore
+                pass  # play file was removed, ignore
 
             if ret != 0:
-                extra_dir_name = pathlib.Path(env['ARTIFACT_EXTRA_LOGS_DIR']).name
+                extra_dir_name = pathlib.Path(env["ARTIFACT_EXTRA_LOGS_DIR"]).name
                 with open(artifact_extra_logs_dir / "FAILURE", "a") as f:
                     print(f"[{extra_dir_name}] {' '.join(sys.argv)} --> {ret}", file=f)
 

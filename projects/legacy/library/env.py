@@ -11,8 +11,8 @@ import threading
 # ARTIFACT_DIR value (and don't update the shared value)
 ###
 
-class MyThread(threading.Thread):
 
+class MyThread(threading.Thread):
     def __init__(self, *args, **kwargs):
         super(MyThread, self).__init__(*args, **kwargs)
         self.parent_artifact_dict = None
@@ -25,17 +25,20 @@ class MyThread(threading.Thread):
         _set_tls_artifact_dir(self.parent_artifact_dict)
         super(MyThread, self).run()
 
+
 threading.Thread = MyThread
 
-def __getattr__(name):
 
+def __getattr__(name):
     if name == "ARTIFACT_DIR":
         return get_tls_artifact_dir()
 
     return globals()[name]
 
+
 _main_artifact_dir = None
 _tls_artifact_dir = threading.local()
+
 
 def get_tls_artifact_dir():
     return _tls_artifact_dir.val
@@ -44,9 +47,11 @@ def get_tls_artifact_dir():
 def _set_tls_artifact_dir(value):
     _tls_artifact_dir.val = value
 
+
 ###
 # end of the thread local storage code
 ###
+
 
 def init():
     if "ARTIFACT_DIR" in os.environ:
@@ -97,12 +102,19 @@ class TempArtifactDir(object):
             logging.error(f"Caught exception {ex_type.__name__}: {ex_value}")
             with open(get_tls_artifact_dir() / "FAILURE", "a") as f:
                 print(f"{ex_type.__name__}: {ex_value}", file=f)
-                print(''.join(traceback.format_exception(None, value=ex_value, tb=exc_traceback)), file=f)
+                print(
+                    "".join(
+                        traceback.format_exception(
+                            None, value=ex_value, tb=exc_traceback
+                        )
+                    ),
+                    file=f,
+                )
 
         os.environ["ARTIFACT_DIR"] = str(self.previous_dirname)
         _set_tls_artifact_dir(self.previous_dirname)
 
-        return False # If we returned True here, any exception would be suppressed!
+        return False  # If we returned True here, any exception would be suppressed!
 
 
 def next_artifact_index():

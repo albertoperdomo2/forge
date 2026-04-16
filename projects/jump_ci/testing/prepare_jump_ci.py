@@ -5,6 +5,7 @@ import json
 from projects.legacy.library import env, config, run
 from projects.jump_ci.testing import utils, tunnelling
 
+
 @utils.entrypoint()
 def lock_cluster(cluster=None):
     """
@@ -17,13 +18,18 @@ def lock_cluster(cluster=None):
         config.project.set_config("ssh_tunnel.enabled", "true")
 
         if config.project.get_config("cluster.name", print=False) is None:
-            override_cluster = config.project.get_config("overrides.PR_POSITIONAL_ARG_1", None)
+            override_cluster = config.project.get_config(
+                "overrides.PR_POSITIONAL_ARG_1", None
+            )
             if not override_cluster:
-                raise ValueError("Expected to find the cluster name in overrides.PR_POSITIONAL_ARG_1 (1st test argument) or cluster.name, but none of them were set ...")
+                raise ValueError(
+                    "Expected to find the cluster name in overrides.PR_POSITIONAL_ARG_1 (1st test argument) or cluster.name, but none of them were set ..."
+                )
 
             config.project.set_config("cluster.name", override_cluster)
-            config.project.set_config("rewrite_variables_overrides.cluster_found_in_pr_args", True)
-
+            config.project.set_config(
+                "rewrite_variables_overrides.cluster_found_in_pr_args", True
+            )
 
     if cluster is None:
         cluster = config.project.get_config("cluster.name")
@@ -31,9 +37,13 @@ def lock_cluster(cluster=None):
     # Open the tunnel
     tunnelling.prepare()
 
-    run.run_toolbox("jump_ci", "take_lock", cluster=cluster, owner=utils.get_lock_owner())
+    run.run_toolbox(
+        "jump_ci", "take_lock", cluster=cluster, owner=utils.get_lock_owner()
+    )
 
-    tunnelling.run_with_ansible_ssh_conf(f"podman container rm --force 'topsail-on-{cluster}'")
+    tunnelling.run_with_ansible_ssh_conf(
+        f"podman container rm --force 'topsail-on-{cluster}'"
+    )
 
 
 @utils.entrypoint()
@@ -50,18 +60,22 @@ def unlock_cluster(cluster=None):
     if cluster is None:
         cluster = config.project.get_config("cluster.name")
 
-    tunnelling.run_with_ansible_ssh_conf(f"podman container rm --force 'topsail-on-{cluster}'")
+    tunnelling.run_with_ansible_ssh_conf(
+        f"podman container rm --force 'topsail-on-{cluster}'"
+    )
 
-    run.run_toolbox("jump_ci", "release_lock", cluster=cluster, owner=utils.get_lock_owner())
+    run.run_toolbox(
+        "jump_ci", "release_lock", cluster=cluster, owner=utils.get_lock_owner()
+    )
 
 
 @utils.entrypoint()
 def prepare(
-        cluster=None,
-        repo_owner="openshift-psap",
-        repo_name="topsail-ng",
-        git_ref=None,
-        pr_number=None,
+    cluster=None,
+    repo_owner="openshift-psap",
+    repo_name="topsail-ng",
+    git_ref=None,
+    pr_number=None,
 ):
     """
     Prepares the jump-host for running TOPSAIL commands.
@@ -80,7 +94,9 @@ def prepare(
         cluster = config.project.get_config("cluster.name")
 
     # Lock the cluster
-    run.run_toolbox("jump_ci", "ensure_lock", cluster=cluster, owner=utils.get_lock_owner())
+    run.run_toolbox(
+        "jump_ci", "ensure_lock", cluster=cluster, owner=utils.get_lock_owner()
+    )
 
     # Clone the Git Repository
     # Build the image
@@ -91,17 +107,21 @@ def prepare(
 
     if os.environ.get("OPENSHIFT_CI") == "true":
         if os.environ.get("OPENSHIFT_CI_TOPSAIL_FOREIGN_TESTING"):
-            logging.info("Not running from TOPSAIL repository. Using TOPSAIL foreign configuration.")
+            logging.info(
+                "Not running from TOPSAIL repository. Using TOPSAIL foreign configuration."
+            )
             repo_owner = config.project.get_config("foreign_testing.topsail.repo.owner")
             repo_name = config.project.get_config("foreign_testing.topsail.repo.name")
-            git_ref  = config.project.get_config("foreign_testing.topsail.repo.branch")
+            git_ref = config.project.get_config("foreign_testing.topsail.repo.branch")
 
         elif os.environ["JOB_NAME"].startswith("periodic"):
             # periodic jobs don't have these env vars ...
             job_spec = json.loads(os.environ["JOB_SPEC"])
             repo_owner = os.environ["REPO_OWNER"] = job_spec["extra_refs"][0]["org"]
             repo_name = os.environ["REPO_NAME"] = job_spec["extra_refs"][0]["repo"]
-            git_ref = os.environ["PULL_PULL_SHA"] = job_spec["extra_refs"][0]["base_ref"]
+            git_ref = os.environ["PULL_PULL_SHA"] = job_spec["extra_refs"][0][
+                "base_ref"
+            ]
         else:
             repo_owner = os.environ["REPO_OWNER"]
             repo_name = os.environ["REPO_NAME"]
@@ -115,7 +135,9 @@ def prepare(
         )
     elif any([pr_number, git_ref]):
         if not all([repo_owner, repo_name, pr_number]):
-            logging.fatal("Missing parameters in the CLI arguments. Please pass at least --pr-number")
+            logging.fatal(
+                "Missing parameters in the CLI arguments. Please pass at least --pr-number"
+            )
             raise SystemExit(1)
 
         prepare_topsail_args |= dict(
@@ -126,10 +148,16 @@ def prepare(
         )
 
     else:
-        logging.fatal("No flag provided and couldn't determine the CI environment ... Aborting.")
+        logging.fatal(
+            "No flag provided and couldn't determine the CI environment ... Aborting."
+        )
         logging.info("Outside of the CI, please pass at least --pr-number")
         raise SystemExit(1)
 
-    run.run_toolbox("jump_ci", "prepare_topsail", **prepare_topsail_args,)
+    run.run_toolbox(
+        "jump_ci",
+        "prepare_topsail",
+        **prepare_topsail_args,
+    )
 
     return None

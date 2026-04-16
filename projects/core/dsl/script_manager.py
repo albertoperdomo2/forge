@@ -8,11 +8,12 @@ from typing import Dict, List, Optional
 from pathlib import Path
 import logging
 
-logger = logging.getLogger('DSL')
+logger = logging.getLogger("DSL")
 
 
 class TaskResult:
     """Container for task results that can be referenced in conditions"""
+
     def __init__(self, task_name: str):
         self.task_name = task_name
         self._result = None
@@ -56,7 +57,7 @@ class ScriptManager:
         self._task_registry[source_file].append(task_info)
 
         # Create result container for this task
-        task_name = task_info['name']
+        task_name = task_info["name"]
         self._task_results[task_name] = TaskResult(task_name)
 
         logger.debug(f"Registered task '{task_name}' from {source_file}")
@@ -64,7 +65,6 @@ class ScriptManager:
     def get_task_result(self, task_name: str) -> Optional[TaskResult]:
         """Get the result container for a specific task"""
         return self._task_results.get(task_name)
-
 
     def get_tasks_from_file(self, source_file: str) -> List[dict]:
         """
@@ -98,7 +98,7 @@ class ScriptManager:
 
                 # Clear task results for tasks from this file
                 for task_info in tasks_to_remove:
-                    task_name = task_info['name']
+                    task_name = task_info["name"]
                     if task_name in self._task_results:
                         del self._task_results[task_name]
 
@@ -114,8 +114,7 @@ class ScriptManager:
             Dictionary mapping source files to task counts
         """
         return {
-            file_path: len(tasks)
-            for file_path, tasks in self._task_registry.items()
+            file_path: len(tasks) for file_path, tasks in self._task_registry.items()
         }
 
     def has_tasks(self) -> bool:

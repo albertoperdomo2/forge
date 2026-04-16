@@ -7,6 +7,7 @@ import test_llmd, prepare_llmd
 from projects.core.library.cli import safe_cli_command
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 import click

@@ -11,6 +11,16 @@ from . import template
 from . import context
 
 __all__ = [
-    'always', 'clear_tasks', 'context', 'execute_tasks', 'get_script_manager',
-    'reset_script_manager', 'retry', 'shell', 'task', 'template', 'toolbox', 'when'
+    "always",
+    "clear_tasks",
+    "context",
+    "execute_tasks",
+    "get_script_manager",
+    "reset_script_manager",
+    "retry",
+    "shell",
+    "task",
+    "template",
+    "toolbox",
+    "when",
 ]

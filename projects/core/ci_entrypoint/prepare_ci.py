@@ -28,10 +28,12 @@ DEFAULT_REPO_OWNER = "openshift-psap"
 DEFAULT_REPO_NAME = "forge"
 CI_METADATA_DIRNAME = "000__ci_metadata"
 
+
 class FinishReason(StrEnum):
     SUCCESS = "success"
     ERROR = "error"
     OTHER = "other"
+
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -43,14 +45,24 @@ import projects.core.notifications.send as send
 # Dual output global state
 _dual_output_state = None
 
+
 class DualOutputState:
     """Manages dual output (console + file) state for proper cleanup."""
-    def __init__(self, daemon_thread, original_stdout_fd, original_stderr_fd, write_fd, stop_event):
+
+    def __init__(
+        self,
+        daemon_thread,
+        original_stdout_fd,
+        original_stderr_fd,
+        write_fd,
+        stop_event,
+    ):
         self.daemon_thread = daemon_thread
         self.original_stdout_fd = original_stdout_fd
         self.original_stderr_fd = original_stderr_fd
         self.write_fd = write_fd
         self.stop_event = stop_event
+
 
 def setup_dual_output():
     """
@@ -64,7 +76,7 @@ def setup_dual_output():
     """
     global _dual_output_state
 
-    artifact_dir = os.environ.get('ARTIFACT_DIR')
+    artifact_dir = os.environ.get("ARTIFACT_DIR")
 
     if not artifact_dir:
         logging.warning("ARTIFACT_DIR not defined, not saving $ARTIFACT_DIR/run.log")
@@ -96,15 +108,19 @@ def setup_dual_output():
     os.dup2(write_fd, sys.stderr.fileno())
 
     # 4. Make stdout and stderr line-buffered (unbuffered for text streams)
-    sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
-    sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', buffering=1)
+    sys.stdout = os.fdopen(sys.stdout.fileno(), "w", buffering=1)
+    sys.stderr = os.fdopen(sys.stderr.fileno(), "w", buffering=1)
 
     # Create stop event for clean thread shutdown
     stop_event = threading.Event()
 
     def communicate():
         import select
-        with open(log_file_path, "a", buffering=1) as log_file, os.fdopen(original_stdout_fd, "w", buffering=1) as terminal:
+
+        with (
+            open(log_file_path, "a", buffering=1) as log_file,
+            os.fdopen(original_stdout_fd, "w", buffering=1) as terminal,
+        ):
             try:
                 while not stop_event.is_set():
                     # Use select to check if data is available with timeout
@@ -112,7 +128,9 @@ def setup_dual_output():
                     if ready:
                         # Data available, read a line
                         try:
-                            line = os.read(read_fd, 4096).decode('utf-8', errors='replace')
+                            line = os.read(read_fd, 4096).decode(
+                                "utf-8", errors="replace"
+                            )
                             if not line:  # EOF
                                 break
                             terminal.write(line)
@@ -121,7 +139,9 @@ def setup_dual_output():
                             log_file.flush()
                         except (OSError, ValueError) as e:
                             # Pipe was closed, exit gracefully
-                            logging.exception(f"Dual output thread file operations failed: {e}")
+                            logging.exception(
+                                f"Dual output thread file operations failed: {e}"
+                            )
                             break
                     # If no data, loop continues and checks stop_event
             except Exception as e:
@@ -133,7 +153,9 @@ def setup_dual_output():
     daemon.start()
 
     # Store state for cleanup
-    _dual_output_state = DualOutputState(daemon, original_stdout_fd, original_stderr_fd, write_fd, stop_event)
+    _dual_output_state = DualOutputState(
+        daemon, original_stdout_fd, original_stderr_fd, write_fd, stop_event
+    )
     return _dual_output_state
 
 
@@ -166,6 +188,7 @@ def shutdown_dual_output():
     # Clear state
     _dual_output_state = None
 
+
 # PR arguments
 def parse_and_save_pr_arguments() -> Optional[Path]:
     """
@@ -179,7 +202,7 @@ def parse_and_save_pr_arguments() -> Optional[Path]:
         Path to saved file if successful, None otherwise
     """
     # Check which CI environment we're in
-    if os.environ.get('FOURNOS_CI') == 'true':
+    if os.environ.get("FOURNOS_CI") == "true":
         # Process FOURNOS environment variables first
         fournos.process_fournos_environment()
 
@@ -197,10 +220,10 @@ def parse_and_save_pr_arguments_ocpci() -> Optional[Path]:
     """
 
     # Check if we're in a PR context
-    repo_owner = os.environ.get('REPO_OWNER')
-    repo_name = os.environ.get('REPO_NAME')
-    pull_number_str = os.environ.get('PULL_NUMBER')
-    artifact_dir = os.environ.get('ARTIFACT_DIR')
+    repo_owner = os.environ.get("REPO_OWNER")
+    repo_name = os.environ.get("REPO_NAME")
+    pull_number_str = os.environ.get("PULL_NUMBER")
+    artifact_dir = os.environ.get("ARTIFACT_DIR")
 
     if not all([repo_owner, repo_name, pull_number_str]):
         logger.info("Not in GitHub PR context - missing environment variables")
@@ -217,11 +240,13 @@ def parse_and_save_pr_arguments_ocpci() -> Optional[Path]:
         return None
 
     # Optional parameters
-    test_name = os.environ.get('TEST_NAME')
-    shared_dir_str = os.environ.get('SHARED_DIR')
+    test_name = os.environ.get("TEST_NAME")
+    shared_dir_str = os.environ.get("SHARED_DIR")
     shared_dir = Path(shared_dir_str) if shared_dir_str else None
 
-    logger.info(f"Parsing GitHub PR arguments for {repo_owner}/{repo_name}#{pull_number}")
+    logger.info(
+        f"Parsing GitHub PR arguments for {repo_owner}/{repo_name}#{pull_number}"
+    )
 
     try:
         # Save to YAML file
@@ -235,12 +260,12 @@ def parse_and_save_pr_arguments_ocpci() -> Optional[Path]:
             repo_name=repo_name,
             pull_number=pull_number,
             test_name=test_name,
-            shared_dir=shared_dir
+            shared_dir=shared_dir,
         )
 
         output_file = artifact_path / CI_METADATA_DIRNAME / "variable_overrides.yaml"
 
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=True)
 
         logger.info(f"Saved PR arguments to {output_file}")
@@ -248,7 +273,7 @@ def parse_and_save_pr_arguments_ocpci() -> Optional[Path]:
 
         # Save directives to text file
         pr_config_file = artifact_path / CI_METADATA_DIRNAME / "pr_config.txt"
-        with open(pr_config_file, 'w') as f:
+        with open(pr_config_file, "w") as f:
             if found_directives:
                 for directive in found_directives:
                     f.write(f"{directive}\n")
@@ -272,20 +297,24 @@ def precheck_artifact_dir() -> bool:
     Returns:
         bool: True if ARTIFACT_DIR is ready, False otherwise
     """
-    artifact_dir = os.environ.get('ARTIFACT_DIR')
+    artifact_dir = os.environ.get("ARTIFACT_DIR")
 
     if artifact_dir:
         logger.info(f"Using ARTIFACT_DIR={artifact_dir}.")
         return
 
-    if os.environ.get('OPENSHIFT_CI') == 'true':
-        raise RuntimeError("ARTIFACT_DIR not set, cannot proceed without it in OpenShift CI.")
+    if os.environ.get("OPENSHIFT_CI") == "true":
+        raise RuntimeError(
+            "ARTIFACT_DIR not set, cannot proceed without it in OpenShift CI."
+        )
 
-    logger.info("ARTIFACT_DIR not set, but not running in a CI. Creating a directory for it ...")
+    logger.info(
+        "ARTIFACT_DIR not set, but not running in a CI. Creating a directory for it ..."
+    )
 
     # Create default ARTIFACT_DIR
     default_dir = f"/tmp/forge_{datetime.now().strftime('%Y%m%d')}"
-    os.environ['ARTIFACT_DIR'] = default_dir
+    os.environ["ARTIFACT_DIR"] = default_dir
     Path(default_dir).mkdir(parents=True, exist_ok=True)
     logger.info(f"Using ARTIFACT_DIR={default_dir} as default artifacts directory.")
 
@@ -307,21 +336,23 @@ def ci_banner(project: str, operation: str, args: List[str]):
     if not pull_sha:
         logger.warning(f"PULL_PULL_SHA not set. Showing the last commits from main.")
 
-    logger.info(f"Git command will be: git show --quiet --oneline {base_sha}..{pull_sha}")
+    logger.info(
+        f"Git command will be: git show --quiet --oneline {base_sha}..{pull_sha}"
+    )
 
     try:
         result = subprocess.run(
             ["git", "show", "--quiet", "--oneline", f"{base_sha}"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
         logger.info(f"Git command returncode: {result.returncode}")
         logger.info(f"Git stdout: {result.stdout}")
         logger.info(f"Git stderr: {result.stderr}")
 
         if result.returncode == 0:
-            lines = result.stdout.split('\n')[:10]  # head 10
+            lines = result.stdout.split("\n")[:10]  # head 10
             for line in lines:
                 logging.info(line)
         else:
@@ -337,7 +368,7 @@ def system_prechecks() -> bool:
     Returns:
         bool: True if all prechecks pass, False otherwise
     """
-    artifact_dir = os.environ.get('ARTIFACT_DIR')
+    artifact_dir = os.environ.get("ARTIFACT_DIR")
     if not artifact_dir:
         raise ValueError("ARTIFACT_DIR not set, cannot perform prechecks")
 
@@ -346,18 +377,21 @@ def system_prechecks() -> bool:
     # Check for existing failures
     failures_file = artifact_path / "FAILURES"
     if failures_file.exists() and not os.environ.get("FORGE_IGNORE_FAILURES_FILE"):
-        raise ValueError(f"File '{failures_file}' already exists, cannot continue. Set FORGE_IGNORE_FAILURES_FILE=1 to ignore this.")
+        raise ValueError(
+            f"File '{failures_file}' already exists, cannot continue. Set FORGE_IGNORE_FAILURES_FILE=1 to ignore this."
+        )
 
     # Handle OpenShift CI PR arguments (already handled by parse_and_save_pr_arguments)
-    if (os.environ.get('OPENSHIFT_CI') == 'true' and
-        os.environ.get('FORGE_JUMP_CI_INSIDE_JUMP_HOST') != 'true'):
-
-        if not os.environ.get('FORGE_OPENSHIFT_CI_STEP_DIR'):
-            hostname = os.environ.get('HOSTNAME', '')
-            job_name_safe = os.environ.get('JOB_NAME_SAFE', '')
+    if (
+        os.environ.get("OPENSHIFT_CI") == "true"
+        and os.environ.get("FORGE_JUMP_CI_INSIDE_JUMP_HOST") != "true"
+    ):
+        if not os.environ.get("FORGE_OPENSHIFT_CI_STEP_DIR"):
+            hostname = os.environ.get("HOSTNAME", "")
+            job_name_safe = os.environ.get("JOB_NAME_SAFE", "")
             if hostname and job_name_safe:
                 step_dir = hostname.replace(f"{job_name_safe}-", "") + "/artifacts"
-                os.environ['FORGE_OPENSHIFT_CI_STEP_DIR'] = step_dir
+                os.environ["FORGE_OPENSHIFT_CI_STEP_DIR"] = step_dir
 
     # Remove any old failure markers
     old_failure = artifact_path / "FAILURE"
@@ -371,12 +405,18 @@ def system_prechecks() -> bool:
             ["git", "describe", "HEAD", "--long", "--always"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
-        forge_version = result.stdout.strip() if result.returncode == 0 else "git missing"
+        forge_version = (
+            result.stdout.strip() if result.returncode == 0 else "git missing"
+        )
         (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
-        (artifact_path / CI_METADATA_DIRNAME / "forge.git_version").write_text(forge_version + "\n")
-        logger.info(f"Saving FORGE git version into {artifact_path}/{CI_METADATA_DIRNAME}/forge.git_version")
+        (artifact_path / CI_METADATA_DIRNAME / "forge.git_version").write_text(
+            forge_version + "\n"
+        )
+        logger.info(
+            f"Saving FORGE git version into {artifact_path}/{CI_METADATA_DIRNAME}/forge.git_version"
+        )
     except Exception as e:
         logger.warning(f"Could not store git versions: {e}")
 
@@ -385,7 +425,7 @@ def system_prechecks() -> bool:
         (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
         env_file = artifact_path / CI_METADATA_DIRNAME / "env.sh"
 
-        with open(env_file, 'w') as f:
+        with open(env_file, "w") as f:
             f.write("#!/bin/bash\n")
             f.write("# Environment variables from CI execution\n")
             f.write(f"# Generated on: {datetime.now().isoformat()}\n\n")
@@ -410,20 +450,22 @@ def download_pr_information():
 
     Downloads PR data and comments to the CI metadata directory.
     """
-    pull_number = os.environ.get('PULL_NUMBER')
+    pull_number = os.environ.get("PULL_NUMBER")
     if not pull_number:
         return
 
-    artifact_dir = os.environ.get('ARTIFACT_DIR')
+    artifact_dir = os.environ.get("ARTIFACT_DIR")
     if not artifact_dir:
         logger.warning("ARTIFACT_DIR not set, cannot download PR information")
         return
 
     artifact_path = Path(artifact_dir)
-    repo_owner = os.environ.get('REPO_OWNER', DEFAULT_REPO_OWNER)
-    repo_name = os.environ.get('REPO_NAME', DEFAULT_REPO_NAME)
+    repo_owner = os.environ.get("REPO_OWNER", DEFAULT_REPO_OWNER)
+    repo_name = os.environ.get("REPO_NAME", DEFAULT_REPO_NAME)
 
-    pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pull_number}"
+    pr_url = (
+        f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pull_number}"
+    )
     pr_comments_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pull_number}/comments"
 
     try:
@@ -435,7 +477,9 @@ def download_pr_information():
             response = requests.get(pr_url, timeout=30)
             response.raise_for_status()
 
-            with open(artifact_path / CI_METADATA_DIRNAME / "pull_request.json", 'w') as f:
+            with open(
+                artifact_path / CI_METADATA_DIRNAME / "pull_request.json", "w"
+            ) as f:
                 f.write(response.text)
         except requests.exceptions.RequestException as e:
             logger.warning(f"Failed to download the PR from {pr_url}: {e}")
@@ -445,12 +489,18 @@ def download_pr_information():
             response = requests.get(pr_comments_url, timeout=30)
             response.raise_for_status()
 
-            with open(artifact_path / CI_METADATA_DIRNAME / "pull_request-comments.json", 'w') as f:
+            with open(
+                artifact_path / CI_METADATA_DIRNAME / "pull_request-comments.json", "w"
+            ) as f:
                 f.write(response.text)
 
-            logger.info(f"Downloaded PR #{pull_number} information from {repo_owner}/{repo_name}")
+            logger.info(
+                f"Downloaded PR #{pull_number} information from {repo_owner}/{repo_name}"
+            )
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Failed to download the PR comments from {pr_comments_url}: {e}")
+            logger.warning(
+                f"Failed to download the PR comments from {pr_comments_url}: {e}"
+            )
 
     except Exception as e:
         logger.warning(f"Could not download PR information: {e}")
@@ -464,9 +514,9 @@ def setup_environment_variables():
     logger.debug("Setting up environment variables")
 
     # Example: Ensure FORGE_HOME is set
-    if not os.environ.get('FORGE_HOME'):
+    if not os.environ.get("FORGE_HOME"):
         forge_home = Path(__file__).resolve().parent.parent.parent
-        os.environ['FORGE_HOME'] = str(forge_home)
+        os.environ["FORGE_HOME"] = str(forge_home)
         logger.debug(f"Set FORGE_HOME={forge_home}")
 
 
@@ -480,18 +530,23 @@ def validate_prerequisites():
     logger.debug("Validating CI prerequisites")
 
     # Check for required tools
-    if not shutil.which('jq'):
+    if not shutil.which("jq"):
         raise RuntimeError("jq not found. Can't continue.")
 
     if IS_LIGHTWEIGHT_IMAGE:
         return
 
     # Check for required tools
-    if not shutil.which('oc'):
+    if not shutil.which("oc"):
         raise RuntimeError("oc not found. Can't continue.")
 
 
-def prepare(verbose: bool = False, project: str = "", operation: str = "", args: List[str] = None):
+def prepare(
+    verbose: bool = False,
+    project: str = "",
+    operation: str = "",
+    args: List[str] = None,
+):
     """
     Execute all CI preparation tasks.
 
@@ -499,7 +554,7 @@ def prepare(verbose: bool = False, project: str = "", operation: str = "", args:
         verbose: Enable verbose output
         project: Project name being executed
         operation: Operation being executed
-        args: Additional arguments    """
+        args: Additional arguments"""
     if args is None:
         args = []
 
@@ -546,7 +601,10 @@ def format_duration(duration_seconds: int) -> str:
     seconds = duration_seconds % 60
     return f"after {hours:02d} hours {minutes:02d} minutes {seconds:02d} seconds"
 
-def send_notification(project: str, operation: str, finish_reason: FinishReason, duration: str):
+
+def send_notification(
+    project: str, operation: str, finish_reason: FinishReason, duration: str
+):
     if project == "jump_ci":
         logger.info("No need to send notification in the JumpCI project")
         return
@@ -567,8 +625,10 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
         elif os.environ.get("PSAP_FORGE_FOREIGN_TESTING"):
             logger.info("Keeping all the notications for foreign tests")
             pass
-        elif success and operation not in ("test", ):
-            logger.info(f"Skipping notification for successful '{operation}' step (only 'test' step notifies on success)")
+        elif success and operation not in ("test",):
+            logger.info(
+                f"Skipping notification for successful '{operation}' step (only 'test' step notifies on success)"
+            )
             return
 
         # Enable GitHub notifications by default, Slack can be enabled via environment variable
@@ -576,9 +636,13 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
         slack_notifications = True
 
         # Check for dry run mode
-        dry_run = os.environ.get('FORGE_NOTIFICATION_DRY_RUN', 'false').lower() == 'true'
+        dry_run = (
+            os.environ.get("FORGE_NOTIFICATION_DRY_RUN", "false").lower() == "true"
+        )
 
-        logger.info(f"Sending notifications - finish_reason: {finish_reason} | GitHub: {github_notifications}, Slack: {slack_notifications}, dry_run: {dry_run}")
+        logger.info(
+            f"Sending notifications - finish_reason: {finish_reason} | GitHub: {github_notifications}, Slack: {slack_notifications}, dry_run: {dry_run}"
+        )
 
         # Send the notification
         notification_failed = send.send_job_completion_notification(
@@ -586,7 +650,7 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
             status=notification_status,
             github=github_notifications,
             slack=slack_notifications,
-            dry_run=dry_run
+            dry_run=dry_run,
         )
         if notification_failed:
             logger.warning("Some notifications failed to send")
@@ -597,7 +661,14 @@ def send_notification(project: str, operation: str, finish_reason: FinishReason,
         logger.exception(f"Failed to send notifications")
         # Don't fail the entire job if notifications fail
 
-def postchecks(project: str, operation: str, start_time: Optional[float], finish_reason: FinishReason, args: Optional[List[str]] = None) -> str:
+
+def postchecks(
+    project: str,
+    operation: str,
+    start_time: Optional[float],
+    finish_reason: FinishReason,
+    args: Optional[List[str]] = None,
+) -> str:
     """
     Post-execution checks and status reporting.
 
@@ -610,13 +681,15 @@ def postchecks(project: str, operation: str, start_time: Optional[float], finish
     Returns:
         Status message string
     """
-    artifact_dir = os.environ.get('ARTIFACT_DIR')
+    artifact_dir = os.environ.get("ARTIFACT_DIR")
 
     if not artifact_dir:
         # No artifact dir, just return simple status
-        return f"✅ {project} {operation} completed successfully" \
-            if finish_reason == FinishReason.SUCCESS \
-               else f"❌ {project} {operation} failed"
+        return (
+            f"✅ {project} {operation} completed successfully"
+            if finish_reason == FinishReason.SUCCESS
+            else f"❌ {project} {operation} failed"
+        )
 
     artifact_path = Path(artifact_dir)
     if finish_reason == FinishReason.SUCCESS:
@@ -651,7 +724,9 @@ def postchecks(project: str, operation: str, start_time: Optional[float], finish
 
     # Check if there were failures
     failures_file = artifact_path / "FAILURES"
-    if finish_reason != FinishReason.SUCCESS or (failures_file.exists() and failures_file.stat().st_size > 0):
+    if finish_reason != FinishReason.SUCCESS or (
+        failures_file.exists() and failures_file.stat().st_size > 0
+    ):
         status = f"❌ Test of '{project} {operation}' failed{duration_str}."
     else:
         status = f"✅ Test of '{project} {operation}' succeeded{duration_str}."

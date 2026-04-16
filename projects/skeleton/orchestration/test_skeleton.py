@@ -3,9 +3,11 @@ from projects.skeleton.toolbox.cluster_info.main import run as cluster_info
 
 import pathlib
 import logging
+
 logger = logging.getLogger(__name__)
 
 import yaml
+
 
 def init(strict_vault_validation=True):
     env.init()
@@ -22,16 +24,25 @@ def test():
     else:
         logger.warning("Running the (fake) light testing ...")
 
-    client_id = vault.get_vault_content_path("psap-forge-notifications", "topsail-bot.clientid")
+    client_id = vault.get_vault_content_path(
+        "psap-forge-notifications", "topsail-bot.clientid"
+    )
     if not client_id:
         logger.warning("`client_id` secret not available.")
     else:
-        logger.warning(f"`client_id` secret available. Size: {client_id.stat().st_size}b")
+        logger.warning(
+            f"`client_id` secret available. Size: {client_id.stat().st_size}b"
+        )
         del client_id
 
     skeleton_config = config.project.get_config("skeleton", print=False)
 
-    yaml_cfg = yaml.dump(dict(skeleton=skeleton_config), indent=4, default_flow_style=False, sort_keys=False)
+    yaml_cfg = yaml.dump(
+        dict(skeleton=skeleton_config),
+        indent=4,
+        default_flow_style=False,
+        sort_keys=False,
+    )
     logger.info("")
     logger.info(f"Fake test configuration:\n{yaml_cfg}")
 
@@ -48,12 +59,16 @@ def test():
         logger.warning("⚠️ Cluster information gathering didn't work")
         return 1
 
-    cluster_nodes_dest = getattr(result, 'cluster_nodes_dest', None)
+    cluster_nodes_dest = getattr(result, "cluster_nodes_dest", None)
     if not cluster_nodes_dest:
-        logger.warning("⚠️ Cluster information gathering didn't generate the cluster node file")
+        logger.warning(
+            "⚠️ Cluster information gathering didn't generate the cluster node file"
+        )
         return 1
 
     logger.info("✅ Cluster information gathering completed successfully")
-    logger.info(f"Check {cluster_nodes_dest.parent} directory for detailed cluster information.")
+    logger.info(
+        f"Check {cluster_nodes_dest.parent} directory for detailed cluster information."
+    )
 
     return 0

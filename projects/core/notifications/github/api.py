@@ -22,7 +22,9 @@ def get_user_token(pem_file, client_id, org, repo):
 
     # Get the installation ID
 
-    installation_resp = requests.get(f"{BASE_URL}/repos/{org}/{repo}/installation", headers=headers)
+    installation_resp = requests.get(
+        f"{BASE_URL}/repos/{org}/{repo}/installation", headers=headers
+    )
 
     if "id" not in installation_resp.json():
         return None
@@ -36,7 +38,9 @@ def get_user_token(pem_file, client_id, org, repo):
 
     # Get the user token
 
-    access_token_resp = requests.post(f"{BASE_URL}/app/installations/{installation_id}/access_tokens", headers=headers)
+    access_token_resp = requests.post(
+        f"{BASE_URL}/app/installations/{installation_id}/access_tokens", headers=headers
+    )
 
     user_token = access_token_resp.json()["token"]
 

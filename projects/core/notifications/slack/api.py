@@ -47,7 +47,9 @@ def search_channel_message(client, message_anchor: str, not_before=None):
             return message["ts"], message["text"]
 
     if calls == MAX_CALLS:
-        logging.info(f"Slack text search stopped due to MAX_CALLS ({MAX_CALLS}) exceeded.")
+        logging.info(
+            f"Slack text search stopped due to MAX_CALLS ({MAX_CALLS}) exceeded."
+        )
 
     return None, None
 

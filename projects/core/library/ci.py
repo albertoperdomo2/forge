@@ -59,7 +59,7 @@ def _display_error_summary(e: Exception) -> None:
         summary_lines.append(f"   {line}")
 
     if not isinstance(e, TaskExecutionError):
-        summary_lines.append("---") # add the details marker after the stacktrace
+        summary_lines.append("---")  # add the details marker after the stacktrace
 
     # Display on screen
     for line in summary_lines:
@@ -69,7 +69,6 @@ def _display_error_summary(e: Exception) -> None:
     _write_error_summary_to_file(summary_lines)
 
     logger.error("=" * 80)
-
 
 
 def _write_error_summary_to_file(summary_lines: list) -> None:
@@ -82,7 +81,6 @@ def _write_error_summary_to_file(summary_lines: list) -> None:
         logger.info(f"Error summary written to: {failures_file}")
     except Exception as write_error:
         logger.error(f"Failed to write error summary to file: {write_error}")
-
 
 
 def safe_ci_command(command_func):
@@ -103,6 +101,7 @@ def safe_ci_command(command_func):
             sys.exit(1)
 
     return wrapper
+
 
 def safe_ci_function(command_func):
     """

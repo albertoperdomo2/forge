@@ -14,7 +14,9 @@ def _parse_docstring_args(docstring: str) -> dict:
         return {}
 
     # Look for Args: section
-    args_match = re.search(r'Args:\s*\n(.*?)(?:\n\s*\n|\n\s*[A-Z]|\Z)', docstring, re.DOTALL)
+    args_match = re.search(
+        r"Args:\s*\n(.*?)(?:\n\s*\n|\n\s*[A-Z]|\Z)", docstring, re.DOTALL
+    )
     if not args_match:
         return {}
 
@@ -22,13 +24,13 @@ def _parse_docstring_args(docstring: str) -> dict:
     arg_descriptions = {}
 
     # Parse each argument line
-    for line in args_section.split('\n'):
+    for line in args_section.split("\n"):
         line = line.strip()
-        if ':' not in line:
+        if ":" not in line:
             continue
 
         # Extract "param_name: description" format
-        param_match = re.match(r'(\w+):\s*(.*)', line)
+        param_match = re.match(r"(\w+):\s*(.*)", line)
         if not param_match:
             continue
 
@@ -58,11 +60,15 @@ def create_dynamic_parser(func, positional_args=None) -> argparse.ArgumentParser
     # Auto-detect positional args if not specified
     if positional_args is None:
         # Make first 2 parameters positional if they're commonly required
-        param_names = [name for name in sig.parameters.keys() if name not in ('self', 'cls')]
+        param_names = [
+            name for name in sig.parameters.keys() if name not in ("self", "cls")
+        ]
         positional_args = param_names[:2]  # First two parameters
 
     # Get main description from docstring
-    main_description = docstring.split('\n')[0] if docstring else f"CLI for {func.__name__}"
+    main_description = (
+        docstring.split("\n")[0] if docstring else f"CLI for {func.__name__}"
+    )
 
     # Create parser
     parser = argparse.ArgumentParser(
@@ -70,14 +76,13 @@ def create_dynamic_parser(func, positional_args=None) -> argparse.ArgumentParser
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Generated automatically from {func.__name__}() signature.
-        """.strip()
+        """.strip(),
     )
 
     # Add arguments based on function signature
     for param_name, param in sig.parameters.items():
-
         # Skip self/cls parameters
-        if param_name in ('self', 'cls'):
+        if param_name in ("self", "cls"):
             continue
 
         # Determine if required (no default value)
@@ -94,10 +99,7 @@ Generated automatically from {func.__name__}() signature.
                 # Boolean args are always optional flags
                 cli_name = f"--{param_name.replace('_', '-')}"
                 parser.add_argument(
-                    cli_name,
-                    action="store_true",
-                    dest=param_name,
-                    help=help_text
+                    cli_name, action="store_true", dest=param_name, help=help_text
                 )
                 continue
             elif param.annotation in (str, int, float):
@@ -110,7 +112,7 @@ Generated automatically from {func.__name__}() signature.
         # Add as positional or optional argument (or both!)
         if param_name in positional_args:
             # Add positional argument
-            nargs = '?' if has_default else None  # Optional if has default
+            nargs = "?" if has_default else None  # Optional if has default
             default = param.default if has_default else None
 
             parser.add_argument(
@@ -118,7 +120,7 @@ Generated automatically from {func.__name__}() signature.
                 type=arg_type,
                 nargs=nargs,
                 default=default,
-                help=f"{help_text} (positional)"
+                help=f"{help_text} (positional)",
             )
 
             # ALSO add named version for flexibility
@@ -127,7 +129,7 @@ Generated automatically from {func.__name__}() signature.
                 cli_name,
                 type=arg_type,
                 dest=param_name,  # Same destination as positional
-                help=f"{help_text} (named alternative to positional)"
+                help=f"{help_text} (named alternative to positional)",
             )
         else:
             # Optional argument with --flag only
@@ -138,7 +140,7 @@ Generated automatically from {func.__name__}() signature.
                 type=arg_type,
                 required=not has_default,
                 dest=param_name,
-                help=help_text
+                help=help_text,
             )
 
     return parser

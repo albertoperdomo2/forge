@@ -1,4 +1,5 @@
 import logging
+
 logging.getLogger().setLevel(logging.INFO)
 import os, sys
 import pathlib
@@ -19,7 +20,8 @@ from . import run
 
 VARIABLE_OVERRIDES_FILENAME = "000__ci_metadata/variable_overrides.yaml"
 
-project = None # the project config will be populated in init()
+project = None  # the project config will be populated in init()
+
 
 class TempValue(object):
     """This context changes temporarily the value of a configuration field"""
@@ -39,7 +41,7 @@ class TempValue(object):
     def __exit__(self, ex_type, ex_value, exc_traceback):
         self.config.set_config(self.key, self.prev_value)
 
-        return False # If we returned True here, any exception would be suppressed!
+        return False  # If we returned True here, any exception would be suppressed!
 
 
 class Config:
@@ -59,21 +61,22 @@ class Config:
             self.config = {}
 
         if not isinstance(self.config, dict):
-            raise ValueError(f"YAML loaded from {self.config_path} isn't a dictionnary ({self.config.__class__.__name__})")
-
+            raise ValueError(
+                f"YAML loaded from {self.config_path} isn't a dictionnary ({self.config.__class__.__name__})"
+            )
 
     def ensure_core_fields(self):
         """
-        The JumpCI currently passes these values:
------
-cluster.name: mac
-exec_list._only_: true
-exec_list.test_ci: true
-project.args:
-- init
-project.name: skeleton
------
-We will get rid of that when we remove the JumpCI.
+                The JumpCI currently passes these values:
+        -----
+        cluster.name: mac
+        exec_list._only_: true
+        exec_list.test_ci: true
+        project.args:
+        - init
+        project.name: skeleton
+        -----
+        We will get rid of that when we remove the JumpCI.
         """
 
         # Define mandatory fields structure
@@ -82,7 +85,7 @@ We will get rid of that when we remove the JumpCI.
             "cluster": dict.fromkeys(["name"]),
             "project": dict.fromkeys(["name", "args"]),
             "exec_list": dict.fromkeys(["_only_", "prepare", "pre_cleanup", "test"]),
-            "ci_job": dict.fromkeys(["name", "project", "args"])
+            "ci_job": dict.fromkeys(["name", "project", "args"]),
         }
 
         # Apply the mandatory field structure
@@ -106,7 +109,9 @@ We will get rid of that when we remove the JumpCI.
         variable_overrides_path = env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
 
         if not variable_overrides_path.exists():
-            logging.debug(f"save_config_overrides: {variable_overrides_path} does not exist, nothing to save.")
+            logging.debug(
+                f"save_config_overrides: {variable_overrides_path} does not exist, nothing to save."
+            )
             self.config["overrides"] = {}
             return
 
@@ -115,12 +120,16 @@ We will get rid of that when we remove the JumpCI.
 
         self.config["overrides"] = variable_overrides
 
-    def apply_config_overrides(self, *, ignore_not_found=False, variable_overrides_path=None, log=True):
+    def apply_config_overrides(
+        self, *, ignore_not_found=False, variable_overrides_path=None, log=True
+    ):
         if variable_overrides_path is None:
             variable_overrides_path = env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
 
         if not variable_overrides_path.exists():
-            logging.debug(f"apply_config_overrides: {variable_overrides_path} does not exist, nothing to override.")
+            logging.debug(
+                f"apply_config_overrides: {variable_overrides_path} does not exist, nothing to override."
+            )
 
             return
 
@@ -134,19 +143,28 @@ We will get rid of that when we remove the JumpCI.
 
         for key, value in variable_overrides.items():
             MAGIC_DEFAULT_VALUE = object()
-            handled_secretly = True # current_value MUST NOT be printed below.
-            current_value = self.get_config(key, MAGIC_DEFAULT_VALUE, print=False, warn=False, handled_secretly=handled_secretly)
+            handled_secretly = True  # current_value MUST NOT be printed below.
+            current_value = self.get_config(
+                key,
+                MAGIC_DEFAULT_VALUE,
+                print=False,
+                warn=False,
+                handled_secretly=handled_secretly,
+            )
             if current_value == MAGIC_DEFAULT_VALUE:
                 if ignore_not_found:
                     continue
 
-                raise ValueError(f"Config key '{key}' does not exist, and cannot create it at the moment :/")
+                raise ValueError(
+                    f"Config key '{key}' does not exist, and cannot create it at the moment :/"
+                )
 
             self.set_config(key, value, print=False)
-            actual_value = self.get_config(key, print=False) # ensure that key has been set, raises an exception otherwise
+            actual_value = self.get_config(
+                key, print=False
+            )  # ensure that key has been set, raises an exception otherwise
             if log:
                 logging.info(f"config override: {key} --> {actual_value}")
-
 
     def apply_preset(self, name):
         values = self.get_preset(name)
@@ -182,25 +200,29 @@ We will get rid of that when we remove the JumpCI.
         return self.config["presets"].get(name)
 
     def apply_presets_from_project_args(self):
-
         for arg_name in self.get_config("project.args", print=False) or []:
             self.apply_preset(arg_name)
 
-
     def has_config(self, jsonpath):
         try:
-            _ = jsonpath_ng.parse(jsonpath).find(self.config)[0].value # raises an IndexError if jsonpath isn't found
+            _ = (
+                jsonpath_ng.parse(jsonpath).find(self.config)[0].value
+            )  # raises an IndexError if jsonpath isn't found
             return True
         except IndexError as ex:
             return False
 
-    def get_config(self, jsonpath, default_value=..., warn=True, print=True, handled_secretly=False):
+    def get_config(
+        self, jsonpath, default_value=..., warn=True, print=True, handled_secretly=False
+    ):
         try:
             value = jsonpath_ng.parse(jsonpath).find(self.config)[0].value
         except IndexError as ex:
             if default_value != ...:
                 if warn:
-                    logging.warning(f"get_config: {jsonpath} --> missing. Returning the default value: {default_value}")
+                    logging.warning(
+                        f"get_config: {jsonpath} --> missing. Returning the default value: {default_value}"
+                    )
                 return default_value
 
             logging.error(f"get_config: {jsonpath} --> {ex}")
@@ -216,10 +238,11 @@ We will get rid of that when we remove the JumpCI.
 
         return value
 
-
     def set_config(self, jsonpath, value, print=True):
         try:
-            self.get_config(jsonpath, print=False, handled_secretly=True) # will raise an exception if the jsonpath does not exist
+            self.get_config(
+                jsonpath, print=False, handled_secretly=True
+            )  # will raise an exception if the jsonpath does not exist
             jsonpath_ng.parse(jsonpath).update(self.config, value)
         except Exception as ex:
             logging.error(f"set_config: {jsonpath}={value} --> {ex}")
@@ -230,15 +253,17 @@ We will get rid of that when we remove the JumpCI.
 
         self.save_config()
 
-
     def save_config(self):
         with open(self.config_path, "w") as f:
-            yaml.dump(self.config, f, indent=4, default_flow_style=False, sort_keys=False)
-
+            yaml.dump(
+                self.config, f, indent=4, default_flow_style=False, sort_keys=False
+            )
 
     def resolve_reference(self, value, handled_secretly=False):
-        if not isinstance(value, str): return value
-        if "@" not in value: return value
+        if not isinstance(value, str):
+            return value
+        if "@" not in value:
+            return value
 
         # --- #
 
@@ -251,18 +276,18 @@ We will get rid of that when we remove the JumpCI.
             ref_key = value.removeprefix("*$@")
             ref_value = self.get_config(ref_key, print=False)
 
-            secret_dir = pathlib.Path(os.environ[self.get_config("secrets.dir.env_key", print=False)])
+            secret_dir = pathlib.Path(
+                os.environ[self.get_config("secrets.dir.env_key", print=False)]
+            )
             secret_value = (secret_dir / ref_value).read_text().strip()
 
             return secret_value
-
 
         # --- #
 
         def simple_dereference():
             ref_key = value[1:]
             return self.get_config(ref_key)
-
 
         def multi_dereference():
             new_value = value
@@ -290,15 +315,14 @@ We will get rid of that when we remove the JumpCI.
 
         # --- #
 
-
-        new_value = simple_dereference() if value.startswith("@") \
-            else multi_dereference()
+        new_value = (
+            simple_dereference() if value.startswith("@") else multi_dereference()
+        )
 
         if not handled_secretly:
             logging.info(f"resolve_reference: {value} ==> '{new_value}'")
 
         return copy.deepcopy(new_value)
-
 
     def filter_out_used_overrides(self):
         """
@@ -326,7 +350,9 @@ def __get_config_path(orchestration_dir):
     if config_path_final.exists():
         config_path_final.unlink()
 
-    logging.info(f"Copying the configuration from {config_file_src} to the artifact dir ...")
+    logging.info(
+        f"Copying the configuration from {config_file_src} to the artifact dir ..."
+    )
     shutil.copyfile(config_file_src, config_path_final)
 
     return config_path_final, config_file_src
@@ -334,13 +360,18 @@ def __get_config_path(orchestration_dir):
 
 REQUIRES_ANNOTATION_ARG_NAME = "_cfg"
 
+
 # annotation
 def requires(**config_kwargs):
     def decorator(func):
-
-        if REQUIRES_ANNOTATION_ARG_NAME not in inspect.signature(func).parameters.keys():
-            raise SyntaxError(f"Function '{func.__name__}' must accept "
-                              f"a {REQUIRES_ANNOTATION_ARG_NAME} parameter.")
+        if (
+            REQUIRES_ANNOTATION_ARG_NAME
+            not in inspect.signature(func).parameters.keys()
+        ):
+            raise SyntaxError(
+                f"Function '{func.__name__}' must accept "
+                f"a {REQUIRES_ANNOTATION_ARG_NAME} parameter."
+            )
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -354,7 +385,9 @@ def requires(**config_kwargs):
             kwargs[REQUIRES_ANNOTATION_ARG_NAME] = config_obj
 
             return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
@@ -372,16 +405,17 @@ def init(orchestration_dir, *, apply_config_overrides=True):
     repo_var_overrides = env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
 
     if not apply_config_overrides:
-        logging.info("config.init: running with 'apply_config_overrides', "
-                     "skipping the overrides. Saving it as 'overrides' "
-                     "field in the project configuration.")
+        logging.info(
+            "config.init: running with 'apply_config_overrides', "
+            "skipping the overrides. Saving it as 'overrides' "
+            "field in the project configuration."
+        )
         project.save_config_overrides()
         project.save_config()
         return
-
 
     project.ensure_core_fields()
     project.load_presets(src_config.parent / "presets.d")
     project.apply_config_overrides()
     project.apply_presets_from_project_args()
-    project.apply_config_overrides() # reapply so that the value overrides are applied last
+    project.apply_config_overrides()  # reapply so that the value overrides are applied last

@@ -35,6 +35,7 @@ def safe_cli_command(command_func):
     Args:
         command_func: Function to execute safely
     """
+
     @functools.wraps(command_func)
     def wrapper(*args, **kwargs):
         try:

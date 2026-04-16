@@ -8,13 +8,15 @@ import projects.core.library.env as env
 from projects.core.library.run import SignalError
 
 # Configure logging to show info messages
-logging.basicConfig(level=logging.INFO, format='%(message)s')
-logger = logging.getLogger('DSL')
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger("DSL")
 logger.propagate = False  # Don't show logger prefix
+
 
 @dataclass
 class CommandResult:
     """Result of a command execution"""
+
     stdout: str
     stderr: str
     returncode: int
@@ -24,13 +26,14 @@ class CommandResult:
     def success(self) -> bool:
         return self.returncode == 0
 
+
 def run(
-        command: str,
-        check: bool = True,
-        shell: bool = True,
-        stdout_dest: Optional[Union[str, Path]] = None,
-        log_stdout: bool = True,
-        log_stderr: bool = True,
+    command: str,
+    check: bool = True,
+    shell: bool = True,
+    stdout_dest: Optional[Union[str, Path]] = None,
+    log_stdout: bool = True,
+    log_stderr: bool = True,
 ) -> CommandResult:
     """
     Execute a shell command
@@ -55,21 +58,21 @@ def run(
             shell=shell,
             check=False,  # We handle check ourselves
             capture_output=True,
-            text=True
+            text=True,
         )
 
         cmd_result = CommandResult(
             stdout=result.stdout or "",
             stderr=result.stderr or "",
             returncode=result.returncode,
-            command=command
+            command=command,
         )
 
         # Write stdout to file if requested
         if stdout_dest:
             stdout_path = Path(stdout_dest)
             stdout_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(stdout_path, 'w') as f:
+            with open(stdout_path, "w") as f:
                 f.write(cmd_result.stdout)
 
         # Print output in verbose format
@@ -104,7 +107,9 @@ def run(
                 error_msg += f"\nSTDOUT: {result.stdout.strip()}"
 
             # Create exception with enhanced message
-            error = subprocess.CalledProcessError(result.returncode, command, result.stdout, result.stderr)
+            error = subprocess.CalledProcessError(
+                result.returncode, command, result.stdout, result.stderr
+            )
             error.args = (error_msg,)
             raise error
 
@@ -116,6 +121,7 @@ def run(
         logger.error(f"<{e.__class__.__name__}> {e}")
         logger.info("")
         raise
+
 
 def mkdir(path, *, parents=True, exists_ok=True):
     """Create a directory with default arguments"""

@@ -31,13 +31,15 @@ from typing import List, Optional
 
 import click
 
+
 def setup_logging():
     """Set up logging configuration."""
     logging.basicConfig(
         level=logging.INFO,
-        format='%(levelname)s: %(message)s',
-        handlers=[logging.StreamHandler(sys.stderr)]
+        format="%(levelname)s: %(message)s",
+        handlers=[logging.StreamHandler(sys.stderr)],
     )
+
 
 # Set up logging
 setup_logging()
@@ -46,6 +48,7 @@ logger = logging.getLogger(__name__)
 FORGE_HOME = Path(__file__).resolve().parent.parent.parent.parent
 
 EXTRA_PACKAGES = []
+
 
 def signal_handler_sigint(sig, frame):
     """Handle SIGINT (Ctrl+C) gracefully."""
@@ -79,7 +82,7 @@ def setup_signal_handlers():
         signal.signal(signal.SIGINT, signal_handler_sigint)
         signal.signal(signal.SIGTERM, signal_handler_sigterm)
         # SIGPIPE handling for broken pipes
-        if hasattr(signal, 'SIGPIPE'):
+        if hasattr(signal, "SIGPIPE"):
             signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     except Exception:
         # Signal handling might not be available on all platforms
@@ -97,7 +100,7 @@ def install_extra_packages(packages):
         subprocess.run(
             ["uv", "pip", "install", "--no-cache", *packages],
             check=True,
-            capture_output=True
+            capture_output=True,
         )
         print(f"✅ {'/'.join(packages)} packages installed successfully with uv")
         print()
@@ -105,9 +108,17 @@ def install_extra_packages(packages):
         # Fallback to pip with user installation
         try:
             subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--user", "--no-cache-dir", *packages],
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "install",
+                    "--user",
+                    "--no-cache-dir",
+                    *packages,
+                ],
                 check=True,
-                capture_output=True
+                capture_output=True,
             )
             print(f"✅ {'/'.join(packages)} packages installed successfully with pip")
             print()
@@ -117,17 +128,19 @@ def install_extra_packages(packages):
 
     # Ensure user site-packages is in path
     import site
+
     user_site = site.getusersitepackages()
     if user_site not in sys.path:
         sys.path.insert(0, user_site)
 
     # Also check for common install locations
     import os
+
     possible_paths = [
         os.path.expanduser("~/.local/lib/python3.11/site-packages"),
         os.path.expanduser("~/.local/lib/python3.12/site-packages"),
         os.path.expanduser("~/.local/lib/python3.13/site-packages"),
-        user_site
+        user_site,
     ]
 
     for path in possible_paths:
@@ -136,6 +149,7 @@ def install_extra_packages(packages):
 
     # Clear import cache and try again
     import importlib
+
     importlib.invalidate_caches()
 
 
@@ -237,7 +251,7 @@ def get_available_projects() -> List[str]:
     for proj_dir in projects_dir.iterdir():
         if not proj_dir.is_dir():
             continue
-        if proj_dir.name.startswith('.'):
+        if proj_dir.name.startswith("."):
             continue
 
         # Only include projects that have an orchestration directory
@@ -276,7 +290,6 @@ def list_projects():
         click.echo(f"   run {projects[1]} validate")
 
 
-
 def show_project_operations(project: str):
     """Show available operations for a project by listing Python files."""
     click.echo(f"🔧 Available operations for project '{project}':")
@@ -285,12 +298,12 @@ def show_project_operations(project: str):
     project_dir = find_project_directory(project)
     if not project_dir:
         click.echo(
-            click.style(f"❌ ERROR: Project '{project}' not found.", fg='red'),
-            err=True
+            click.style(f"❌ ERROR: Project '{project}' not found.", fg="red"), err=True
         )
         return
 
     python_files = []
+
     def add_python_file(file_path):
         if not file_path.is_file():
             return
@@ -300,7 +313,6 @@ def show_project_operations(project: str):
 
         operation_name = file_path.stem  # filename without .py extension
         python_files.append((operation_name, file_path))
-
 
     # List Python files in the orchestration directory
     for file_path in (project_dir / "orchestration").glob("*.py"):
@@ -334,45 +346,44 @@ def parse_cli_help(help_output: str) -> List[str]:
     operations = []
     in_commands_section = False
 
-    lines = help_output.split('\n')
+    lines = help_output.split("\n")
     for line in lines:
         line = line.strip()
 
         # Look for "Commands:" section
-        if line.lower().startswith('commands:'):
+        if line.lower().startswith("commands:"):
             in_commands_section = True
             continue
 
         # Stop when we hit another section
-        if in_commands_section and line and not line.startswith(' '):
+        if in_commands_section and line and not line.startswith(" "):
             break
 
         # Extract command names
-        if in_commands_section and line.startswith(' '):
+        if in_commands_section and line.startswith(" "):
             # Format is typically: "  command_name  Description"
             parts = line.split()
             if parts:
                 command_name = parts[0].strip()
                 # Skip common help/utility commands
-                if command_name not in ['--help', '--version', '-h', '-v']:
+                if command_name not in ["--help", "--version", "-h", "-v"]:
                     operations.append(command_name)
 
     return operations
 
 
 def execute_project_operation(
-        project: str,
-        operation: str,
-        args: tuple,
-        verbose: bool = False,
-        dry_run: bool  = False,
-        do_prepare_ci: bool = True
+    project: str,
+    operation: str,
+    args: tuple,
+    verbose: bool = False,
+    dry_run: bool = False,
+    do_prepare_ci: bool = True,
 ):
     """Execute a project operation."""
 
     if not (isinstance(args, list) or isinstance(args, tuple)):
         raise ValueError(f"Args={args} must be a list, not {args.__class__.__name__}")
-
 
     if verbose:
         click.echo("")
@@ -393,8 +404,7 @@ def execute_project_operation(
             )
         except:
             click.echo(
-                click.style("❌ ERROR: CI preparation failed", fg='red'),
-                err=True
+                click.style("❌ ERROR: CI preparation failed", fg="red"), err=True
             )
             raise
     else:
@@ -404,8 +414,7 @@ def execute_project_operation(
     project_dir = find_project_directory(project)
     if not project_dir:
         click.echo(
-            click.style(f"❌ ERROR: Project '{project}' not found.", fg='red'),
-            err=True
+            click.style(f"❌ ERROR: Project '{project}' not found.", fg="red"), err=True
         )
 
         available_projects = get_available_projects()
@@ -427,24 +436,24 @@ def execute_project_operation(
             click.echo(
                 click.style(
                     f"❌ ERROR: CI script exists but is not executable for project '{project}' operation '{operation}'.",
-                    fg='red'
+                    fg="red",
                 ),
-                err=True
+                err=True,
             )
             click.echo(f"💡 Fix with: chmod +x {script_path}")
         else:
             click.echo(
                 click.style(
                     f"❌ ERROR: No CI script found for project '{project}' operation '{operation}'.",
-                    fg='red'
+                    fg="red",
                 ),
-                err=True
+                err=True,
             )
             click.echo(f"🔍 Expected: {script_path}")
         sys.exit(1)
 
     # Convert underscores to hyphens in args for Click compatibility
-    click_args = [arg.replace('_', '-') for arg in args]
+    click_args = [arg.replace("_", "-") for arg in args]
 
     # Prepare command - don't pass operation as it's just the script name
     cmd = [sys.executable, str(ci_script)] + click_args
@@ -454,9 +463,13 @@ def execute_project_operation(
         click.echo(f"   Command: {' '.join(cmd)}")
         click.echo(f"   Working Directory: {Path.cwd()}")
         click.echo(f"   Script: {ci_script}")
-        if any('_' in arg for arg in args):
-            converted_args = [f"'{arg}' -> '{arg.replace('_', '-')}'" for arg in args if '_' in arg]
-            click.echo(f"   Note: Converted underscores to hyphens: {', '.join(converted_args)}")
+        if any("_" in arg for arg in args):
+            converted_args = [
+                f"'{arg}' -> '{arg.replace('_', '-')}'" for arg in args if "_" in arg
+            ]
+            click.echo(
+                f"   Note: Converted underscores to hyphens: {', '.join(converted_args)}"
+            )
 
     if dry_run:
         click.echo(f"\n🧪 DRY RUN: Would execute the above command")
@@ -475,22 +488,28 @@ def execute_project_operation(
         result = subprocess.run(
             cmd,
             check=False,  # Don't raise exception on non-zero exit
-            stdin=None,   # Inherit stdin for pdb/debugging
+            stdin=None,  # Inherit stdin for pdb/debugging
             stdout=None,  # Inherit stdout for pdb/debugging
-            stderr=None   # Inherit stderr for pdb/debugging
+            stderr=None,  # Inherit stderr for pdb/debugging
         )
         click.echo()
-        click.echo(f"▶️  Execution of {project} {operation} {' '.join(args)} returned {result.returncode}")
+        click.echo(
+            f"▶️  Execution of {project} {operation} {' '.join(args)} returned {result.returncode}"
+        )
         click.echo()
 
-        finish_reason = prepare_ci.FinishReason.SUCCESS if result.returncode == 0 \
+        finish_reason = (
+            prepare_ci.FinishReason.SUCCESS
+            if result.returncode == 0
             else prepare_ci.FinishReason.ERROR
+        )
 
         success = finish_reason == prepare_ci.FinishReason.SUCCESS
         # Post-execution checks and status reporting
-        status_message = prepare_ci.postchecks(project, operation, start_time, finish_reason, list(args))
-        msg = click.style(status_message, \
-                          fg='green' if success else 'red')
+        status_message = prepare_ci.postchecks(
+            project, operation, start_time, finish_reason, list(args)
+        )
+        msg = click.style(status_message, fg="green" if success else "red")
 
         click.echo()
         click.echo(msg, err=not success)
@@ -510,18 +529,22 @@ def execute_project_operation(
             pass  # Don't let cleanup errors mask the original error
 
         click.echo(
-            click.style(f"❌ ERROR: Unexpected error during execution", fg='red'),
-            err=True
+            click.style(f"❌ ERROR: Unexpected error during execution", fg="red"),
+            err=True,
         )
         sys.exit(1)
 
 
 @click.command()
-@click.argument('project', required=False)
-@click.argument('operation', required=False)
-@click.argument('args', nargs=-1)
-@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output', default=True)
-@click.option('--dry-run', is_flag=True, help='Show what would be executed without running it')
+@click.argument("project", required=False)
+@click.argument("operation", required=False)
+@click.argument("args", nargs=-1)
+@click.option(
+    "--verbose", "-v", is_flag=True, help="Enable verbose output", default=True
+)
+@click.option(
+    "--dry-run", is_flag=True, help="Show what would be executed without running it"
+)
 def main(project, operation, args, verbose, dry_run):
     """
     FORGE CI Orchestration Entrypoint.

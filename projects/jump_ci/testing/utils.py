@@ -9,6 +9,7 @@ import utils_gethostname
 
 TESTING_THIS_DIR = pathlib.Path(__file__).absolute().parent
 
+
 def apply_preset_by_jobname():
     if os.environ.get("OPENSHIFT_CI") != "true":
         logging.info("apply_preset_by_jobname: not running in Openshift CI, skipping")
@@ -22,11 +23,15 @@ def apply_preset_by_jobname():
         logging.info(f"apply_preset_by_jobname: no preset to apply for '{job_name}'")
         return
 
-    logging.info(f"apply_preset_by_jobname: applying the '{preset_name}' preset for job name '{job_name}' ...")
+    logging.info(
+        f"apply_preset_by_jobname: applying the '{preset_name}' preset for job name '{job_name}' ..."
+    )
     config.project.apply_preset(preset_name)
 
 
 initialized = False
+
+
 def init(ignore_secret_path=False, apply_preset_from_pr_args=True):
     global initialized
     if initialized:
@@ -45,12 +50,14 @@ def init(ignore_secret_path=False, apply_preset_from_pr_args=True):
     if node_name:
         logging.warning(f"JumpCI Pod is running on node/{node_name}")
     else:
-        logging.warning("Could not determine Node Name (Check if you are running inside a properly configured K8s Pod).")
-
+        logging.warning(
+            "Could not determine Node Name (Check if you are running inside a properly configured K8s Pod)."
+        )
 
 
 def entrypoint(ignore_secret_path=False):
-    apply_preset_from_pr_args=False
+    apply_preset_from_pr_args = False
+
     def decorator(fct):
         @functools.wraps(fct)
         def wrapper(*args, **kwargs):
@@ -58,10 +65,13 @@ def entrypoint(ignore_secret_path=False):
             return fct(*args, **kwargs)
 
         return wrapper
+
     return decorator
 
 
 __keep_open = []
+
+
 def get_tmp_fd():
     # generate a fd-only temporary file
     fd, file_path = tempfile.mkstemp()
@@ -70,7 +80,7 @@ def get_tmp_fd():
     # process terminates
     os.remove(file_path)
 
-    py_file = os.fdopen(fd, 'w')
+    py_file = os.fdopen(fd, "w")
     # this makes sure the FD isn't closed when the var goes out of
     # scope
     __keep_open.append(py_file)
@@ -85,7 +95,6 @@ def get_lock_owner():
             pr = os.environ["PULL_NUMBER"]
             return f"openshift_ci__pr{pr}__build{build_id}"
         else:
-
             return f"openshift_ci__periodic__build{build_id}"
     else:
         logging.warning("Not running in a known CI. Using the username as lock owner.")

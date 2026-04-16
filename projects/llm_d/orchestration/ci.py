@@ -10,6 +10,7 @@ import test_llmd, prepare_llmd
 import types
 import click
 
+
 @click.group()
 @click.pass_context
 @ci_lib.safe_ci_function
@@ -17,6 +18,7 @@ def main(ctx):
     """LLM-D Project CI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
     test_llmd.init()
+
 
 @main.command()
 @click.pass_context
