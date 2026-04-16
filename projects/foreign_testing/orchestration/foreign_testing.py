@@ -69,7 +69,10 @@ def submit(project_path=None):
     # Build the command arguments
     args = ["deploy"]
 
+
     if project_path:
+        if not project_path.exists():
+            raise ValueError(f"Received a project path that doesn't exist: {project_path}")
         args = [*["--project-source", str(project_path)], *args]
         logger.info(f"Submitting deployment with args: {args}")
 
