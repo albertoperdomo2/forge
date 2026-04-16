@@ -18,8 +18,8 @@ fournos:
       name: psap-forge-ci
       key: kubeconfig
   job:
-    owner: "FORGE/fournos-launcher"
-    display_name: "Forge Job"
+    owner: "FORGE/fournos-launcher" # updated to the PR owner if available
+    display_name: null # will be set to the job project/args if null
     pipeline_name: forge-test-only
     env:
       OPENSHIFT_CI_job: [JOB_TYPE, JOB_NAME, JOB_SPEC, OPENSHIFT_CI, JOB_NAME_SAFE, BUILD_ID]

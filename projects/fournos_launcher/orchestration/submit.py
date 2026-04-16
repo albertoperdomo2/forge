@@ -47,6 +47,17 @@ def submit_job():
     extra_env = config.project.get_config("fournos.job.extra_env", {}, print=False)
     env_dict.update(extra_env)
 
+    # Update display name with project and args
+    project_name = config.project.get_config("ci_job.project")
+    job_args = config.project.get_config("ci_job.args")
+
+    # job_args is always a list, format accordingly
+    args_str = " ".join(job_args)
+
+    display_name = f"{project_name} {args_str}"
+    config.project.set_config("fournos.job.display_name", display_name)
+    logger.info(f"Set job display name: {display_name}")
+
     submit_and_wait(
         cluster_name=config.project.get_config("cluster.name"),
         project=config.project.get_config("ci_job.project"),
