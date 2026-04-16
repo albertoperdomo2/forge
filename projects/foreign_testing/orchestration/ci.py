@@ -28,9 +28,9 @@ def main(ctx):
 @ci_lib.safe_ci_command
 def submit(ctx):
     """Launch a foreign test."""
-    foreign_testing.prepare()
+    project_path = foreign_testing.prepare()
 
-    return foreign_testing.submit()
+    return foreign_testing.submit(project_path)
 
 
 if __name__ == "__main__":
