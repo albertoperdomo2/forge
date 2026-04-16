@@ -8,6 +8,8 @@ from pathlib import Path
 
 from projects.core.dsl import toolbox
 from projects.llm_d.orchestration import llmd_runtime
+from projects.llm_d.toolbox.cleanup import main as cleanup_toolbox
+from projects.llm_d.toolbox.prepare_model_cache import main as prepare_model_cache
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +37,8 @@ def run_prepare(config: llmd_runtime.ResolvedConfig) -> int:
     ensure_required_crds(config.platform["rhoai"]["required_crds_after_dsc"], config)
     ensure_gateway(config)
     ensure_test_namespace(config)
+    cleanup_toolbox.delete_run_leftovers(config)
+    prepare_model_cache.run_prepare_model_cache(config)
     verify_gpu_nodes(config)
     capture_prepare_state(config)
 

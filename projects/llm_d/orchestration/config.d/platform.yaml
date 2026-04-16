@@ -1,5 +1,6 @@
 cluster:
   minimum_openshift_version: "4.19.9"
+  namespace_name: forge-llm-d
   namespace_prefix: llm-d
   namespace_max_length: 63
   cleanup_timeout_seconds: 900
