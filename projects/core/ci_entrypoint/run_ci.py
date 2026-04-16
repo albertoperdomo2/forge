@@ -399,7 +399,7 @@ def execute_project_operation(
     # Find CI script
     ci_script = find_ci_script(project_dir, operation)
     if not ci_script:
-        script_path = project_dir / "orchestration" / f"{operation}.py"
+        script_path = project_dir.relative_to(FORGE_HOME) / "orchestration" / f"{operation}.py"
 
         if script_path.exists():
             click.echo(
@@ -413,14 +413,13 @@ def execute_project_operation(
         else:
             click.echo(
                 click.style(
-                    f"❌ ERROR: No CI script found for project '{project}' operation '{operation}'.",
+                    f"❌ ERROR: No CI script '{script_path}' found for project '{project}' operation '{operation}'.",
                     fg="red",
                 ),
                 err=True,
             )
             click.echo(f"🔍 Expected: {script_path}")
         sys.exit(1)
-
 
     # Prepare command - don't pass operation as it's just the script name
     cmd = [sys.executable, str(ci_script)] + click_args
