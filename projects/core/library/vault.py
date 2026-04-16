@@ -8,12 +8,13 @@ This module provides:
 - Integration with existing secret dereferencing system
 """
 
-import os
-import yaml
 import logging
-from pathlib import Path
-from typing import Dict, List, Optional, Set, TYPE_CHECKING
+import os
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional
+
+import yaml
 
 if TYPE_CHECKING:
     pass
@@ -22,13 +23,15 @@ import projects.core.library.env as env
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class VaultContent:
     """Represents a single piece of content in a vault"""
+
     name: str
     description: str
-    filename: Optional[str] = None
-    _vault: Optional['VaultDefinition'] = None
+    filename: str | None = None
+    _vault: Optional["VaultDefinition"] = None
 
     def __post_init__(self):
         # Default filename to the content name if not specified
@@ -36,7 +39,7 @@ class VaultContent:
             self.filename = self.name
 
     @property
-    def file_path(self) -> Optional[Path]:
+    def file_path(self) -> Path | None:
         """Get the full absolute path to this content file"""
         if self._vault is None:
             return None
@@ -47,33 +50,38 @@ class VaultContent:
 
         return secret_dir / self.filename
 
+
 @dataclass
 class VaultDefinition:
     """Represents a complete vault definition"""
+
     name: str
     env_key: str
     description: str
-    content: Dict[str, VaultContent]
+    content: dict[str, VaultContent]
 
     @property
-    def secret_dir(self) -> Optional[Path]:
+    def secret_dir(self) -> Path | None:
         """Get the secret directory path from environment"""
         if self.env_key not in os.environ:
             return None
         return Path(os.environ[self.env_key])
+
 
 class VaultManager:
     """Manages vault definitions and validation"""
 
     def __init__(self, vault_definitions_dir: Path = None):
         self.vault_definitions_dir = vault_definitions_dir or env.FORGE_HOME / "vaults"
-        self._vault_cache: Dict[str, VaultDefinition] = {}
+        self._vault_cache: dict[str, VaultDefinition] = {}
         self._load_vault_definitions()
 
     def _load_vault_definitions(self):
         """Load all vault definitions from the vaults directory"""
         if not self.vault_definitions_dir.exists():
-            logger.warning(f"Vault definitions directory does not exist: {self.vault_definitions_dir}")
+            logger.warning(
+                f"Vault definitions directory does not exist: {self.vault_definitions_dir}"
+            )
             return
 
         for vault_file in self.vault_definitions_dir.glob("*.yaml"):
@@ -86,7 +94,7 @@ class VaultManager:
 
     def _load_vault_definition(self, vault_file: Path) -> VaultDefinition:
         """Load a single vault definition from a YAML file"""
-        with open(vault_file, 'r') as f:
+        with open(vault_file) as f:
             data = yaml.safe_load(f)
 
         # Vault name is derived from filename (without .yaml extension)
@@ -94,27 +102,25 @@ class VaultManager:
 
         # Parse content definitions
         content = {}
-        for content_name, content_def in data.get('content', {}).items():
+        for content_name, content_def in data.get("content", {}).items():
             if isinstance(content_def, dict):
                 # New format with file mapping and description
-                filename = content_def.get('file', content_name)
-                description = content_def.get('description', '')  # Don't provide default
+                filename = content_def.get("file", content_name)
+                description = content_def.get("description", "")  # Don't provide default
             else:
                 # Legacy format - content_def is the description
                 filename = content_name
-                description = content_def if content_def else ''
+                description = content_def if content_def else ""
 
             content[content_name] = VaultContent(
-                name=content_name,
-                description=description,
-                filename=filename
+                name=content_name, description=description, filename=filename
             )
 
         vault_def = VaultDefinition(
             name=vault_name,
-            env_key=data['env_key'],
-            description=data.get('description', ''),
-            content=content
+            env_key=data["env_key"],
+            description=data.get("description", ""),
+            content=content,
         )
 
         # Set vault reference on all content items
@@ -123,11 +129,11 @@ class VaultManager:
 
         return vault_def
 
-    def get_vault(self, vault_name: str) -> Optional[VaultDefinition]:
+    def get_vault(self, vault_name: str) -> VaultDefinition | None:
         """Get a vault definition by name"""
         return self._vault_cache.get(vault_name)
 
-    def list_vaults(self) -> List[str]:
+    def list_vaults(self) -> list[str]:
         """List all available vault names"""
         return list(self._vault_cache.keys())
 
@@ -207,7 +213,7 @@ class VaultManager:
                 filename = file_path.name
 
                 # Ignore files that start with "secretsync" (automated sync tool files)
-                if filename.startswith('secretsync'):
+                if filename.startswith("secretsync"):
                     logger.debug(f"Ignoring secretsync file: {filename}")
                     continue
 
@@ -242,7 +248,7 @@ class VaultManager:
 
         all_valid = True
         for vault_requirement in project_vaults:
-            vault_name = vault_requirement.get('name')
+            vault_name = vault_requirement.get("name")
             if not vault_name:
                 logger.error(f"Project '{project_name}' has vault requirement without 'name' field")
                 all_valid = False
@@ -253,7 +259,7 @@ class VaultManager:
 
         return all_valid
 
-    def load_project_vault_requirements(self, project_name: str) -> List[Dict]:
+    def load_project_vault_requirements(self, project_name: str) -> list[dict]:
         """Load vault requirements for a specific project"""
         vaults_file = env.FORGE_HOME / "projects" / project_name / "orchestration" / "vaults.yaml"
 
@@ -261,14 +267,14 @@ class VaultManager:
             return []
 
         try:
-            with open(vaults_file, 'r') as f:
+            with open(vaults_file) as f:
                 data = yaml.safe_load(f)
 
             # Handle both list format and dict format
             if isinstance(data, list):
                 return data
-            elif isinstance(data, dict) and 'vaults' in data:
-                return data['vaults']
+            elif isinstance(data, dict) and "vaults" in data:
+                return data["vaults"]
             else:
                 logger.warning(f"Project vault file has unexpected format: {vaults_file}")
                 return []
@@ -277,7 +283,7 @@ class VaultManager:
             logger.error(f"Failed to load project vault requirements from {vaults_file}: {e}")
             return []
 
-    def get_vault_content_path(self, vault_name: str, content_name: str) -> Optional[Path]:
+    def get_vault_content_path(self, vault_name: str, content_name: str) -> Path | None:
         """
         Get the full path to a specific piece of vault content
 
@@ -311,9 +317,7 @@ class VaultManager:
 
 
 def _filter_and_validate_vaults(
-        vault_manager: VaultManager,
-        vaults: List[str],
-        strict: bool = True
+    vault_manager: VaultManager, vaults: list[str], strict: bool = True
 ):
     """
     Filter vault manager to only include specified vaults and validate them
@@ -364,10 +368,12 @@ def _filter_and_validate_vaults(
 
     return True
 
-# Global vault manager instance
-_vault_manager: Optional[VaultManager] = None
 
-def init(vaults: List[str] = None, strict: bool = True):
+# Global vault manager instance
+_vault_manager: VaultManager | None = None
+
+
+def init(vaults: list[str] = None, strict: bool = True):
     """Initialize the vault manager
 
     - Initialize the vault manager
@@ -406,7 +412,7 @@ def validate_project_vaults(project_name: str, strict: bool = True) -> bool:
     return get_vault_manager().validate_project_vaults(project_name, strict=strict)
 
 
-def get_vault_content_path(vault_name: str, content_name: str) -> Optional[Path]:
+def get_vault_content_path(vault_name: str, content_name: str) -> Path | None:
     """Convenience function to get vault content path"""
 
     return get_vault_manager().get_vault_content_path(vault_name, content_name)

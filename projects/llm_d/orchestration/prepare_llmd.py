@@ -1,7 +1,8 @@
 import logging
-logger = logging.getLogger(__name__)
 
-from projects.core.library import env, config, run
+from projects.core.library import config
+
+logger = logging.getLogger(__name__)
 
 
 def prepare():

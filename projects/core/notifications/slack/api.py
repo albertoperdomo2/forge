@@ -1,10 +1,7 @@
 import logging
-import os
-import pathlib
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-
 
 CHANNEL_ID = "C07NS5TAKPA"
 MAX_CALLS = 10

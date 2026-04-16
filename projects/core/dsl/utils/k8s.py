@@ -30,26 +30,26 @@ def sanitize_k8s_name(name: str) -> str:
         "valid-name123"
     """
     # Convert to lowercase and replace invalid characters with hyphens
-    sanitized = re.sub(r'[^a-z0-9\-]', '-', name.lower())
+    sanitized = re.sub(r"[^a-z0-9\-]", "-", name.lower())
 
     # Remove leading/trailing hyphens and collapse multiple hyphens
-    sanitized = re.sub(r'^-+|-+$', '', sanitized)
-    sanitized = re.sub(r'-+', '-', sanitized)
+    sanitized = re.sub(r"^-+|-+$", "", sanitized)
+    sanitized = re.sub(r"-+", "-", sanitized)
 
     # Ensure it starts and ends with alphanumeric
     if sanitized and not sanitized[0].isalnum():
-        sanitized = 'x' + sanitized
+        sanitized = "x" + sanitized
     if sanitized and not sanitized[-1].isalnum():
-        sanitized = sanitized + 'x'
+        sanitized = sanitized + "x"
 
     # Truncate to 63 characters (K8s limit)
     if len(sanitized) > 63:
         sanitized = sanitized[:63]
         # Make sure it still ends with alphanumeric after truncation
         if not sanitized[-1].isalnum():
-            sanitized = sanitized[:-1] + 'x'
+            sanitized = sanitized[:-1] + "x"
 
-    return sanitized or 'default'
+    return sanitized or "default"
 
 
 def is_valid_k8s_name(name: str) -> bool:
@@ -78,5 +78,5 @@ def is_valid_k8s_name(name: str) -> bool:
         return False
 
     # Check pattern: lowercase alphanumeric and hyphens, start/end with alphanumeric
-    pattern = r'^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$'
+    pattern = r"^[a-z0-9]([a-z0-9\-]*[a-z0-9])?$"
     return bool(re.match(pattern, name))

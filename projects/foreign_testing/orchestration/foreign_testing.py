@@ -1,16 +1,19 @@
-import pathlib
 import logging
-logger = logging.getLogger(__name__)
 import os
+import pathlib
 import shutil
 
-from projects.core.library import env, config, run
 from projects.core.ci_entrypoint import run_ci
+from projects.core.library import config, env, run
+
+logger = logging.getLogger(__name__)
+
 
 def init():
     env.init()
     run.init()
     config.init(pathlib.Path(__file__).parent)
+
 
 def prepare():
     foreign_repo_id = os.environ.get("PSAP_FORGE_FOREIGN_TESTING")
@@ -19,12 +22,16 @@ def prepare():
     pull_pull_sha = os.environ.get("PULL_PULL_SHA")
 
     if not foreign_repo_id:
-        raise ValueError("PSAP_FORGE_FOREIGN_TESTING must be set (and point to `foreign_testing.$NAME` field)")
+        raise ValueError(
+            "PSAP_FORGE_FOREIGN_TESTING must be set (and point to `foreign_testing.$NAME` field)"
+        )
 
     foreign_repo_configs = config.project.get_config("foreign_testing")
     foreign_repo_config = foreign_repo_configs.get(foreign_repo_id, None)
     if foreign_repo_config is None:
-        raise ValueError(f"PSAP_FORGE_FOREIGN_TESTING must point to `foreign_testing.{foreign_repo_id}` field")
+        raise ValueError(
+            f"PSAP_FORGE_FOREIGN_TESTING must point to `foreign_testing.{foreign_repo_id}` field"
+        )
 
     repo_dest = env.FORGE_HOME / "foreign_testing" / repo_name
     run.run(f'git clone "https://github.com/{repo_owner}/{repo_name}" "{repo_dest}"')
@@ -67,7 +74,9 @@ def submit(project_path=None):
         logger.info(f"Submitting deployment with args: {args}")
 
     run_ci.execute_project_operation(
-        "fournos_deploy", "ci", args,
+        "fournos_deploy",
+        "ci",
+        args,
         do_prepare_ci=False,
         verbose=True,
     )

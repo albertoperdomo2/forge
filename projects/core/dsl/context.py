@@ -15,10 +15,10 @@ class ReadOnlyArgs:
 
     def __init__(self, args_dict: dict):
         # Store the original args in a private attribute
-        object.__setattr__(self, '_args_dict', args_dict)
+        object.__setattr__(self, "_args_dict", args_dict)
 
     def __getattr__(self, name: str) -> Any:
-        args_dict = object.__getattribute__(self, '_args_dict')
+        args_dict = object.__getattribute__(self, "_args_dict")
         if name in args_dict:
             return args_dict[name]
         raise AttributeError(f"'ReadOnlyArgs' object has no attribute '{name}'")
@@ -30,11 +30,11 @@ class ReadOnlyArgs:
         raise AttributeError(f"Cannot delete attribute '{name}' from readonly args")
 
     def __contains__(self, name: str) -> bool:
-        args_dict = object.__getattribute__(self, '_args_dict')
+        args_dict = object.__getattribute__(self, "_args_dict")
         return name in args_dict
 
     def __repr__(self) -> str:
-        args_dict = object.__getattribute__(self, '_args_dict')
+        args_dict = object.__getattribute__(self, "_args_dict")
         return f"ReadOnlyArgs({args_dict})"
 
 
@@ -47,11 +47,13 @@ class TaskContext:
         pass
 
     def __repr__(self) -> str:
-        attrs = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        attrs = {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
         return f"TaskContext({attrs})"
 
 
-def create_task_parameters(original_args: types.SimpleNamespace, shared_context: types.SimpleNamespace) -> tuple[ReadOnlyArgs, TaskContext]:
+def create_task_parameters(
+    original_args: types.SimpleNamespace, shared_context: types.SimpleNamespace
+) -> tuple[ReadOnlyArgs, TaskContext]:
     """
     Create readonly args and mutable context from the original args object
 
@@ -73,7 +75,7 @@ def create_task_parameters(original_args: types.SimpleNamespace, shared_context:
 
     # Copy existing values from shared context to this task's context
     for attr_name, attr_value in vars(shared_context).items():
-        if not attr_name.startswith('_'):
+        if not attr_name.startswith("_"):
             setattr(context, attr_name, attr_value)
 
     return readonly_args, context

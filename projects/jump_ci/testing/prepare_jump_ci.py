@@ -1,9 +1,10 @@
-import os
-import logging
 import json
+import logging
+import os
 
-from projects.legacy.library import env, config, run
-from projects.jump_ci.testing import utils, tunnelling
+from projects.jump_ci.testing import tunnelling, utils
+from projects.legacy.library import config, run
+
 
 @utils.entrypoint()
 def lock_cluster(cluster=None):
@@ -19,11 +20,12 @@ def lock_cluster(cluster=None):
         if config.project.get_config("cluster.name", print=False) is None:
             override_cluster = config.project.get_config("overrides.PR_POSITIONAL_ARG_1", None)
             if not override_cluster:
-                raise ValueError("Expected to find the cluster name in overrides.PR_POSITIONAL_ARG_1 (1st test argument) or cluster.name, but none of them were set ...")
+                raise ValueError(
+                    "Expected to find the cluster name in overrides.PR_POSITIONAL_ARG_1 (1st test argument) or cluster.name, but none of them were set ..."
+                )
 
             config.project.set_config("cluster.name", override_cluster)
             config.project.set_config("rewrite_variables_overrides.cluster_found_in_pr_args", True)
-
 
     if cluster is None:
         cluster = config.project.get_config("cluster.name")
@@ -57,11 +59,11 @@ def unlock_cluster(cluster=None):
 
 @utils.entrypoint()
 def prepare(
-        cluster=None,
-        repo_owner="openshift-psap",
-        repo_name="topsail-ng",
-        git_ref=None,
-        pr_number=None,
+    cluster=None,
+    repo_owner="openshift-psap",
+    repo_name="topsail-ng",
+    git_ref=None,
+    pr_number=None,
 ):
     """
     Prepares the jump-host for running TOPSAIL commands.
@@ -84,17 +86,19 @@ def prepare(
 
     # Clone the Git Repository
     # Build the image
-    prepare_topsail_args = dict(
-        cluster=cluster,
-        lock_owner=utils.get_lock_owner(),
-    )
+    prepare_topsail_args = {
+        "cluster": cluster,
+        "lock_owner": utils.get_lock_owner(),
+    }
 
     if os.environ.get("OPENSHIFT_CI") == "true":
         if os.environ.get("OPENSHIFT_CI_TOPSAIL_FOREIGN_TESTING"):
-            logging.info("Not running from TOPSAIL repository. Using TOPSAIL foreign configuration.")
+            logging.info(
+                "Not running from TOPSAIL repository. Using TOPSAIL foreign configuration."
+            )
             repo_owner = config.project.get_config("foreign_testing.topsail.repo.owner")
             repo_name = config.project.get_config("foreign_testing.topsail.repo.name")
-            git_ref  = config.project.get_config("foreign_testing.topsail.repo.branch")
+            git_ref = config.project.get_config("foreign_testing.topsail.repo.branch")
 
         elif os.environ["JOB_NAME"].startswith("periodic"):
             # periodic jobs don't have these env vars ...
@@ -107,29 +111,35 @@ def prepare(
             repo_name = os.environ["REPO_NAME"]
             git_ref = os.environ["PULL_PULL_SHA"]
 
-        prepare_topsail_args |= dict(
-            repo_owner=repo_owner,
-            repo_name=repo_name,
-            git_ref=git_ref,
-            pr_number=os.environ.get("PULL_NUMBER"),
-        )
+        prepare_topsail_args |= {
+            "repo_owner": repo_owner,
+            "repo_name": repo_name,
+            "git_ref": git_ref,
+            "pr_number": os.environ.get("PULL_NUMBER"),
+        }
     elif any([pr_number, git_ref]):
         if not all([repo_owner, repo_name, pr_number]):
-            logging.fatal("Missing parameters in the CLI arguments. Please pass at least --pr-number")
+            logging.fatal(
+                "Missing parameters in the CLI arguments. Please pass at least --pr-number"
+            )
             raise SystemExit(1)
 
-        prepare_topsail_args |= dict(
-            repo_owner=repo_owner,
-            repo_name=repo_name,
-            pr_number=pr_number,
-            git_ref=git_ref,
-        )
+        prepare_topsail_args |= {
+            "repo_owner": repo_owner,
+            "repo_name": repo_name,
+            "pr_number": pr_number,
+            "git_ref": git_ref,
+        }
 
     else:
         logging.fatal("No flag provided and couldn't determine the CI environment ... Aborting.")
         logging.info("Outside of the CI, please pass at least --pr-number")
         raise SystemExit(1)
 
-    run.run_toolbox("jump_ci", "prepare_topsail", **prepare_topsail_args,)
+    run.run_toolbox(
+        "jump_ci",
+        "prepare_topsail",
+        **prepare_topsail_args,
+    )
 
     return None

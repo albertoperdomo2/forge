@@ -1,16 +1,17 @@
+import json
+import logging
 import os
 import pathlib
-import sys
 import subprocess
-import json
-import urllib.request
+import sys
 import urllib.error
-import logging
+import urllib.request
 
 TOOLBOX_THIS_DIR = pathlib.Path(__file__).absolute().parent
 PROJECT_DIR = TOOLBOX_THIS_DIR.parent
 
 logger = logging.getLogger(__name__)
+
 
 class Repo:
     """
@@ -26,19 +27,19 @@ class Repo:
         WIP_MARKER = "WIP"
 
         # Check if running in GitHub Actions
-        github_ref = os.environ.get('GITHUB_REF')
+        github_ref = os.environ.get("GITHUB_REF")
         if not github_ref:
             logger.error("GITHUB_REF not set, cannot run outside of a GitHub action.")
             sys.exit(1)
 
-        github_repository = os.environ.get('GITHUB_REPOSITORY')
+        github_repository = os.environ.get("GITHUB_REPOSITORY")
         if not github_repository:
             logger.error("GITHUB_REPOSITORY not set.")
             sys.exit(1)
 
         try:
             # Extract PR number from GITHUB_REF (format: refs/pull/123/merge)
-            pr_number = github_ref.split('/')[2]
+            pr_number = github_ref.split("/")[2]
             pr_url = f"https://api.github.com/repos/{github_repository}/pulls/{pr_number}"
 
             logger.info(f"Fetching the PR from '{pr_url}' ...")
@@ -47,14 +48,18 @@ class Repo:
             with urllib.request.urlopen(pr_url) as response:
                 pr_data = json.loads(response.read().decode())
 
-            pr_title = pr_data['title']
+            pr_title = pr_data["title"]
             logger.info(f"PR title: {pr_title}")
 
             # Get commit messages using git
             try:
                 # Get first and second parent from latest commit
-                result = subprocess.run(['git', 'log', '--pretty=%P', '-n', '1'],
-                                      capture_output=True, text=True, check=True)
+                result = subprocess.run(
+                    ["git", "log", "--pretty=%P", "-n", "1"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
                 parents = result.stdout.strip().split()
 
                 if len(parents) >= 2:
@@ -62,9 +67,18 @@ class Repo:
                     second_parent = parents[1]
 
                     # Get commits between the parents
-                    result = subprocess.run(['git', 'log', '--pretty=format:%h - %s', '--abbrev-commit',
-                                           f'{first_parent}..{second_parent}'],
-                                          capture_output=True, text=True, check=True)
+                    result = subprocess.run(
+                        [
+                            "git",
+                            "log",
+                            "--pretty=format:%h - %s",
+                            "--abbrev-commit",
+                            f"{first_parent}..{second_parent}",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    )
                     commits = result.stdout.strip()
 
                     logger.info("PR commits:")
@@ -124,7 +138,7 @@ class Repo:
                 pass
 
         logger.info("Checking for broken symlinks...")
-        check_directory(pathlib.Path('.'))
+        check_directory(pathlib.Path("."))
 
         if broken_links:
             logger.error("Found broken symlinks:")

@@ -2,29 +2,39 @@
 Runtime execution engine for the DSL framework
 """
 
-import sys
 import inspect
-import types
-import yaml
 import logging
 import os
+import types
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 import projects.core.library.env as env
 from projects.core.library.run import SignalError
-from .log import log_execution_banner, log_completion_banner, logger
+
 from .context import create_task_parameters
+from .log import log_completion_banner, log_execution_banner, logger
+from .script_manager import get_script_manager
 
 # Import from task.py to avoid circular imports
 from .task import ConditionError, RetryFailure
-from .script_manager import get_script_manager
 
 
 class TaskExecutionError(Exception):
     """Custom exception that wraps task execution failures with context"""
 
-    def __init__(self, task_name: str, task_description: str, original_exception: Exception, task_args: dict = None, task_location: str = None, artifact_dir: str = None, task_context: dict = None):
+    def __init__(
+        self,
+        task_name: str,
+        task_description: str,
+        original_exception: Exception,
+        task_args: dict = None,
+        task_location: str = None,
+        artifact_dir: str = None,
+        task_context: dict = None,
+    ):
         self.task_name = task_name
         self.task_description = task_description
         self.original_exception = original_exception
@@ -42,7 +52,7 @@ class TaskExecutionError(Exception):
         message_parts = [
             f"❌ TASK FAILURE: {task_name}: {task_description or 'No description'}",
             f"   {task_location or 'Unknown'}",
-            f"   {original_exception.__class__.__name__}: {original_exception}"
+            f"   {original_exception.__class__.__name__}: {original_exception}",
         ]
 
         message = "\n".join(message_parts)
@@ -73,8 +83,7 @@ def execute_tasks(function_args: dict = None):
         rel_filename = filename
 
     # Use NextArtifactDir for proper storage management
-    with env.NextArtifactDir(command_name) as artifact_dir:
-
+    with env.NextArtifactDir(command_name):
         # Convert function arguments to namespace object and add artifact_dir
         args = types.SimpleNamespace(**(function_args or {}))
         args.artifact_dir = env.ARTIFACT_DIR
@@ -136,7 +145,7 @@ def execute_tasks(function_args: dict = None):
                 while file_tasks:
                     try:
                         current_task_info = file_tasks.pop(0)
-                        _execute_single_task(task_info, args, shared_context)
+                        _execute_single_task(current_task_info, args, shared_context)
 
                     except Exception as e:
                         # If normal tasks succeeded but always task failed, raise always task error
@@ -148,7 +157,10 @@ def execute_tasks(function_args: dict = None):
 
             # Re-raise original error if normal tasks failed
             if execution_error:
-                log_completion_banner(function_args, status=f"FAILED ({execution_error.__class__.__name__})")
+                log_completion_banner(
+                    function_args,
+                    status=f"FAILED ({execution_error.__class__.__name__})",
+                )
                 raise execution_error
 
             # Log completion banner if execution was successful
@@ -162,17 +174,17 @@ def execute_tasks(function_args: dict = None):
             return shared_context
         finally:
             # Clean up the file handler to prevent leaks
-            dsl_logger = logging.getLogger('DSL')
+            dsl_logger = logging.getLogger("DSL")
             dsl_logger.removeHandler(file_handler)
             file_handler.close()
 
 
 def _execute_single_task(task_info, args, shared_context):
     """Execute a single task with condition checking"""
-    task_name = task_info['name']
-    task_func = task_info['func']
-    condition = task_info['condition']
-    task_status = task_info['status'] = {}
+    task_name = task_info["name"]
+    task_func = task_info["func"]
+    condition = task_info["condition"]
+    task_status = task_info["status"] = {}
 
     # Check condition if present
     if condition is not None:
@@ -190,10 +202,12 @@ def _execute_single_task(task_info, args, shared_context):
                 logger.info("~" * 80)
                 return
         except Exception as e:
-            logger.error(f"==> CONDITION EXCEPTION raised by {task_name}: {e.__class__.__name__}: {e}")
+            logger.error(
+                f"==> CONDITION EXCEPTION raised by {task_name}: {e.__class__.__name__}: {e}"
+            )
             logger.error(f"==> Task: {task_name} ({task_func.__doc__ or 'No description'})")
             logger.info("")
-            raise ConditionError(e)
+            raise ConditionError(e) from e
 
     # Execute the task
     try:
@@ -201,17 +215,18 @@ def _execute_single_task(task_info, args, shared_context):
         readonly_args, context = create_task_parameters(args, shared_context)
 
         # Check if task has retry configuration
-        retry_config = task_info.get('retry_config')
+        retry_config = task_info.get("retry_config")
         if retry_config:
             # Import here to avoid circular imports
             from .task import _execute_with_retry
+
             task_status["ret"] = _execute_with_retry(
                 task_func,
-                retry_config['attempts'],
-                retry_config['delay'],
-                retry_config['backoff'],
+                retry_config["attempts"],
+                retry_config["delay"],
+                retry_config["backoff"],
                 readonly_args,
-                context
+                context,
             )
         else:
             # Call task with readonly args and mutable context
@@ -222,7 +237,7 @@ def _execute_single_task(task_info, args, shared_context):
         # Store context values back into shared_context for access by subsequent tasks
         # This allows tasks to communicate through context without polluting args
         for attr_name, attr_value in vars(context).items():
-            if not attr_name.startswith('_'):
+            if not attr_name.startswith("_"):
                 setattr(shared_context, attr_name, attr_value)
 
     except (KeyboardInterrupt, SignalError):
@@ -232,7 +247,9 @@ def _execute_single_task(task_info, args, shared_context):
         try:
             co_filename = Path(co_filename).relative_to(env.FORGE_HOME)
         except ValueError as e:
-            logging.warning(f"Path {co_filename} isn't relative to FORGE_HOME={env.FORGE_HOME} ({e})")
+            logging.warning(
+                f"Path {co_filename} isn't relative to FORGE_HOME={env.FORGE_HOME} ({e})"
+            )
             pass  # Use absolute path if file is outside FORGE_HOME
 
         task_location = f"{co_filename}:{task_func.original_func.__code__.co_firstlineno}"
@@ -240,15 +257,14 @@ def _execute_single_task(task_info, args, shared_context):
         # Wrap in custom exception with context
         task_error = TaskExecutionError(
             task_name=task_name,
-            task_description=task_func.__doc__ or 'No description',
+            task_description=task_func.__doc__ or "No description",
             original_exception=e,
-            task_args=vars(args) if hasattr(args, '__dict__') else None,
-            task_context=vars(context) if hasattr(context, '__dict__') else None,
+            task_args=vars(args) if hasattr(args, "__dict__") else None,
+            task_context=vars(context) if hasattr(context, "__dict__") else None,
             task_location=task_location,
             artifact_dir=str(env.ARTIFACT_DIR),
         )
-        # Don't use 'from None' - preserve the original stack trace
-        raise task_error
+        raise task_error from e
 
 
 def clear_tasks(file_path=None):
@@ -274,24 +290,24 @@ def _generate_execution_metadata(function_args: dict, caller_frame, meta_dir):
     function_name = _get_toolbox_function_name(filename)
 
     metadata = {
-        'execution_metadata': {
-            'timestamp': datetime.now().isoformat(),
-            'file': rel_filename,
-            'command': function_name,
-            'artifact_dir': str(env.ARTIFACT_DIR),
-            'working_directory': str(Path.cwd()),
-            'arguments': {}
+        "execution_metadata": {
+            "timestamp": datetime.now().isoformat(),
+            "file": rel_filename,
+            "command": function_name,
+            "artifact_dir": str(env.ARTIFACT_DIR),
+            "working_directory": str(Path.cwd()),
+            "arguments": {},
         }
     }
 
     # Add function arguments, filtering out internal ones
     for key, value in function_args.items():
-        if key not in ['function_args']:  # Skip internal parameters
-            metadata['execution_metadata']['arguments'][key] = value
+        if key not in ["function_args"]:  # Skip internal parameters
+            metadata["execution_metadata"]["arguments"][key] = value
 
     # Write metadata to YAML file
     metadata_file = meta_dir / "metadata.yaml"
-    with open(metadata_file, 'w') as f:
+    with open(metadata_file, "w") as f:
         yaml.dump(metadata, f, default_flow_style=False, sort_keys=False)
 
     logger.debug(f"Generated execution metadata: {metadata_file}")
@@ -302,14 +318,14 @@ def _setup_execution_logging(artifact_dir):
     log_file = artifact_dir / "task.log"
 
     # Create file handler for the DSL logger
-    file_handler = logging.FileHandler(log_file, mode='w')
+    file_handler = logging.FileHandler(log_file, mode="w")
     file_handler.setLevel(logging.INFO)
 
     # Use same format as console output
-    file_handler.setFormatter(logging.Formatter('%(message)s'))
+    file_handler.setFormatter(logging.Formatter("%(message)s"))
 
     # Add handler to the DSL logger so all DSL modules inherit it
-    dsl_logger = logging.getLogger('DSL')
+    dsl_logger = logging.getLogger("DSL")
     dsl_logger.addHandler(file_handler)
 
     return log_file, file_handler
@@ -329,22 +345,21 @@ def _generate_restart_script(function_args: dict, caller_frame, meta_dir):
     script_content += f'python "{rel_filename}"'
 
     # Add arguments, each on a new line with proper indentation
-    args_added = False
     for key, value in function_args.items():
-        if key not in ['function_args'] and value is not None:  # Skip internal parameters and None values
+        if (
+            key not in ["function_args"] and value is not None
+        ):  # Skip internal parameters and None values
             if isinstance(value, bool):
                 if value:  # Only add flag if True
                     script_content += " \\\n    " + f"--{key.replace('_', '-')}"
-                    args_added = True
             else:
                 script_content += " \\\n    " + f'--{key.replace("_", "-")} "{value}"'
-                args_added = True
 
     script_content += "\n"
 
     # Write restart script
     restart_file = meta_dir / "restart.sh"
-    with open(restart_file, 'w') as f:
+    with open(restart_file, "w") as f:
         f.write(script_content)
 
     # Make executable

@@ -2,17 +2,18 @@
 Command runner for DSL tasks
 """
 
-import subprocess
 import logging
+import subprocess
 from dataclasses import dataclass
-from typing import Optional
 
-logger = logging.getLogger('DSL')
+logger = logging.getLogger("DSL")
 logger.propagate = False  # Don't show logger prefix
+
 
 @dataclass
 class CommandResult:
     """Result of a command execution"""
+
     stdout: str
     stderr: str
     returncode: int
@@ -22,7 +23,10 @@ class CommandResult:
     def success(self) -> bool:
         return self.returncode == 0
 
-def run(command: str, check: bool = True, capture_output: bool = True, shell: bool = True) -> CommandResult:
+
+def run(
+    command: str, check: bool = True, capture_output: bool = True, shell: bool = True
+) -> CommandResult:
     """
     Execute a shell command
 
@@ -44,14 +48,14 @@ def run(command: str, check: bool = True, capture_output: bool = True, shell: bo
             shell=shell,
             check=False,  # We handle check ourselves
             capture_output=capture_output,
-            text=True
+            text=True,
         )
 
         cmd_result = CommandResult(
             stdout=result.stdout or "",
             stderr=result.stderr or "",
             returncode=result.returncode,
-            command=command
+            command=command,
         )
 
         # Print output in verbose format
@@ -65,7 +69,9 @@ def run(command: str, check: bool = True, capture_output: bool = True, shell: bo
         print()
 
         if check and result.returncode != 0:
-            raise subprocess.CalledProcessError(result.returncode, command, result.stdout, result.stderr)
+            raise subprocess.CalledProcessError(
+                result.returncode, command, result.stdout, result.stderr
+            )
 
         return cmd_result
 

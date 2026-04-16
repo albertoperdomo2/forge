@@ -5,10 +5,10 @@ Provides common functionality for CLI commands including error handling,
 argument parsing, and consistent output formatting.
 """
 
-import sys
-import logging
-import traceback
 import functools
+import logging
+import sys
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ def safe_cli_command(command_func):
     Args:
         command_func: Function to execute safely
     """
+
     @functools.wraps(command_func)
     def wrapper(*args, **kwargs):
         try:

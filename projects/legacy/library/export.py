@@ -1,23 +1,27 @@
 #! /usr/bin/env python
 
-import logging
-logging.getLogger().setLevel(logging.INFO)
-import os, sys
-import json
-import subprocess
 import functools
+import json
+import logging
+import os
 import pathlib
+import subprocess
+import sys
 
 import fire
 
-from projects.legacy.library import config, run, env
+from projects.legacy.library import config, env, run
+
+logging.getLogger().setLevel(logging.INFO)
 
 
 def init():
     env.init()
     config_file = os.environ.get("TOPSAIL_FROM_CONFIG_FILE")
     if not config_file:
-        raise RuntimeError("TOPSAIL_FROM_CONFIG_FILE must be set. Please source your `configure.sh` before running this file.")
+        raise RuntimeError(
+            "TOPSAIL_FROM_CONFIG_FILE must be set. Please source your `configure.sh` before running this file."
+        )
 
     config.init(pathlib.Path(config_file).parent)
 
@@ -30,6 +34,7 @@ def entrypoint():
             fct(*args, **kwargs)
 
         return wrapper
+
     return decorator
 
 
@@ -54,14 +59,13 @@ def export_artifacts(artifacts_dirname, test_step=None):
         job = job_spec["job"]
         build_id = job_spec["buildid"]
 
-        run_id=f"prow/{pull_number}/{build_id}"
+        run_id = f"prow/{pull_number}/{build_id}"
 
     elif os.environ.get("PERFLAB_CI") == "true":
         logging.warning("No way to get the run identifiers from Jenkins in the PERFLAB_CI")
 
-
         build_number = os.environ["JENKINS_BUILD_NUMBER"]
-        job = os.environ["JENKINS_JOB"] # "job/ExternalTeams/job/RHODS/job/topsail"
+        job = os.environ["JENKINS_JOB"]  # "job/ExternalTeams/job/RHODS/job/topsail"
         job_id = job[4:].replace("/job/", "_")
 
         run_id = f"middleware_jenkins/{job_id}/{build_number}"
@@ -81,8 +85,9 @@ def export_artifacts(artifacts_dirname, test_step=None):
 
     logging.info(f"Exporting to {export_dest} ({export_url})")
     aws_creds_filename = config.project.get_config("secrets.aws_credentials")
-    run.run(f"AWS_SHARED_CREDENTIALS_FILE=\"$PSAP_ODS_SECRET_PATH/{aws_creds_filename}\" aws s3 cp --recursive \"{artifacts_dirname}\" \"{export_dest}\" --acl public-read &> {env.ARTIFACT_DIR / 'aws_s3_cp.log'}")
-
+    run.run(
+        f'AWS_SHARED_CREDENTIALS_FILE="$PSAP_ODS_SECRET_PATH/{aws_creds_filename}" aws s3 cp --recursive "{artifacts_dirname}" "{export_dest}" --acl public-read &> {env.ARTIFACT_DIR / "aws_s3_cp.log"}'
+    )
 
 
 class Export:
@@ -108,6 +113,6 @@ if __name__ == "__main__":
         logging.error(f"Command '{e.cmd}' failed --> {e.returncode}")
         sys.exit(1)
     except KeyboardInterrupt:
-        print() # empty line after ^C
-        logging.error(f"Interrupted.")
+        print()  # empty line after ^C
+        logging.error("Interrupted.")
         sys.exit(1)

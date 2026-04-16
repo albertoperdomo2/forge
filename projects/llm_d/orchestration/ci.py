@@ -4,11 +4,14 @@ LLM-D Project CI Operations
 
 """
 
-from projects.core.library import ci as ci_lib
-import test_llmd, prepare_llmd
-
 import types
+
 import click
+import prepare_llmd
+import test_llmd
+
+from projects.core.library import ci as ci_lib
+
 
 @click.group()
 @click.pass_context
@@ -17,6 +20,7 @@ def main(ctx):
     """LLM-D Project CI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
     test_llmd.init()
+
 
 @main.command()
 @click.pass_context

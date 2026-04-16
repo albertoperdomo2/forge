@@ -1,12 +1,14 @@
-import pathlib
 import logging
+import os
+import pathlib
+
+from projects.core.library import config, env, run, vault
+from projects.fournos_launcher.toolbox.submit_and_wait.main import (
+    run as submit_and_wait,
+)
+
 logger = logging.getLogger(__name__)
 
-import os
-
-from projects.core.library import env, config, run, vault
-
-from projects.fournos_launcher.toolbox.submit_and_wait.main import run as submit_and_wait
 
 def init():
     env.init()
@@ -22,7 +24,7 @@ def init():
 def prepare_env():
     kubeconfig_path = vault.get_vault_content_path(
         config.project.get_config("fournos.kubeconfig.vault.name"),
-        config.project.get_config("fournos.kubeconfig.vault.key")
+        config.project.get_config("fournos.kubeconfig.vault.key"),
     )
 
     os.environ["KUBECONFIG"] = str(kubeconfig_path)
@@ -46,16 +48,16 @@ def submit_job():
     env_dict.update(extra_env)
 
     submit_and_wait(
-      cluster_name=config.project.get_config("cluster.name"),
-      project=config.project.get_config("ci_job.project"),
-      args=config.project.get_config("ci_job.args"),
-      variables_overrides=overrides,
-      namespace=config.project.get_config("fournos.namespace"),
-      owner=config.project.get_config("fournos.job.owner"),
-      display_name=config.project.get_config("fournos.job.display_name"),
-      pipeline_name=config.project.get_config("fournos.job.pipeline_name"),
-      env=env_dict,
-      status_dest=env.ARTIFACT_DIR,
+        cluster_name=config.project.get_config("cluster.name"),
+        project=config.project.get_config("ci_job.project"),
+        args=config.project.get_config("ci_job.args"),
+        variables_overrides=overrides,
+        namespace=config.project.get_config("fournos.namespace"),
+        owner=config.project.get_config("fournos.job.owner"),
+        display_name=config.project.get_config("fournos.job.display_name"),
+        pipeline_name=config.project.get_config("fournos.job.pipeline_name"),
+        env=env_dict,
+        status_dest=env.ARTIFACT_DIR,
     )
 
     return 0

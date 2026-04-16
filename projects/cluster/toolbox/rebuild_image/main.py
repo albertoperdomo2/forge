@@ -7,15 +7,19 @@ Triggers a rebuild of an existing Shipwright Build by creating a BuildRun
 and waiting for completion.
 """
 
-from projects.core.library import env
-from projects.core.dsl import task, retry, when, always, execute_tasks, clear_tasks, shell, toolbox, template
-
-from datetime import datetime
-from pathlib import Path
-import time
 import json
-
 import logging
+
+from projects.core.dsl import (
+    always,
+    execute_tasks,
+    retry,
+    shell,
+    task,
+    template,
+    toolbox,
+)
+
 
 # Set up clean logger without prefix
 def setup_clean_logger(name: str):
@@ -25,11 +29,12 @@ def setup_clean_logger(name: str):
     if not logger.handlers:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(logging.Formatter('%(message)s'))
+        console_handler.setFormatter(logging.Formatter("%(message)s"))
         logger.addHandler(console_handler)
 
     logger.propagate = False
     return logger
+
 
 logger = setup_clean_logger("TOOLBOX")
 
@@ -38,7 +43,7 @@ def run(
     build_name: str,
     *,
     namespace: str = "psap-automation-wip",
-    timeout_minutes: int = 30
+    timeout_minutes: int = 30,
 ):
     """
     Rebuild container image using existing Shipwright Build
@@ -74,16 +79,18 @@ def validate_parameters(args, ctx):
     result = shell.run(
         f"oc get builds.shipwright.io {args.build_name} -n {args.namespace}",
         check=False,
-        log_stdout=False
+        log_stdout=False,
     )
 
     if not result.success:
-        raise ValueError(f"Shipwright Build '{args.build_name}' not found in namespace '{args.namespace}'")
+        raise ValueError(
+            f"Shipwright Build '{args.build_name}' not found in namespace '{args.namespace}'"
+        )
 
     # Get Build details for logging
     result = shell.run(
         f"oc get builds.shipwright.io {args.build_name} -n {args.namespace} -o jsonpath='{{.spec.output.image}}'",
-        log_stdout=False
+        log_stdout=False,
     )
 
     if result.success:
@@ -116,7 +123,7 @@ def create_buildrun(args, ctx):
         raise RuntimeError("Failed to create BuildRun")
 
     buildrun_info = json.loads(result.stdout)
-    ctx.buildrun_name = buildrun_info['metadata']['name']
+    ctx.buildrun_name = buildrun_info["metadata"]["name"]
 
     return f"Triggered rebuild with BuildRun: {ctx.buildrun_name}"
 
@@ -147,7 +154,7 @@ def wait_for_completion(args, ctx):
         shell.run(
             f"oc logs {ctx.buildrun_name} -n {args.namespace}",
             stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.buildrun_name}-build.log",
-            check=False
+            check=False,
         )
 
         if status == "false":
@@ -155,7 +162,7 @@ def wait_for_completion(args, ctx):
             result = shell.run(
                 f"oc get buildruns.shipwright.io {ctx.buildrun_name} -n {args.namespace} -o jsonpath='{{.status.conditions[?(@.type==\"Succeeded\")].message}}'",
                 check=False,
-                log_stdout=False
+                log_stdout=False,
             )
             failure_message = result.stdout.strip() if result.success else "Unknown failure"
             raise RuntimeError(f"BuildRun {ctx.buildrun_name} failed: {failure_message}")
@@ -170,19 +177,19 @@ def wait_for_completion(args, ctx):
 def capture_artifacts(args, ctx):
     """Capture build-related artifacts and status"""
 
-    buildrun_name = getattr(ctx, 'buildrun_name', None)
+    buildrun_name = getattr(ctx, "buildrun_name", None)
     if buildrun_name:
         shell.run(
             f"oc describe buildrun {buildrun_name} -n {args.namespace}",
             stdout_dest=args.artifact_dir / "artifacts" / "buildrun-describe.txt",
-            check=False
+            check=False,
         )
 
         # Get BuildRun YAML for detailed inspection
         shell.run(
             f"oc get buildruns.shipwright.io {buildrun_name} -n {args.namespace} -o yaml",
             stdout_dest=args.artifact_dir / "artifacts" / f"{buildrun_name}-buildrun.yaml",
-            check=False
+            check=False,
         )
     else:
         logger.warning("No BuildRun name available for artifact capture")
@@ -191,7 +198,7 @@ def capture_artifacts(args, ctx):
     shell.run(
         f"oc get builds.shipwright.io {args.build_name} -n {args.namespace} -o yaml",
         stdout_dest=args.artifact_dir / "artifacts" / f"{args.build_name}-build-definition.yaml",
-        check=False
+        check=False,
     )
 
     return "Build artifacts captured"

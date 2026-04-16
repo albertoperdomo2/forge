@@ -1,21 +1,21 @@
-import pathlib
+import atexit
 import logging
 import os
-import functools
-import atexit
-import time
+import pathlib
 import subprocess
+import time
+
 import yaml
 
-from projects.legacy.library import env, config, run, configure_logging
-
 from projects.jump_ci.testing import utils
+from projects.legacy.library import config, run
 
 extra_vars_file = None
 
+
 @utils.entrypoint()
 def prepare(
-        verbose=None,
+    verbose=None,
 ):
     """
     Prepare the environment for running TOPSAIL in the jump host
@@ -44,7 +44,9 @@ def prepare(
         bastion_user = f.readline().strip()
 
     if config.project.get_config("ssh_tunnel.enabled"):
-        logging.info("ssh_tunnel.enabled is set, creating a tunnel to the bastion via the jump host")
+        logging.info(
+            "ssh_tunnel.enabled is set, creating a tunnel to the bastion via the jump host"
+        )
         # creates a tunnel to the jumphost to the bastion, on localhost:2500
 
         open_tunnel(
@@ -53,7 +55,6 @@ def prepare(
             bastion_host_filename=BASTION_HOST_FILENAME,
             bastion_host_user_filename=BASTION_HOST_USER_FILENAME,
             local_host_port=LOCAL_HOST_PORT,
-
             jump_host_filename=JUMP_HOST_FILENAME,
             verbose=verbose,
             keep_open=False,
@@ -85,7 +86,7 @@ def prepare(
 ansible_port: {remote_host_port}
 ansible_ssh_private_key_file: {private_key_path}
 ansible_ssh_user: {bastion_user}
-ansible_ssh_common_args: "{' '.join(SSH_FLAGS)}"
+ansible_ssh_common_args: "{" ".join(SSH_FLAGS)}"
 """
     print(extra_vars_yaml_content, file=extra_vars_file)
     extra_vars_file.flush()
@@ -93,16 +94,16 @@ ansible_ssh_common_args: "{' '.join(SSH_FLAGS)}"
 
 @utils.entrypoint()
 def open_tunnel(
-        secret_env_key="PSAP_ODS_SECRET_PATH",
-        private_key_filename="jumpci_privatekey",
-        jump_host_filename="jumpci_jump_host",
-        local_host_port=2500,
-        bastion_host_filename="jumpci_bastion_host",
-        bastion_host_user_filename="jumpci_bastion_host_user",
-        bastion_host_port=22,
-        verbose=False,
-        keep_open=True,
-        ssh_flags=[],
+    secret_env_key="PSAP_ODS_SECRET_PATH",
+    private_key_filename="jumpci_privatekey",
+    jump_host_filename="jumpci_jump_host",
+    local_host_port=2500,
+    bastion_host_filename="jumpci_bastion_host",
+    bastion_host_user_filename="jumpci_bastion_host_user",
+    bastion_host_port=22,
+    verbose=False,
+    keep_open=True,
+    ssh_flags=None,
 ):
     """
     Tests the tunnel to access the jump host.
@@ -120,6 +121,8 @@ def open_tunnel(
       ssh_flags: extra flags to pass to SSH
     """
 
+    if ssh_flags is None:
+        ssh_flags = []
     secret_dir = pathlib.Path(os.environ[secret_env_key])
 
     private_key_path = secret_dir / private_key_filename
@@ -144,7 +147,9 @@ def open_tunnel(
 
     RETRIES = 1
     DELAY = 5
-    recreate_count_down = RECREATED_TUNNEL_COUNT_DOWN = 5 # recreate the SSH tunnel every 5 attempts
+    recreate_count_down = RECREATED_TUNNEL_COUNT_DOWN = (
+        5  # recreate the SSH tunnel every 5 attempts
+    )
 
     def create_tunnel():
         _proc = subprocess.Popen(cmd, shell=True)
@@ -160,14 +165,21 @@ def open_tunnel(
     logging.info("Waiting for the SSH connection to work ...")
     for i in range(RETRIES):
         try:
-            probe_ssh_endpoint(bastion_user, "localhost", local_host_port, private_key_path, ssh_flags, verbose)
+            probe_ssh_endpoint(
+                bastion_user,
+                "localhost",
+                local_host_port,
+                private_key_path,
+                ssh_flags,
+                verbose,
+            )
             logging.info("SSH connection working!")
             break
         except subprocess.CalledProcessError:
             pass
         recreate_count_down -= 1
 
-        logging.info(f"Attempt {i+1}/{RETRIES} failed ...")
+        logging.info(f"Attempt {i + 1}/{RETRIES} failed ...")
         if i == (RETRIES - 1):
             raise Exception("SSH connection probe failed :/")
 
@@ -185,10 +197,14 @@ def open_tunnel(
 
     return
 
+
 def probe_ssh_endpoint(user, host, port, private_key_path, ssh_flags, verbose):
-    run.run(f"ssh {' '.join(ssh_flags)} -i {private_key_path} {user + '@' if user else ''}{host} -p {port} true",
-            capture_stderr=True,
-            log_command=verbose)
+    run.run(
+        f"ssh {' '.join(ssh_flags)} -i {private_key_path} {user + '@' if user else ''}{host} -p {port} true",
+        capture_stderr=True,
+        log_command=verbose,
+    )
+
 
 def run_with_ansible_ssh_conf(cmd):
     with open(os.environ["TOPSAIL_ANSIBLE_PLAYBOOK_EXTRA_VARS"]) as f:
@@ -201,5 +217,7 @@ def run_with_ansible_ssh_conf(cmd):
     private_key_path = ansible_ssh_config["ansible_ssh_private_key_file"]
 
     logging.info(f"Running on the jump host: {cmd}")
-    run.run(f"ssh {ssh_flags} -t -i {private_key_path} {user}@{hostname} -p {port} -- {cmd}",
-            log_command=False)
+    run.run(
+        f"ssh {ssh_flags} -t -i {private_key_path} {user}@{hostname} -p {port} -- {cmd}",
+        log_command=False,
+    )

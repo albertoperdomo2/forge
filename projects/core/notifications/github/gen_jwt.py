@@ -9,21 +9,21 @@ import jwt
 
 def generate_encoded_jwt(pem, client_id):
     # Open PEM
-    with open(pem, 'rb') as pem_file:
+    with open(pem, "rb") as pem_file:
         signing_key = pem_file.read()
 
     payload = {
         # Issued at time
-        'iat': int(time.time()),
+        "iat": int(time.time()),
         # JWT expiration time (10 minutes maximum)
-        'exp': int(time.time()) + 600,
-
+        "exp": int(time.time()) + 600,
         # GitHub App's client ID
-        'iss': client_id
+        "iss": client_id,
     }
 
     # Create JWT
-    return jwt.encode(payload, signing_key, algorithm='RS256')
+    return jwt.encode(payload, signing_key, algorithm="RS256")
+
 
 if __name__ == "__main__":
     # Get PEM file path

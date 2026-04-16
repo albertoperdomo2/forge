@@ -1,11 +1,10 @@
 import os
 import pathlib
 import time
-import traceback
-import logging
 
 ARTIFACT_DIR = None
 FORGE_HOME = pathlib.Path(__file__).parents[3]
+
 
 def _set_artifact_dir(value):
     global ARTIFACT_DIR
@@ -19,7 +18,6 @@ def init(daily_artifact_dir=False):
 
     else:
         env_forge_base_dir = pathlib.Path(os.environ.get("FORGE_BASE_DIR", "/tmp"))
-        fmt = '%Y%m%d' if daily_artifact_dir else '%Y%m%d-%H%M'
 
         artifact_dir = env_forge_base_dir / f"forge_{time.strftime('%Y%m%d-%H%M')}"
 
@@ -44,7 +42,7 @@ def NextArtifactDir(name, *, lock=None, counter_p=None):
     return TempArtifactDir(dirname)
 
 
-class TempArtifactDir(object):
+class TempArtifactDir:
     def __init__(self, dirname):
         self.dirname = pathlib.Path(dirname)
         self.previous_dirname = None
@@ -62,7 +60,7 @@ class TempArtifactDir(object):
         os.environ["ARTIFACT_DIR"] = str(self.previous_dirname)
         _set_artifact_dir(self.previous_dirname)
 
-        return False # If we returned True here, any exception would be suppressed!
+        return False  # If we returned True here, any exception would be suppressed!
 
 
 def next_artifact_index():

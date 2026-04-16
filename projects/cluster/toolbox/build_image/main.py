@@ -7,16 +7,19 @@ Creates and manages Shipwright builds for container images. Ensures ImageStream 
 creates the build definition, triggers the build, and waits for completion.
 """
 
-from projects.core.library import env
-from projects.core.dsl import task, retry, when, always, execute_tasks, clear_tasks, shell, toolbox, template
-
-
-from datetime import datetime
-from pathlib import Path
-import time
 import json
-
 import logging
+
+from projects.core.dsl import (
+    always,
+    execute_tasks,
+    retry,
+    shell,
+    task,
+    template,
+    toolbox,
+)
+
 logger = logging.getLogger("TOOLBOX")
 
 
@@ -28,7 +31,7 @@ def run(
     *,
     dockerfile_path: str = "projects/core/image/Containerfile",
     namespace: str = "psap-automation-wip",
-    timeout_minutes: int = 30
+    timeout_minutes: int = 30,
 ):
     """
     Build container image using Shipwright Build
@@ -71,8 +74,8 @@ def validate_parameters(args, ctx):
         raise ValueError("tag_name is required")
 
     # Parse repository URL
-    if '/' in args.repo_name:
-        ctx.repo_owner, ctx.repo_name = args.repo_name.split('/', 1)
+    if "/" in args.repo_name:
+        ctx.repo_owner, ctx.repo_name = args.repo_name.split("/", 1)
         ctx.git_url = f"https://github.com/{args.repo_name}.git"
     else:
         raise ValueError("repo_name should be in format 'owner/repo'")
@@ -99,7 +102,7 @@ def ensure_imagestream_exists(args, ctx):
     result = shell.run(
         f"oc get imagestream {args.imagestream_name} -n {args.namespace}",
         check=False,
-        log_stdout=False
+        log_stdout=False,
     )
 
     if result.success:
@@ -124,7 +127,7 @@ def create_shipwright_build(args, ctx):
     template.render_template_to_file("build.yaml.j2", build_manifest_file)
 
     # Check if build already exists and delete if it does
-    delete_result = shell.run(
+    shell.run(
         f"oc delete build {ctx.build_name} -n {args.namespace} --ignore-not-found",
     )
 
@@ -154,7 +157,7 @@ def trigger_build(args, ctx):
         raise RuntimeError("Failed to create BuildRun the")
 
     buildrun_info = json.loads(result.stdout)
-    ctx.buildrun_name = buildrun_info['metadata']['name']
+    ctx.buildrun_name = buildrun_info["metadata"]["name"]
 
     return f"Triggered build with BuildRun: {ctx.buildrun_name}"
 
@@ -168,7 +171,7 @@ def wait_for_build_completion(args, ctx):
     result = shell.run(
         f"oc get buildruns.shipwright.io {ctx.buildrun_name} -n {args.namespace} -o jsonpath='{{.status.conditions[?(@.type==\"Succeeded\")].status}}'",
         check=False,
-        log_stdout=False
+        log_stdout=False,
     )
 
     if not result.success:
@@ -186,7 +189,7 @@ def wait_for_build_completion(args, ctx):
         shell.run(
             f"oc logs {ctx.buildrun_name} -n {args.namespace}",
             stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.buildrun_name}-build.log",
-            check=False
+            check=False,
         )
 
         if status == "false":
@@ -202,27 +205,27 @@ def wait_for_build_completion(args, ctx):
 def capture_build_artifacts(args, ctx):
     """Capture build-related artifacts and status"""
 
-    build_run_name = getattr(ctx, 'buildrun_name', None)
+    build_run_name = getattr(ctx, "buildrun_name", None)
     # Get final BuildRun status
     if build_run_name:
         shell.run(
             f"oc describe buildrun {build_run_name} -n {args.namespace}",
             stdout_dest=args.artifact_dir / "artifacts" / "buildrun-describe.txt",
-            check=False
+            check=False,
         )
 
         # Get BuildRun YAML for detailed inspection
         shell.run(
             f"oc get buildruns.shipwright.io {build_run_name} -n {args.namespace} -o yaml",
             stdout_dest=args.artifact_dir / "artifacts" / f"{build_run_name}-buildrun.yaml",
-            check=False
+            check=False,
         )
 
         # Get pod logs for git clone step (if available)
         shell.run(
             f"oc logs {build_run_name} -n {args.namespace} -c step-source-default",
             stdout_dest=args.artifact_dir / "artifacts" / f"{build_run_name}-source-clone.log",
-            check=False
+            check=False,
         )
     else:
         logger.warning("No BuildRun name available")
@@ -231,14 +234,14 @@ def capture_build_artifacts(args, ctx):
     shell.run(
         f"oc get builds.shipwright.io {ctx.build_name} -n {args.namespace} -o yaml",
         stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.build_name}-build-definition.yaml",
-        check=False
+        check=False,
     )
 
     # Get ImageStream status
     shell.run(
         f"oc describe imagestream {args.imagestream_name} -n {args.namespace}",
         stdout_dest=args.artifact_dir / "artifacts" / "imagestream-status.txt",
-        check=False
+        check=False,
     )
 
     return "Build artifacts captured"
@@ -249,7 +252,7 @@ def capture_build_artifacts(args, ctx):
 def generate_build_summary(args, ctx):
     """Generate a summary of the build process"""
 
-    summary_file = args.artifact_dir / "artifacts" / "build_summary.txt"
+    args.artifact_dir / "artifacts" / "build_summary.txt"
 
     logger.info("=== Shipwright Build Summary ===")
     logger.info(f"Generated at: {getattr(ctx, 'build_timestamp', 'unknown')}")

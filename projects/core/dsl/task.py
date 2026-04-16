@@ -3,28 +3,28 @@ Task decorator and retry functionality
 """
 
 import functools
-import logging
-import time
 import inspect
+import logging
 import os
-import types
-import yaml
-from typing import Callable, Any, Optional
+import time
 
-import projects.core.library.env as env
-from .log import log_task_header, log_execution_banner
+from .log import log_task_header
 from .script_manager import get_script_manager
 
 LINE_WIDTH = 80
 
 # Configure logging to show info messages
-logging.basicConfig(level=logging.INFO, format='%(message)s')
-logger = logging.getLogger('DSL')
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger("DSL")
 logger.propagate = False  # Don't show logger prefix
 
-class ConditionError(Exception): pass
 
-class RetryFailure(Exception): pass
+class ConditionError(Exception):
+    pass
+
+
+class RetryFailure(Exception):
+    pass
 
 
 def _ensure_is_task(func, decorator_name):
@@ -39,7 +39,7 @@ def _ensure_is_task(func, decorator_name):
         TypeError: If the function is not a task
     """
 
-    if not hasattr(func, 'is_dsl_task') or not func.is_dsl_task:
+    if not hasattr(func, "is_dsl_task") or not func.is_dsl_task:
         raise TypeError(
             f"@{decorator_name} can only be applied to functions decorated with @task. \n"
             f"Function '{func.__name__}' is not a task. \n"
@@ -65,12 +65,11 @@ def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
     Raises:
         RetryFailure: If all retry attempts fail
     """
-    retry_config = getattr(func, '_retry_config', {})
-    retry_attempts = retry_config.get('attempts', attempts)
-    retry_delay = retry_config.get('delay', delay)
-    retry_backoff = retry_config.get('backoff', backoff)
+    retry_config = getattr(func, "_retry_config", {})
+    retry_attempts = retry_config.get("attempts", attempts)
+    retry_delay = retry_config.get("delay", delay)
+    retry_backoff = retry_config.get("backoff", backoff)
 
-    last_exception = None
     current_delay = retry_delay
 
     for attempt in range(retry_attempts):
@@ -83,7 +82,9 @@ def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
                     logger.info("")
                     logger.info("~" * LINE_WIDTH)
                     logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
-                    logger.warning(f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} (returned: {result})")
+                    logger.warning(
+                        f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} (returned: {result})"
+                    )
 
                     logger.info(f"~~ RETRY in {current_delay:.0f}s")
                     logger.info("~" * LINE_WIDTH)
@@ -94,7 +95,9 @@ def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
                 else:
                     logger.error(f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts}")
                     logger.info("")
-                    raise RetryFailure(f"All {retry_attempts} attempts failed for task {func.__name__} : {func.__doc__ or 'No description'} (last result: {result})")
+                    raise RetryFailure(
+                        f"All {retry_attempts} attempts failed for task {func.__name__} : {func.__doc__ or 'No description'} (last result: {result})"
+                    )
             else:
                 # Truthy result means success
                 return result
@@ -135,6 +138,7 @@ def task_only(decorator_func):
                 return func
             return decorator
     """
+
     @functools.wraps(decorator_func)
     def wrapper(*args, **kwargs):
         # Use the signature of decorator_func to determine if it's a simple decorator or factory
@@ -142,10 +146,14 @@ def task_only(decorator_func):
         params = list(sig.parameters.values())
 
         # Check if this is a simple decorator that takes a single function argument
-        if (len(params) == 1 and
-            params[0].annotation in (inspect.Parameter.empty, 'func', callable) and
-            len(args) == 1 and len(kwargs) == 0 and
-            callable(args[0]) and hasattr(args[0], '__name__')):
+        if (
+            len(params) == 1
+            and params[0].annotation in (inspect.Parameter.empty, "func", callable)
+            and len(args) == 1
+            and len(kwargs) == 0
+            and callable(args[0])
+            and hasattr(args[0], "__name__")
+        ):
             # Simple decorator case: @always
             func = args[0]
             _ensure_is_task(func, decorator_func.__name__)
@@ -160,9 +168,11 @@ def task_only(decorator_func):
                 # then apply the resulting decorator to the function
                 actual_decorator = decorator_func(*args, **kwargs)
                 return actual_decorator(func)
+
             return inner_decorator
 
     return wrapper
+
 
 # TaskResult class moved to script_manager.py
 
@@ -213,11 +223,11 @@ def task(func):
 
     # Register the task with the script manager
     task_info = {
-        'name': func.__name__,
-        'func': wrapper,
-        'condition': getattr(func, '_when_condition', None),
-        'retry_config': getattr(func, '_retry_config', None),  # May be updated by @retry
-        'always_execute': getattr(func, '_always_execute', False)
+        "name": func.__name__,
+        "func": wrapper,
+        "condition": getattr(func, "_when_condition", None),
+        "retry_config": getattr(func, "_retry_config", None),  # May be updated by @retry
+        "always_execute": getattr(func, "_always_execute", False),
     }
 
     script_manager = get_script_manager()
@@ -248,9 +258,11 @@ def when(condition):
         @when(lambda: some_variable > 5)
         @when(lambda: os.path.exists("/tmp/flag"))
     """
+
     def decorator(func):
         func._when_condition = condition
         return func
+
     return decorator
 
 
@@ -263,8 +275,8 @@ def always(func):
     func._always_execute = True
 
     # If this is already a registered task, update its always_execute flag
-    if hasattr(func, '_task_info'):
-        func._task_info['always_execute'] = True
+    if hasattr(func, "_task_info"):
+        func._task_info["always_execute"] = True
 
     return func
 
@@ -283,16 +295,12 @@ def retry(attempts=3, delay=1, backoff=1.0):
 
     def decorator(func):
         # Store retry config on function (runtime will handle the actual retry)
-        retry_config = {
-            'attempts': attempts,
-            'delay': delay,
-            'backoff': backoff
-        }
+        retry_config = {"attempts": attempts, "delay": delay, "backoff": backoff}
         func._retry_config = retry_config
 
         # If this is already a registered task, update its retry config
-        if hasattr(func, '_task_info'):
-            func._task_info['retry_config'] = retry_config
+        if hasattr(func, "_task_info"):
+            func._task_info["retry_config"] = retry_config
 
         return func
 

@@ -5,14 +5,19 @@ FOURNOS job submission and monitoring using task-based DSL
 Parameters are passed from the entrypoint that reads the configuration
 """
 
-import sys
-import time
 import logging
 from datetime import datetime
 from pathlib import Path
 
-from projects.core.library import env
-from projects.core.dsl import task, retry, when, always, execute_tasks, clear_tasks, shell, toolbox, template
+from projects.core.dsl import (
+    always,
+    execute_tasks,
+    retry,
+    shell,
+    task,
+    template,
+    toolbox,
+)
 from projects.core.dsl.utils.k8s import sanitize_k8s_name
 
 logger = logging.getLogger(__name__)
@@ -30,7 +35,7 @@ def run(
     display_name: str = "",
     pipeline_name: str = "",
     env: dict = None,
-    status_dest = None,
+    status_dest=None,
 ):
     """
     Submit a FOURNOS job and wait for completion
@@ -100,7 +105,8 @@ def validate_inputs(args, ctx):
     if not isinstance(args.env, dict):
         raise ValueError("env should be a dict")
 
-    return f"Inputs validated"
+    return "Inputs validated"
+
 
 @task
 def setup_directories(args, context):
@@ -129,7 +135,7 @@ def generate_job_name(args, ctx):
 
 @task
 def ensure_oc(args, ctx):
-    """ Ensure oc is available and connected"""
+    """Ensure oc is available and connected"""
 
     shell.run("which oc || (echo 'oc not found in PATH' && exit 1)")
     shell.run("oc whoami")
@@ -167,7 +173,7 @@ def wait_for_job_completion(args, ctx):
     status_result = shell.run(
         f'oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o jsonpath="{{.status.phase}}"',
         check=False,
-        log_stdout=False
+        log_stdout=False,
     )
 
     if not status_result.success:
@@ -176,7 +182,9 @@ def wait_for_job_completion(args, ctx):
             raise RuntimeError(f"Job {ctx.final_job_name} not found in namespace {args.namespace}")
 
         # Other errors might be temporary, retry
-        logger.info(f"Failed to get job status, retrying... (stderr: {status_result.stderr.strip()})")
+        logger.info(
+            f"Failed to get job status, retrying... (stderr: {status_result.stderr.strip()})"
+        )
         return False  # Retry
 
     status = status_result.stdout.strip()
@@ -189,7 +197,7 @@ def wait_for_job_completion(args, ctx):
         failure_result = shell.run(
             f'oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o jsonpath="{{.status.message}}"',
             check=False,
-            log_stdout=False
+            log_stdout=False,
         )
         failure_msg = failure_result.stdout.strip() if failure_result.success else "Unknown failure"
         raise RuntimeError(f"Job {ctx.final_job_name} failed: {failure_msg}")  # Abort on failure
@@ -200,15 +208,16 @@ def wait_for_job_completion(args, ctx):
         logger.info(f"Job {ctx.final_job_name} status: {status}")
         return False  # Unknown status, retry
 
+
 @always
 @task
 def capture_final_job_status(args, ctx):
     """Capture final job status and details"""
     # Get full job details
     shell.run(
-        f'oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o yaml',
+        f"oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o yaml",
         stdout_dest=args.artifact_dir / "artifacts" / f"{ctx.final_job_name}-final-status.yaml",
-        check=False
+        check=False,
     )
 
     return f"Final job status captured to {ctx.final_job_name}-final-status.yaml"
@@ -224,16 +233,16 @@ def capture_pod_information(args, ctx):
 
     # Get pod status and save to status destination
     shell.run(
-        f'oc get pods -l {label_selector} -n {args.namespace}',
+        f"oc get pods -l {label_selector} -n {args.namespace}",
         stdout_dest=args.status_dest / "tasks.status",
-        check=False
+        check=False,
     )
 
     # Get list of pod names to collect logs
     pod_list_result = shell.run(
         f'oc get pods -l {label_selector} -n {args.namespace} -o jsonpath="{{.items[*].metadata.name}}"',
         check=False,
-        log_stdout=False
+        log_stdout=False,
     )
 
     if not (pod_list_result.success and pod_list_result.stdout.strip()):
@@ -248,9 +257,9 @@ def capture_pod_information(args, ctx):
     for pod_name in pod_names:
         # Get logs for each pod (default container only)
         shell.run(
-            f'oc logs {pod_name} -n {args.namespace}',
+            f"oc logs {pod_name} -n {args.namespace}",
             stdout_dest=logs_dir / f"{pod_name}.log",
-            check=False
+            check=False,
         )
     return f"Captured logs for {len(pod_names)} pods in logs/ directory"
 
@@ -261,7 +270,7 @@ def cleanup_job(args, ctx):
     """Clean up the job object"""
 
     shell.run(
-        f'oc delete fournosjob {ctx.final_job_name} -n {args.namespace} --ignore-not-found',
+        f"oc delete fournosjob {ctx.final_job_name} -n {args.namespace} --ignore-not-found",
     )
 
     return "No manifest file to clean up"

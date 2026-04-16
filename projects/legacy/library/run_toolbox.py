@@ -5,10 +5,13 @@ import sys
 try:
     import fire
 except ModuleNotFoundError:
-    print("The toolbox requires the Python `fire` package, see requirements.txt for a full list of requirements")
+    print(
+        "The toolbox requires the Python `fire` package, see requirements.txt for a full list of requirements"
+    )
     sys.exit(1)
 
 import projects.legacy.library.ansible_toolbox
+
 
 def main(no_exit=False):
     # Print help rather than opening a pager

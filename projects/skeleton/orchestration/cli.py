@@ -3,20 +3,22 @@
 Skeleton Project CLI entrypoint
 """
 
-import test_skeleton, prepare_skeleton
-from projects.core.library.cli import safe_cli_command
-from projects.core.library import config
-
 import logging
-logger = logging.getLogger(__name__)
-
-import click
 import sys
 import types
 
+import click
+import prepare_skeleton
+import test_skeleton
+
+from projects.core.library import config
+from projects.core.library.cli import safe_cli_command
+
+logger = logging.getLogger(__name__)
+
 
 @click.group()
-@click.option('--presets', multiple=True, help='Apply presets to the configuration')
+@click.option("--presets", multiple=True, help="Apply presets to the configuration")
 @click.pass_context
 def main(ctx, presets):
     """CLI Operations."""
@@ -61,7 +63,6 @@ def cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
     exit_code = prepare_skeleton.cleanup()
     sys.exit(exit_code)
-
 
 
 if __name__ == "__main__":

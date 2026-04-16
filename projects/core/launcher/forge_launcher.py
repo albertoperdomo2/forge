@@ -15,13 +15,13 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import click
 import yaml
 
-CONFIG_FILE = Path(__file__).resolve().parent / 'launcher_config.yaml'
-CONFIG_EXAMPLE_FILE = Path(__file__).resolve().parent / 'launcher_config.yaml.example'
+CONFIG_FILE = Path(__file__).resolve().parent / "launcher_config.yaml"
+CONFIG_EXAMPLE_FILE = Path(__file__).resolve().parent / "launcher_config.yaml.example"
+
 
 class ForgeLauncher:
     """Manages FORGE containerized development environment."""
@@ -30,39 +30,42 @@ class ForgeLauncher:
         self.verbose = verbose
         self.config = self._load_config()
 
-    def _load_config(self) -> Dict[str, str]:
+    def _load_config(self) -> dict[str, str]:
         """Load configuration from default and custom config files."""
         config = {
             # Default configuration
-            'forge_home': os.path.expanduser('/path/to/forge'),
-            'forge_toolbox_command': 'bash',
-            'forge_toolbox_name': 'forge',
-            'forge_image_extra_pkg': '',
-            'container_image': 'forge',  # Configurable image name for build and run
-            'container_file': None,  # Will be set dynamically based on forge_home
-            'exported_env_vars': [  # Environment variables to export to container
-                'PSAP_ODS_SECRET_PATH',
-                'KUBECONFIG',
-                'OPENSHIFT_BUILD_NAMESPACE',
-                'OPENSHIFT_BUILD_REFERENCE'
+            "forge_home": os.path.expanduser("/path/to/forge"),
+            "forge_toolbox_command": "bash",
+            "forge_toolbox_name": "forge",
+            "forge_image_extra_pkg": "",
+            "container_image": "forge",  # Configurable image name for build and run
+            "container_file": None,  # Will be set dynamically based on forge_home
+            "exported_env_vars": [  # Environment variables to export to container
+                "PSAP_ODS_SECRET_PATH",
+                "KUBECONFIG",
+                "OPENSHIFT_BUILD_NAMESPACE",
+                "OPENSHIFT_BUILD_REFERENCE",
             ],
-            'custom_env_vars': {}  # Custom environment variables as key/value pairs
+            "custom_env_vars": {},  # Custom environment variables as key/value pairs
         }
 
         # Copy from example if config doesn't exist
         if not CONFIG_FILE.exists() and CONFIG_EXAMPLE_FILE.exists():
             try:
                 import shutil
+
                 shutil.copy2(CONFIG_EXAMPLE_FILE, CONFIG_FILE)
                 if self.verbose:
-                    click.echo(f"📄 Copied example config from {CONFIG_EXAMPLE_FILE} to {CONFIG_FILE}")
+                    click.echo(
+                        f"📄 Copied example config from {CONFIG_EXAMPLE_FILE} to {CONFIG_FILE}"
+                    )
             except Exception as e:
                 click.echo(f"⚠️  Warning: Failed to copy example config: {e}", err=True)
 
         # Load custom config if it exists
         if CONFIG_FILE.exists():
             try:
-                with open(CONFIG_FILE, 'r') as f:
+                with open(CONFIG_FILE) as f:
                     custom_config = yaml.safe_load(f)
                     if custom_config:
                         config.update(custom_config)
@@ -77,36 +80,43 @@ class ForgeLauncher:
                 config[key] = os.path.expandvars(os.path.expanduser(value))
 
         # Set container file path - always relative to forge_home
-        if not config['container_file']:
+        if not config["container_file"]:
             # Use default path
-            container_file_path = 'projects/core/image/Containerfile'
+            container_file_path = "projects/core/image/Containerfile"
         else:
-            container_file_path = config['container_file']
+            container_file_path = config["container_file"]
 
         # Always resolve relative to forge_home unless it's already absolute
         if not os.path.isabs(container_file_path):
-            config['container_file'] = os.path.join(config['forge_home'], container_file_path)
+            config["container_file"] = os.path.join(config["forge_home"], container_file_path)
         else:
-            config['container_file'] = container_file_path
+            config["container_file"] = container_file_path
 
         # Ensure exported_env_vars is a list
-        if isinstance(config['exported_env_vars'], str):
+        if isinstance(config["exported_env_vars"], str):
             # Handle comma-separated string from YAML
-            config['exported_env_vars'] = [var.strip() for var in config['exported_env_vars'].split(',')]
-        elif not isinstance(config['exported_env_vars'], list):
+            config["exported_env_vars"] = [
+                var.strip() for var in config["exported_env_vars"].split(",")
+            ]
+        elif not isinstance(config["exported_env_vars"], list):
             # Fallback to default if invalid
-            config['exported_env_vars'] = ['PSAP_ODS_SECRET_PATH', 'KUBECONFIG', 'OPENSHIFT_BUILD_NAMESPACE', 'OPENSHIFT_BUILD_REFERENCE']
+            config["exported_env_vars"] = [
+                "PSAP_ODS_SECRET_PATH",
+                "KUBECONFIG",
+                "OPENSHIFT_BUILD_NAMESPACE",
+                "OPENSHIFT_BUILD_REFERENCE",
+            ]
 
         # Ensure custom_env_vars is a dictionary
-        if not isinstance(config.get('custom_env_vars'), dict):
-            config['custom_env_vars'] = {}
+        if not isinstance(config.get("custom_env_vars"), dict):
+            config["custom_env_vars"] = {}
 
         return config
 
     def _has_toolbox(self) -> bool:
         """Check if toolbox is available."""
         try:
-            cmd = ['toolbox', '--help']
+            cmd = ["toolbox", "--help"]
             if self.verbose:
                 click.echo(f"🔍 Checking toolbox: {' '.join(cmd)}")
             subprocess.run(cmd, capture_output=True, check=False, timeout=5)
@@ -114,17 +124,17 @@ class ForgeLauncher:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
-    def _get_container_env(self) -> Dict[str, str]:
+    def _get_container_env(self) -> dict[str, str]:
         """Get environment variables to pass to the container."""
         # Core environment variables (always included)
         env = {
-            'FORGE_HOME': self.config['forge_home'],
-            'PYTHONPATH': self.config['forge_home'],
-            'HOME': os.environ.get('HOME', ''),
+            "FORGE_HOME": self.config["forge_home"],
+            "PYTHONPATH": self.config["forge_home"],
+            "HOME": os.environ.get("HOME", ""),
         }
 
         # Add configurable environment variables (exported from current environment)
-        exported_vars = self.config.get('exported_env_vars', [])
+        exported_vars = self.config.get("exported_env_vars", [])
         if self.verbose:
             click.echo(f"📋 Configured environment variables to export: {exported_vars}")
 
@@ -138,7 +148,7 @@ class ForgeLauncher:
                     click.echo(f"   ⚠️  {var} not found in environment")
 
         # Add custom environment variables (direct key/value pairs)
-        custom_vars = self.config.get('custom_env_vars', {})
+        custom_vars = self.config.get("custom_env_vars", {})
         if custom_vars and self.verbose:
             click.echo(f"📋 Custom environment variables: {list(custom_vars.keys())}")
 
@@ -152,7 +162,7 @@ class ForgeLauncher:
     def _image_exists(self) -> bool:
         """Check if the container image exists."""
         try:
-            cmd = ['podman', 'image', 'exists', self.config['container_image']]
+            cmd = ["podman", "image", "exists", self.config["container_image"]]
             if self.verbose:
                 click.echo(f"🔍 Checking image: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, check=False, timeout=10)
@@ -163,7 +173,13 @@ class ForgeLauncher:
     def _container_exists(self) -> bool:
         """Check if the toolbox container exists."""
         try:
-            cmd = ['podman', 'inspect', '--type', 'container', self.config['forge_toolbox_name']]
+            cmd = [
+                "podman",
+                "inspect",
+                "--type",
+                "container",
+                self.config["forge_toolbox_name"],
+            ]
             if self.verbose:
                 click.echo(f"🔍 Checking container: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, check=False, timeout=10)
@@ -171,13 +187,13 @@ class ForgeLauncher:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
 
-    def _run_toolbox_command(self, command: str, working_dir: Optional[str] = None) -> int:
+    def _run_toolbox_command(self, command: str, working_dir: str | None = None) -> int:
         """Run a command in the toolbox environment."""
         if self.verbose:
             click.echo(f"🔧 Running in container: {command}")
 
         env_vars = self._get_container_env()
-        env_setup = '; '.join(f'export {k}="{v}"' for k, v in env_vars.items() if v)
+        env_setup = "; ".join(f'export {k}="{v}"' for k, v in env_vars.items() if v)
 
         if working_dir:
             full_command = f"cd {working_dir} && {env_setup}; {command}"
@@ -186,36 +202,50 @@ class ForgeLauncher:
 
         if self._has_toolbox():
             cmd = [
-                'toolbox', 'run', '-c', self.config['forge_toolbox_name'],
-                '--', 'bash', '-c', full_command
+                "toolbox",
+                "run",
+                "-c",
+                self.config["forge_toolbox_name"],
+                "--",
+                "bash",
+                "-c",
+                full_command,
             ]
         else:
             # Fallback to podman
             env_args = []
             for k, v in env_vars.items():
                 if v:
-                    env_args.extend(['--env', f'{k}={v}'])
+                    env_args.extend(["--env", f"{k}={v}"])
 
-            forge_home = self.config['forge_home']
-            home = os.environ.get('HOME', '')
+            forge_home = self.config["forge_home"]
+            os.environ.get("HOME", "")
 
-            cmd = [
-                'podman', 'run', '--rm', '-it',
-                '--security-opt', 'label=disable',
-                '--cgroupns', 'host',
-                '--network=host',
-                '-v', f'{forge_home}:{forge_home}:Z',
-                '-w', working_dir or forge_home
-            ] + env_args + [
-                self.config['container_image'],
-                '/bin/bash', '-c', full_command
-            ]
+            cmd = (
+                [
+                    "podman",
+                    "run",
+                    "--rm",
+                    "-it",
+                    "--security-opt",
+                    "label=disable",
+                    "--cgroupns",
+                    "host",
+                    "--network=host",
+                    "-v",
+                    f"{forge_home}:{forge_home}:Z",
+                    "-w",
+                    working_dir or forge_home,
+                ]
+                + env_args
+                + [self.config["container_image"], "/bin/bash", "-c", full_command]
+            )
 
         if self.verbose:
-            click.echo(f"🚀 Executing container command:")
+            click.echo("🚀 Executing container command:")
             click.echo(f"   Command: {' '.join(cmd)}")
             if env_vars:
-                click.echo(f"   Environment variables:")
+                click.echo("   Environment variables:")
                 for k, v in env_vars.items():
                     if v:
                         click.echo(f"      {k}={v}")
@@ -231,13 +261,13 @@ class ForgeLauncher:
             click.echo(f"❌ Command failed: {e}", err=True)
             return 1
 
-    def build_image(self, extra_packages: List[str] = None) -> int:
+    def build_image(self, extra_packages: list[str] = None) -> int:
         """Build the FORGE container image."""
         click.echo("🔨 Building FORGE container image...")
 
-        forge_home = self.config['forge_home']
-        container_file = Path(self.config['container_file'])
-        image_name = self.config['container_image']
+        forge_home = self.config["forge_home"]
+        container_file = Path(self.config["container_file"])
+        image_name = self.config["container_image"]
 
         if not container_file.exists():
             click.echo(f"❌ Containerfile not found at {container_file}", err=True)
@@ -245,10 +275,13 @@ class ForgeLauncher:
 
         # Build base image
         build_cmd = [
-            'podman', 'build',
+            "podman",
+            "build",
             str(forge_home),
-            '-f', str(container_file),
-            '-t', image_name
+            "-f",
+            str(container_file),
+            "-t",
+            image_name,
         ]
 
         if self.verbose:
@@ -262,36 +295,36 @@ class ForgeLauncher:
 
             # Build overlay with extra packages if needed
             packages = extra_packages or []
-            if self.config.get('forge_image_extra_pkg'):
-                packages.extend(self.config['forge_image_extra_pkg'].split())
+            if self.config.get("forge_image_extra_pkg"):
+                packages.extend(self.config["forge_image_extra_pkg"].split())
 
             if packages:
                 overlay_dockerfile = f"""FROM {image_name}
 ENTRYPOINT []
 CMD []
 USER 0
-RUN dnf install -y --quiet {' '.join(packages)}
+RUN dnf install -y --quiet {" ".join(packages)}
 USER 1001
 """
                 overlay_cmd = [
-                    'podman', 'build',
-                    '--tag', image_name,
-                    '--from', image_name,
-                    '--file', '-'
+                    "podman",
+                    "build",
+                    "--tag",
+                    image_name,
+                    "--from",
+                    image_name,
+                    "--file",
+                    "-",
                 ]
 
                 if self.verbose:
                     click.echo(f"🔨 Executing overlay build: {' '.join(overlay_cmd)}")
-                    click.echo(f"📝 Overlay Dockerfile:")
-                    for line in overlay_dockerfile.split('\n'):
+                    click.echo("📝 Overlay Dockerfile:")
+                    for line in overlay_dockerfile.split("\n"):
                         if line.strip():
                             click.echo(f"   {line}")
 
-                overlay_proc = subprocess.Popen(
-                    overlay_cmd,
-                    stdin=subprocess.PIPE,
-                    text=True
-                )
+                overlay_proc = subprocess.Popen(overlay_cmd, stdin=subprocess.PIPE, text=True)
                 overlay_proc.communicate(overlay_dockerfile)
 
                 if overlay_proc.returncode != 0:
@@ -307,15 +340,15 @@ USER 1001
 
     def recreate_container(self) -> int:
         """Recreate the toolbox container."""
-        container_name = self.config['forge_toolbox_name']
-        image_name = self.config['container_image']
+        container_name = self.config["forge_toolbox_name"]
+        image_name = self.config["container_image"]
 
         click.echo(f"♻️  Recreating container: {container_name}")
 
         # Stop and remove existing container
         try:
-            stop_cmd = ['podman', 'stop', container_name]
-            rm_cmd = ['podman', 'rm', container_name]
+            stop_cmd = ["podman", "stop", container_name]
+            rm_cmd = ["podman", "rm", container_name]
 
             if self.verbose:
                 click.echo(f"🛑 Executing: {' '.join(stop_cmd)}")
@@ -329,16 +362,21 @@ USER 1001
 
         # Create new container
         if self._has_toolbox():
-            cmd = ['toolbox', 'create', container_name, '--image', image_name]
+            cmd = ["toolbox", "create", container_name, "--image", image_name]
         else:
-            forge_home = self.config['forge_home']
+            forge_home = self.config["forge_home"]
             cmd = [
-                'podman', 'run',
-                '--name', container_name,
-                '-v', f'{forge_home}:/forge',
-                '--detach', '--tty',
-                '--entrypoint', '/bin/bash',
-                image_name
+                "podman",
+                "run",
+                "--name",
+                container_name,
+                "-v",
+                f"{forge_home}:/forge",
+                "--detach",
+                "--tty",
+                "--entrypoint",
+                "/bin/bash",
+                image_name,
             ]
 
         if self.verbose:
@@ -357,21 +395,21 @@ USER 1001
 
 
 @click.group()
-@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
+@click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 @click.pass_context
 def cli(ctx, verbose):
     """FORGE Development Environment Launcher."""
     ctx.ensure_object(dict)
-    ctx.obj['verbose'] = verbose
-    ctx.obj['launcher'] = ForgeLauncher(verbose)
+    ctx.obj["verbose"] = verbose
+    ctx.obj["launcher"] = ForgeLauncher(verbose)
 
 
 @cli.command()
-@click.option('--extra-packages', '-p', multiple=True, help='Extra packages to install')
+@click.option("--extra-packages", "-p", multiple=True, help="Extra packages to install")
 @click.pass_context
 def build(ctx, extra_packages):
     """Build the FORGE container image."""
-    launcher = ctx.obj['launcher']
+    launcher = ctx.obj["launcher"]
     sys.exit(launcher.build_image(list(extra_packages)))
 
 
@@ -379,30 +417,30 @@ def build(ctx, extra_packages):
 @click.pass_context
 def recreate(ctx):
     """Recreate the FORGE toolbox container."""
-    launcher = ctx.obj['launcher']
+    launcher = ctx.obj["launcher"]
     sys.exit(launcher.recreate_container())
 
 
 @cli.command()
-@click.argument('command', required=False)
-@click.argument('args', nargs=-1)
-@click.option('--here', is_flag=True, help='Stay in current directory')
+@click.argument("command", required=False)
+@click.argument("args", nargs=-1)
+@click.option("--here", is_flag=True, help="Stay in current directory")
 @click.pass_context
 def enter(ctx, command, args, here):
     """Enter the FORGE development environment."""
-    launcher = ctx.obj['launcher']
+    launcher = ctx.obj["launcher"]
 
     if command:
         full_command = f"{command} {' '.join(args)}"
     elif here:
-        full_command = launcher.config['forge_toolbox_command']
+        full_command = launcher.config["forge_toolbox_command"]
         working_dir = os.getcwd()
     else:
-        full_command = launcher.config['forge_toolbox_command']
-        working_dir = launcher.config['forge_home']
+        full_command = launcher.config["forge_toolbox_command"]
+        working_dir = launcher.config["forge_home"]
 
     if not here and not command:
-        working_dir = launcher.config['forge_home']
+        working_dir = launcher.config["forge_home"]
     else:
         working_dir = os.getcwd() if here else None
 
@@ -410,24 +448,24 @@ def enter(ctx, command, args, here):
 
 
 @cli.command()
-@click.argument('args', nargs=-1)
+@click.argument("args", nargs=-1)
 @click.pass_context
 def run(ctx, args):
     """Run FORGE's main run command in the container."""
-    launcher = ctx.obj['launcher']
+    launcher = ctx.obj["launcher"]
     command = f"./run {' '.join(args)}"
-    working_dir = launcher.config['forge_home']
+    working_dir = launcher.config["forge_home"]
     sys.exit(launcher._run_toolbox_command(command, working_dir))
 
 
 @cli.command()
-@click.argument('args', nargs=-1)
+@click.argument("args", nargs=-1)
 @click.pass_context
 def run_cmd(ctx, args):
     """Run FORGE's run_toolbox.py command in the container."""
-    launcher = ctx.obj['launcher']
+    launcher = ctx.obj["launcher"]
     command = f"./run_toolbox.py {' '.join(args)}"
-    working_dir = launcher.config['forge_home']
+    working_dir = launcher.config["forge_home"]
     sys.exit(launcher._run_toolbox_command(command, working_dir))
 
 
@@ -435,7 +473,7 @@ def run_cmd(ctx, args):
 @click.pass_context
 def status(ctx):
     """Show status of FORGE development environment."""
-    launcher = ctx.obj['launcher']
+    launcher = ctx.obj["launcher"]
 
     click.echo("📊 FORGE Development Environment Status:")
     click.echo()
@@ -447,30 +485,30 @@ def status(ctx):
         click.echo("🔧 Toolbox: ❌ Not available (using podman fallback)")
 
     # Check forge_home
-    forge_home = Path(launcher.config['forge_home'])
+    forge_home = Path(launcher.config["forge_home"])
     if forge_home.exists():
         click.echo(f"📁 forge_home: ✅ Found at {forge_home}")
     else:
         click.echo(f"📁 forge_home: ❌ Not found at {forge_home}")
 
     # Check container image
-    image_name = launcher.config['container_image']
+    image_name = launcher.config["container_image"]
     if launcher._image_exists():
         click.echo(f"📦 Container Image: ✅ {image_name} available")
     else:
         click.echo(f"📦 Container Image: ❌ {image_name} not found")
-        click.echo(f"   💡 Run 'build' to create the image")
+        click.echo("   💡 Run 'build' to create the image")
 
     # Check container
-    container_name = launcher.config['forge_toolbox_name']
+    container_name = launcher.config["forge_toolbox_name"]
     if launcher._container_exists():
         click.echo(f"🏗️  Container: ✅ {container_name} exists")
     else:
         click.echo(f"🏗️  Container: ❌ {container_name} not found")
-        click.echo(f"   💡 Run 'recreate' to create the container")
+        click.echo("   💡 Run 'recreate' to create the container")
 
     # Check Containerfile
-    containerfile = Path(launcher.config['container_file'])
+    containerfile = Path(launcher.config["container_file"])
     if containerfile.exists():
         click.echo(f"🐳 Containerfile: ✅ Found at {containerfile}")
     else:
@@ -479,11 +517,7 @@ def status(ctx):
     click.echo()
 
     # Overall readiness check
-    ready = (
-        forge_home.exists() and
-        launcher._image_exists() and
-        launcher._container_exists()
-    )
+    ready = forge_home.exists() and launcher._image_exists() and launcher._container_exists()
 
     if ready:
         click.echo("🚀 Status: ✅ Ready for development!")
@@ -491,37 +525,54 @@ def status(ctx):
     else:
         click.echo("⚠️  Status: ❌ Setup required")
         if not forge_home.exists():
-            click.echo(f"   📝 Set forge_home: config --set forge_home /path/to/forge")
+            click.echo("   📝 Set forge_home: config --set forge_home /path/to/forge")
         if not launcher._image_exists():
-            click.echo(f"   🔨 Build image: build")
+            click.echo("   🔨 Build image: build")
         if not launcher._container_exists():
-            click.echo(f"   ♻️  Create container: recreate")
+            click.echo("   ♻️  Create container: recreate")
 
 
 @cli.command()
-@click.option('--set', 'set_config', nargs=2, metavar='KEY VALUE', help='Set a configuration value')
-@click.option('--set-env', 'set_env', nargs=2, metavar='VAR VALUE', help='Set a custom environment variable')
-@click.option('--pass-env', 'pass_env', metavar='VAR', help='Add environment variable to exported list')
-@click.option('--edit', is_flag=True, help='Edit configuration file with $EDITOR')
+@click.option(
+    "--set",
+    "set_config",
+    nargs=2,
+    metavar="KEY VALUE",
+    help="Set a configuration value",
+)
+@click.option(
+    "--set-env",
+    "set_env",
+    nargs=2,
+    metavar="VAR VALUE",
+    help="Set a custom environment variable",
+)
+@click.option(
+    "--pass-env",
+    "pass_env",
+    metavar="VAR",
+    help="Add environment variable to exported list",
+)
+@click.option("--edit", is_flag=True, help="Edit configuration file with $EDITOR")
 @click.pass_context
 def config(ctx, set_config, set_env, pass_env, edit):
     """Show current configuration, set values, manage environment variables, or edit the config file."""
-    launcher = ctx.obj['launcher']
+    launcher = ctx.obj["launcher"]
 
     if edit:
         # Edit configuration file with $EDITOR
-        editor = os.environ.get('EDITOR', 'nano')  # Default to nano if EDITOR not set
+        editor = os.environ.get("EDITOR", "nano")  # Default to nano if EDITOR not set
 
         # Create config file if it doesn't exist
         if not CONFIG_FILE.exists():
             CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(CONFIG_FILE, 'w') as f:
+            with open(CONFIG_FILE, "w") as f:
                 yaml.dump({}, f)
 
         try:
             result = subprocess.run([editor, str(CONFIG_FILE)])
             if result.returncode == 0:
-                click.echo(f"✅ Configuration file edited successfully")
+                click.echo("✅ Configuration file edited successfully")
             else:
                 click.echo(f"⚠️  Editor exited with code {result.returncode}")
         except Exception as e:
@@ -534,16 +585,16 @@ def config(ctx, set_config, set_env, pass_env, edit):
         config = {}
         if CONFIG_FILE.exists():
             try:
-                with open(CONFIG_FILE, 'r') as f:
+                with open(CONFIG_FILE) as f:
                     config = yaml.safe_load(f) or {}
             except Exception:
                 config = {}
 
         # Ensure custom_env_vars and exported_env_vars exist in config
-        if 'custom_env_vars' not in config:
-            config['custom_env_vars'] = {}
-        if 'exported_env_vars' not in config:
-            config['exported_env_vars'] = []
+        if "custom_env_vars" not in config:
+            config["custom_env_vars"] = {}
+        if "exported_env_vars" not in config:
+            config["exported_env_vars"] = []
 
         success_msg = ""
 
@@ -554,8 +605,14 @@ def config(ctx, set_config, set_env, pass_env, edit):
             # Validate that the key exists in the current config schema
             if key not in launcher.config:
                 valid_keys = list(launcher.config.keys())
-                click.echo(f"❌ Invalid config key '{key}'. Valid keys are: {', '.join(sorted(valid_keys))}", err=True)
-                click.echo(f"💡 For environment variables, use: config --set-env {key} {value}", err=True)
+                click.echo(
+                    f"❌ Invalid config key '{key}'. Valid keys are: {', '.join(sorted(valid_keys))}",
+                    err=True,
+                )
+                click.echo(
+                    f"💡 For environment variables, use: config --set-env {key} {value}",
+                    err=True,
+                )
                 sys.exit(1)
 
             config[key] = value
@@ -564,13 +621,13 @@ def config(ctx, set_config, set_env, pass_env, edit):
         if set_env:
             # Set custom environment variable
             var, value = set_env
-            config['custom_env_vars'][var] = value
+            config["custom_env_vars"][var] = value
             success_msg = f"✅ Set environment variable {var} = {value}"
 
         if pass_env:
             # Add environment variable to exported list
-            if pass_env not in config['exported_env_vars']:
-                config['exported_env_vars'].append(pass_env)
+            if pass_env not in config["exported_env_vars"]:
+                config["exported_env_vars"].append(pass_env)
                 success_msg = f"✅ Added {pass_env} to exported environment variables"
             else:
                 success_msg = f"ℹ️  {pass_env} is already in exported environment variables"
@@ -578,7 +635,7 @@ def config(ctx, set_config, set_env, pass_env, edit):
         # Save config
         try:
             CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(CONFIG_FILE, 'w') as f:
+            with open(CONFIG_FILE, "w") as f:
                 yaml.dump(config, f, indent=2, default_flow_style=False)
             click.echo(success_msg)
         except Exception as e:
@@ -591,21 +648,23 @@ def config(ctx, set_config, set_env, pass_env, edit):
         click.echo()
 
         for key, value in launcher.config.items():
-            if key == 'custom_env_vars' and isinstance(value, dict):
+            if key == "custom_env_vars" and isinstance(value, dict):
                 click.echo(f"  {key}:")
                 if value:
                     for env_var, env_value in value.items():
                         click.echo(f"    {env_var}: {env_value}")
                 else:
-                    click.echo(f"    (none)")
+                    click.echo("    (none)")
             else:
                 click.echo(f"  {key}: {value}")
 
         click.echo()
-        click.echo(f"🔧 Toolbox available: {'✅ Yes' if launcher._has_toolbox() else '❌ No (using podman)'}")
+        click.echo(
+            f"🔧 Toolbox available: {'✅ Yes' if launcher._has_toolbox() else '❌ No (using podman)'}"
+        )
 
         # Check if FORGE_HOME exists
-        forge_home = Path(launcher.config['forge_home'])
+        forge_home = Path(launcher.config["forge_home"])
         if forge_home.exists():
             click.echo(f"📁 FORGE_HOME: ✅ Found at {forge_home}")
         else:
@@ -619,6 +678,5 @@ def config(ctx, set_config, set_env, pass_env, edit):
         click.echo("   config --edit                                   # Edit config file")
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     cli()

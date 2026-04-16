@@ -1,13 +1,10 @@
-import datetime
-import logging
-import sys
-
 from projects.legacy.library.ansible_toolbox import (
-    RunAnsibleRole, AnsibleRole,
-    AnsibleMappedParams, AnsibleConstant,
-    AnsibleSkipConfigGeneration,
     AnsibleGatherFacts,
+    AnsibleMappedParams,
+    AnsibleRole,
+    RunAnsibleRole,
 )
+
 
 class Jump_Ci:
     """
@@ -26,11 +23,10 @@ class Jump_Ci:
           owner: name of the lock owner
         """
 
-        if not cluster: # don't accept the empty string value
+        if not cluster:  # don't accept the empty string value
             raise ValueError("--cluster must be set")
 
         return RunAnsibleRole(locals())
-
 
     @AnsibleRole("jump_ci_ensure_lock")
     @AnsibleMappedParams
@@ -45,7 +41,7 @@ class Jump_Ci:
           check_kubeconfig: if enabled, ensure that the cluster's kubeconfig file exists
         """
 
-        if not cluster: # don't accept the empty string value
+        if not cluster:  # don't accept the empty string value
             raise ValueError("--cluster must be set")
 
         return RunAnsibleRole(locals())
@@ -62,7 +58,7 @@ class Jump_Ci:
           owner: name of the lock owner
         """
 
-        if not cluster: # don't accept the empty string value
+        if not cluster:  # don't accept the empty string value
             raise ValueError("--cluster must be set")
 
         return RunAnsibleRole(locals())
@@ -71,18 +67,18 @@ class Jump_Ci:
     @AnsibleMappedParams
     @AnsibleGatherFacts
     def prepare_topsail(
-            self,
-            cluster,
-            lock_owner,
-            pr_number=None,
-            repo_owner="openshift-psap",
-            repo_name="topsail-ng",
-            git_ref=None,
-            image_name=None,
-            image_tag=None,
-            dockerfile_name="projects/core/image/Containerfile",
-            update_from_imagetag="main",
-            cleanup_old_pr_images=True,
+        self,
+        cluster,
+        lock_owner,
+        pr_number=None,
+        repo_owner="openshift-psap",
+        repo_name="topsail-ng",
+        git_ref=None,
+        image_name=None,
+        image_tag=None,
+        dockerfile_name="projects/core/image/Containerfile",
+        update_from_imagetag="main",
+        cleanup_old_pr_images=True,
     ):
         """
         Prepares the jump host for running TOPSAIL:
@@ -106,7 +102,7 @@ class Jump_Ci:
         if not image_name:
             image_name = f"localhost/{repo_name}"
 
-        if not cluster: # don't accept the empty string value
+        if not cluster:  # don't accept the empty string value
             raise ValueError("--cluster must be set")
 
         return RunAnsibleRole(locals())
@@ -115,14 +111,14 @@ class Jump_Ci:
     @AnsibleMappedParams
     @AnsibleGatherFacts
     def prepare_step(
-            self,
-            cluster,
-            lock_owner,
-            project,
-            step,
-            env_file,
-            variables_overrides_dict,
-            secrets_path_env_key=None,
+        self,
+        cluster,
+        lock_owner,
+        project,
+        step,
+        env_file,
+        variables_overrides_dict,
+        secrets_path_env_key=None,
     ):
         """
         Prepares the jump host for running a CI test step:
@@ -137,10 +133,10 @@ class Jump_Ci:
           secrets_path_env_key: If provided, the env key will be used to locate the secret directories to upload to the jump host
         """
 
-        if not cluster: # don't accept the empty string value/None
+        if not cluster:  # don't accept the empty string value/None
             raise ValueError("--cluster must be set")
 
-        if not project: # don't accept the empty string value/None
+        if not project:  # don't accept the empty string value/None
             raise ValueError("--project must be set")
 
         return RunAnsibleRole(locals())
@@ -149,12 +145,12 @@ class Jump_Ci:
     @AnsibleMappedParams
     @AnsibleGatherFacts
     def retrieve_artifacts(
-            self,
-            cluster,
-            lock_owner,
-            remote_dir,
-            local_dir="artifacts",
-            skip_cluster_lock=False
+        self,
+        cluster,
+        lock_owner,
+        remote_dir,
+        local_dir="artifacts",
+        skip_cluster_lock=False,
     ):
         """
         Prepares the jump host for running a CI test step:
@@ -167,7 +163,7 @@ class Jump_Ci:
           skip_cluster_lock: if True, skip the cluster is lock check (eg, when included from another role).
         """
 
-        if not cluster: # don't accept the empty string value
+        if not cluster:  # don't accept the empty string value
             raise ValueError("--cluster must be set")
 
         return RunAnsibleRole(locals())

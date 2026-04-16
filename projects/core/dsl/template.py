@@ -5,14 +5,21 @@ This module provides helpers for loading and rendering Jinja2 templates
 in FORGE toolbox tasks.
 """
 
-import jinja2
 import inspect
-import yaml
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
+
+import jinja2
+import yaml
+
 from .log import logger
 
-def render_template(template_name: str, context: Optional[Dict[str, Any]] = None, templates_dir: Optional[Path] = None) -> str:
+
+def render_template(
+    template_name: str,
+    context: dict[str, Any] | None = None,
+    templates_dir: Path | None = None,
+) -> str:
     """
     Render a Jinja2 template with the given context
 
@@ -52,12 +59,12 @@ def render_template(template_name: str, context: Optional[Dict[str, Any]] = None
 
             # Check if this frame looks like a task (has args and context/ctx)
             context_var = None
-            if 'context' in local_vars:
-                context_var = local_vars['context']
-            elif 'ctx' in local_vars:
-                context_var = local_vars['ctx']
+            if "context" in local_vars:
+                context_var = local_vars["context"]
+            elif "ctx" in local_vars:
+                context_var = local_vars["ctx"]
 
-            if 'args' in local_vars and context_var is not None:
+            if "args" in local_vars and context_var is not None:
                 # This looks like a task frame - use its file location
                 caller_file = Path(frame.f_code.co_filename)
                 templates_dir = caller_file.parent / "templates"
@@ -76,11 +83,11 @@ def render_template(template_name: str, context: Optional[Dict[str, Any]] = None
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(templates_dir),
         # Enable auto-escaping for security (though we're generating YAML, not HTML)
-        autoescape=jinja2.select_autoescape(['html', 'xml']),
+        autoescape=jinja2.select_autoescape(["html", "xml"]),
         # Raise errors for undefined variables instead of silently ignoring
         undefined=jinja2.StrictUndefined,
         # Keep line endings consistent
-        keep_trailing_newline=True
+        keep_trailing_newline=True,
     )
 
     # Add custom YAML filter
@@ -90,29 +97,31 @@ def render_template(template_name: str, context: Optional[Dict[str, Any]] = None
         if default_flow_style is None:
             default_flow_style = flow_style
 
-        yaml_output = yaml.dump(value, default_flow_style=default_flow_style, sort_keys=False).rstrip()
+        yaml_output = yaml.dump(
+            value, default_flow_style=default_flow_style, sort_keys=False
+        ).rstrip()
 
         if indent_by > 0:
             # Add indentation to each line except the first
-            lines = yaml_output.split('\n')
+            lines = yaml_output.split("\n")
             if len(lines) > 1:
                 indented_lines = [lines[0]]  # First line keeps original indentation
                 for line in lines[1:]:
                     if line.strip():  # Don't indent empty lines
-                        indented_lines.append(' ' * indent_by + line)
+                        indented_lines.append(" " * indent_by + line)
                     else:
                         indented_lines.append(line)
-                yaml_output = '\n'.join(indented_lines)
+                yaml_output = "\n".join(indented_lines)
 
         return yaml_output
 
-    env.filters['toyaml'] = toyaml_filter
+    env.filters["toyaml"] = toyaml_filter
 
     try:
         template = env.get_template(template_name)
         return template.render(context)
     except jinja2.TemplateNotFound as e:
-        available_templates = [t for t in templates_dir.glob("*.j2")]
+        available_templates = list(templates_dir.glob("*.j2"))
         raise FileNotFoundError(
             f"Template '{template_name}' not found in {templates_dir}. "
             f"Available templates: {[t.name for t in available_templates]}"
@@ -121,7 +130,7 @@ def render_template(template_name: str, context: Optional[Dict[str, Any]] = None
         raise RuntimeError(f"Template rendering error in '{template_name}': {e}") from e
 
 
-def _get_task_context() -> Dict[str, Any]:
+def _get_task_context() -> dict[str, Any]:
     """
     Auto-detect args and context from the calling task function
 
@@ -143,25 +152,25 @@ def _get_task_context() -> Dict[str, Any]:
 
         # Check if this frame has both 'args' and 'context'/'ctx' - indicates it's a task
         context_var = None
-        if 'context' in local_vars:
-            context_var = local_vars['context']
-        elif 'ctx' in local_vars:
-            context_var = local_vars['ctx']
+        if "context" in local_vars:
+            context_var = local_vars["context"]
+        elif "ctx" in local_vars:
+            context_var = local_vars["ctx"]
 
-        if 'args' in local_vars and context_var is not None:
-            return {
-                'args': local_vars['args'],
-                'ctx': context_var
-            }
+        if "args" in local_vars and context_var is not None:
+            return {"args": local_vars["args"], "ctx": context_var}
 
     # If we can't find args and context, return empty dict
     # This allows the function to work even outside of tasks
     return {}
 
 
-def render_template_to_file(template_name: str, output_file: Path,
-                           extra_context: Optional[Dict[str, Any]] = None,
-                           templates_dir: Optional[Path] = None) -> Path:
+def render_template_to_file(
+    template_name: str,
+    output_file: Path,
+    extra_context: dict[str, Any] | None = None,
+    templates_dir: Path | None = None,
+) -> Path:
     """
     Render a template directly to a file with automatic args/context detection
 
@@ -195,13 +204,13 @@ def render_template_to_file(template_name: str, output_file: Path,
 
     rendered_content = render_template(template_name, context, templates_dir)
 
-    with open(output_file, 'w') as f:
+    with open(output_file, "w") as f:
         f.write(rendered_content)
 
     return output_file
 
 
-def get_templates_dir(relative_to_file: Optional[str] = None) -> Path:
+def get_templates_dir(relative_to_file: str | None = None) -> Path:
     """
     Get the templates directory relative to a file
 
@@ -222,7 +231,7 @@ def get_templates_dir(relative_to_file: Optional[str] = None) -> Path:
     return Path(relative_to_file).parent / "templates"
 
 
-def list_templates(templates_dir: Optional[Path] = None) -> list[str]:
+def list_templates(templates_dir: Path | None = None) -> list[str]:
     """
     List available templates in a directory
 

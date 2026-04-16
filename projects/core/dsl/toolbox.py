@@ -6,24 +6,26 @@ Provides common functionality for toolbox command entry points,
 including argument parsing, environment setup, and error handling.
 """
 
-import sys
-import logging
 import inspect
+import logging
 import subprocess
-from typing import Callable, List, Optional
+import sys
 import traceback
+from collections.abc import Callable
+
 import yaml
 
 from projects.core.library import env
+
 from .cli import create_dynamic_parser
 from .runtime import TaskExecutionError
 
 # Configure clean logging for DSL toolbox
-logger = logging.getLogger('DSL')
+logger = logging.getLogger("DSL")
 logger.propagate = False  # Don't show logger prefix
 
 
-def _get_positional_args(func: Callable) -> List[str]:
+def _get_positional_args(func: Callable) -> list[str]:
     """
     Introspect a function to determine which parameters should be positional.
 
@@ -36,7 +38,10 @@ def _get_positional_args(func: Callable) -> List[str]:
     for param_name, param in sig.parameters.items():
         if param.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD:
             positional_args.append(param_name)
-        elif param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.KEYWORD_ONLY):
+        elif param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.KEYWORD_ONLY,
+        ):
             # Stop collecting once we hit * or keyword-only parameters
             break
 
@@ -58,10 +63,7 @@ def run_toolbox_command(command_func: Callable) -> None:
     positional_args = _get_positional_args(command_func)
 
     # Create parser dynamically from function signature
-    parser = create_dynamic_parser(
-        command_func,
-        positional_args=positional_args
-    )
+    parser = create_dynamic_parser(command_func, positional_args=positional_args)
     args = parser.parse_args()
 
     # Convert args to kwargs for function call
@@ -93,12 +95,11 @@ def run_toolbox_command(command_func: Callable) -> None:
 def get_task_execution_error(e):
     def clean_args(value):
         import pathlib
+
         # Convert PosixPath objects to strings for YAML serialization
         cleaned_args = {}
         for k, v in value.items():
-            cleaned_args[k] = str(v) \
-                if isinstance(v, pathlib.Path) \
-                   else v
+            cleaned_args[k] = str(v) if isinstance(v, pathlib.Path) else v
         return cleaned_args
 
     yield "x" * 80
@@ -106,17 +107,24 @@ def get_task_execution_error(e):
     yield f"~~ TASK: {e.task_name}: {e.task_description}"
     yield f"~~ ARTIFACT_DIR: {e.artifact_dir}"
     yield f"~~ LOG_FILE: {e.artifact_dir}/task.log"
-    yield f"~~ ARGS:"
-    for line in yaml.dump(clean_args(e.task_args), default_flow_style=False, sort_keys=False).splitlines():
+    yield "~~ ARGS:"
+    for line in yaml.dump(
+        clean_args(e.task_args), default_flow_style=False, sort_keys=False
+    ).splitlines():
         yield f"~~     {line}"
-    yield f"~~ CONTEXT:"
-    for line in yaml.dump(clean_args(e.task_context), default_flow_style=False, sort_keys=False).splitlines():
+    yield "~~ CONTEXT:"
+    for line in yaml.dump(
+        clean_args(e.task_context), default_flow_style=False, sort_keys=False
+    ).splitlines():
         yield f"~~     {line}"
     yield "~~"
     yield f"~~ EXCEPTION: {e.original_exception.__class__.__name__}"
 
     # Use enhanced error message for CalledProcessError if available
-    if isinstance(e.original_exception, subprocess.CalledProcessError) and e.original_exception.args:
+    if (
+        isinstance(e.original_exception, subprocess.CalledProcessError)
+        and e.original_exception.args
+    ):
         yield f"~~     {e.original_exception.args[0]}"
     else:
         yield f"~~     {e.original_exception}"
@@ -145,6 +153,7 @@ def create_toolbox_main(command_func: Callable) -> Callable:
         if __name__ == "__main__":
             main()
     """
+
     def main():
         """CLI entrypoint with dynamic argument discovery"""
         run_toolbox_command(command_func)

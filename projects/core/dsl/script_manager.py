@@ -4,15 +4,14 @@ ScriptManager - Task registry and state management for DSL framework
 Provides clean separation between task definitions and execution state.
 """
 
-from typing import Dict, List, Optional
-from pathlib import Path
 import logging
 
-logger = logging.getLogger('DSL')
+logger = logging.getLogger("DSL")
 
 
 class TaskResult:
     """Container for task results that can be referenced in conditions"""
+
     def __init__(self, task_name: str):
         self.task_name = task_name
         self._result = None
@@ -38,9 +37,9 @@ class ScriptManager:
 
     def __init__(self):
         # Task registry organized by source file path
-        self._task_registry: Dict[str, List[dict]] = {}
+        self._task_registry: dict[str, list[dict]] = {}
         # Task results organized by task name
-        self._task_results: Dict[str, TaskResult] = {}
+        self._task_results: dict[str, TaskResult] = {}
 
     def register_task(self, task_info: dict, source_file: str) -> None:
         """
@@ -56,17 +55,16 @@ class ScriptManager:
         self._task_registry[source_file].append(task_info)
 
         # Create result container for this task
-        task_name = task_info['name']
+        task_name = task_info["name"]
         self._task_results[task_name] = TaskResult(task_name)
 
         logger.debug(f"Registered task '{task_name}' from {source_file}")
 
-    def get_task_result(self, task_name: str) -> Optional[TaskResult]:
+    def get_task_result(self, task_name: str) -> TaskResult | None:
         """Get the result container for a specific task"""
         return self._task_results.get(task_name)
 
-
-    def get_tasks_from_file(self, source_file: str) -> List[dict]:
+    def get_tasks_from_file(self, source_file: str) -> list[dict]:
         """
         Get tasks from a specific source file
 
@@ -78,7 +76,7 @@ class ScriptManager:
         """
         return self._task_registry.get(source_file, [])
 
-    def clear_tasks(self, source_file: Optional[str] = None) -> None:
+    def clear_tasks(self, source_file: str | None = None) -> None:
         """
         Clear tasks from registry
 
@@ -98,7 +96,7 @@ class ScriptManager:
 
                 # Clear task results for tasks from this file
                 for task_info in tasks_to_remove:
-                    task_name = task_info['name']
+                    task_name = task_info["name"]
                     if task_name in self._task_results:
                         del self._task_results[task_name]
 
@@ -106,17 +104,14 @@ class ScriptManager:
                 del self._task_registry[source_file]
                 logger.debug(f"Cleared {len(tasks_to_remove)} tasks from {source_file}")
 
-    def get_registry_summary(self) -> Dict[str, int]:
+    def get_registry_summary(self) -> dict[str, int]:
         """
         Get a summary of the current task registry
 
         Returns:
             Dictionary mapping source files to task counts
         """
-        return {
-            file_path: len(tasks)
-            for file_path, tasks in self._task_registry.items()
-        }
+        return {file_path: len(tasks) for file_path, tasks in self._task_registry.items()}
 
     def has_tasks(self) -> bool:
         """Check if any tasks are registered"""

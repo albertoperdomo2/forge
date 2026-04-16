@@ -1,21 +1,24 @@
-import sys, os, signal
-import traceback
-import logging
-logging.getLogger().setLevel(logging.INFO)
-import json
-import signal
 import itertools
+import json
+import logging
+import os
 import pathlib
-
+import signal
 import subprocess
+import sys
+import traceback
 
 try:
     import joblib
 except ImportError:
-    logging.warning("Joblib package not available. Won't run jobs with multiple Parallel processes.")
+    logging.warning(
+        "Joblib package not available. Won't run jobs with multiple Parallel processes."
+    )
     joblib = None
 
-from . import env, config
+from . import config, env
+
+logging.getLogger().setLevel(logging.INFO)
 
 FORGE_HOME = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 
@@ -35,13 +38,27 @@ class SignalError(SystemExit):
     def __str__(self):
         return f"SignalError(sig={self.sig})"
 
+
 def raise_signal(sig, frame):
     raise SignalError(sig, frame)
+
+
 signal.signal(signal.SIGINT, raise_signal)
 signal.signal(signal.SIGTERM, raise_signal)
 
 
-def run_toolbox_from_config(group, command, prefix=None, suffix=None, show_args=None, extra=None, artifact_dir_suffix=None, mute_stdout=False, check=True, run_kwargs=None):
+def run_toolbox_from_config(
+    group,
+    command,
+    prefix=None,
+    suffix=None,
+    show_args=None,
+    extra=None,
+    artifact_dir_suffix=None,
+    mute_stdout=False,
+    check=True,
+    run_kwargs=None,
+):
     if extra is None:
         extra = {}
 
@@ -50,7 +67,7 @@ def run_toolbox_from_config(group, command, prefix=None, suffix=None, show_args=
 
     run_kwargs["cwd"] = str(FORGE_HOME)
 
-    kwargs = dict()
+    kwargs = {}
     if prefix is not None:
         kwargs["prefix"] = prefix
     if suffix is not None:
@@ -72,24 +89,36 @@ def run_toolbox_from_config(group, command, prefix=None, suffix=None, show_args=
 
     cmd_env = " ".join(env_vals)
 
-    return run(f'{cmd_env} bin/run_toolbox.py from_config {group} {command} {_dict_to_run_toolbox_args(kwargs)}', **run_kwargs)
+    return run(
+        f"{cmd_env} bin/run_toolbox.py from_config {group} {command} {_dict_to_run_toolbox_args(kwargs)}",
+        **run_kwargs,
+    )
 
 
 def _dict_to_run_toolbox_args(args_dict):
     args = []
     for k, v in args_dict.items():
         if isinstance(v, dict) or isinstance(v, list):
-            val = json.dumps(v)
-            arg = f"--{k}=\"{v}\""
+            json.dumps(v)
+            arg = f'--{k}="{v}"'
         else:
-            val = str(v).replace("'", "\'")
+            str(v).replace("'", "'")
             arg = f"--{k}='{v}'"
         args.append(arg)
 
     return " ".join(args)
 
 
-def run_toolbox(group, command, artifact_dir_suffix=None, run_kwargs=None, mute_stdout=None, mute_stderr=None, check=None, **kwargs):
+def run_toolbox(
+    group,
+    command,
+    artifact_dir_suffix=None,
+    run_kwargs=None,
+    mute_stdout=None,
+    mute_stderr=None,
+    check=None,
+    **kwargs,
+):
     if run_kwargs is None:
         run_kwargs = {}
 
@@ -110,10 +139,24 @@ def run_toolbox(group, command, artifact_dir_suffix=None, run_kwargs=None, mute_
 
     run_kwargs["cwd"] = str(FORGE_HOME)
 
-    return run(f'{cmd_env} bin/run_toolbox.py {group} {command} {_dict_to_run_toolbox_args(kwargs)}', **run_kwargs)
+    return run(
+        f"{cmd_env} bin/run_toolbox.py {group} {command} {_dict_to_run_toolbox_args(kwargs)}",
+        **run_kwargs,
+    )
 
 
-def run(command, capture_stdout=False, capture_stderr=False, check=True, protect_shell=True, cwd=None, stdin_file=None, log_command=True, decode_stdout=True, decode_stderr=True):
+def run(
+    command,
+    capture_stdout=False,
+    capture_stderr=False,
+    check=True,
+    protect_shell=True,
+    cwd=None,
+    stdin_file=None,
+    log_command=True,
+    decode_stdout=True,
+    decode_stderr=True,
+):
     if log_command:
         logging.info(f"run: {command}")
 
@@ -122,9 +165,12 @@ def run(command, capture_stdout=False, capture_stderr=False, check=True, protect
     args["cwd"] = cwd
     args["shell"] = True
 
-    if capture_stdout: args["stdout"] = subprocess.PIPE
-    if capture_stderr: args["stderr"] = subprocess.PIPE
-    if check: args["check"] = True
+    if capture_stdout:
+        args["stdout"] = subprocess.PIPE
+    if capture_stderr:
+        args["stderr"] = subprocess.PIPE
+    if check:
+        args["check"] = True
     if stdin_file:
         if not hasattr(stdin_file, "fileno"):
             raise ValueError("Argument 'stdin_file' must be an open file (with a file descriptor)")
@@ -135,12 +181,15 @@ def run(command, capture_stdout=False, capture_stderr=False, check=True, protect
 
     proc = subprocess.run(command, **args)
 
-    if capture_stdout and decode_stdout: proc.stdout = proc.stdout.decode("utf8")
-    if capture_stderr and decode_stderr: proc.stderr = proc.stderr.decode("utf8")
+    if capture_stdout and decode_stdout:
+        proc.stdout = proc.stdout.decode("utf8")
+    if capture_stderr and decode_stderr:
+        proc.stderr = proc.stderr.decode("utf8")
 
     return proc
 
-class Parallel(object):
+
+class Parallel:
     def __init__(self, name, exit_on_exception=True, dedicated_dir=True):
         self.name = name
         self.parallel_tasks = None
@@ -153,20 +202,21 @@ class Parallel(object):
         return self
 
     def delayed(self, function, *args, **kwargs):
-        self.parallel_tasks += [joblib.delayed(function)(*args, **kwargs)] \
-            if joblib \
-               else [(function, args, kwargs)]
+        self.parallel_tasks += (
+            [joblib.delayed(function)(*args, **kwargs)] if joblib else [(function, args, kwargs)]
+        )
 
     def __exit__(self, ex_type, ex_value, exc_traceback):
-
         if ex_value:
-            logging.warning(f"An exception occured while preparing the '{self.name}' Parallel execution ...")
+            logging.warning(
+                f"An exception occured while preparing the '{self.name}' Parallel execution ..."
+            )
             return False
 
         if self.dedicated_dir:
             context = env.NextArtifactDir(self.name)
         else:
-            context = open("/dev/null") # dummy context
+            context = open("/dev/null")  # dummy context
 
         with context:
             try:
@@ -183,13 +233,15 @@ class Parallel(object):
 
                 traceback.print_exc()
 
-                logging.error(f"Exception caught during the '{self.name}' Parallel execution. Exiting.")
+                logging.error(
+                    f"Exception caught during the '{self.name}' Parallel execution. Exiting."
+                )
                 # kill all processes in my group
                 # (the group was started with the os.setpgrp() above)
                 os.killpg(0, signal.SIGKILL)
                 sys.exit(1)
 
-        return False # If we returned True here, any exception would be suppressed!
+        return False  # If we returned True here, any exception would be suppressed!
 
 
 def run_and_catch(exc, fct, *args, **kwargs):
@@ -239,7 +291,8 @@ def run_iterable_fields(iterable_fields, fct, *args, **kwargs):
     iterable_kv = {}
     for iterable_key in iterable_fields:
         iterable_values = config.project.get_config(iterable_key, print=False)
-        if not isinstance(iterable_values, list): continue
+        if not isinstance(iterable_values, list):
+            continue
         iterable_kv[iterable_key] = iterable_values
 
     kv_list = [[(key, v) for v in iterable_kv[key]] for key in iterable_kv]

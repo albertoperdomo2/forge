@@ -7,16 +7,15 @@ Demonstrates basic FORGE toolbox capabilities by gathering cluster information.
 This shows the current possibilities available in the FORGE framework.
 """
 
-from datetime import datetime
-from pathlib import Path
+from projects.core.dsl import (
+    execute_tasks,
+    shell,
+    task,
+    toolbox,
+)
 
-from projects.core.library import env
-from projects.core.dsl import task, retry, when, always, execute_tasks, clear_tasks, shell, toolbox
 
-def run(
-    *,
-    output_format: str = "text"
-):
+def run(*, output_format: str = "text"):
     """
     Gather basic cluster and environment information
 
@@ -26,6 +25,7 @@ def run(
 
     # Execute all registered tasks in order, respecting conditions
     return execute_tasks(locals())
+
 
 @task
 def prepare_ctx(args, ctx):
@@ -40,6 +40,7 @@ def prepare_ctx(args, ctx):
         ctx.ext = "json"
     else:
         raise ValueError(f"Unexpected output_format='{args.output_format}' value")
+
 
 @task
 def setup_directories(args, ctx):
