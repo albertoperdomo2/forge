@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import logging
 import os
@@ -37,7 +38,9 @@ class ResolvedConfig:
     namespace_is_managed: bool
     gpu_count: int | None
     platform: dict[str, Any]
+    model_key: str
     model: dict[str, Any]
+    model_cache: dict[str, Any]
     smoke_request: dict[str, Any]
     benchmark: dict[str, Any] | None
     fournos_config: dict[str, Any]
@@ -46,6 +49,31 @@ class ResolvedConfig:
     @property
     def manifests_dir(self) -> Path:
         return self.config_dir / "manifests"
+
+
+@dataclass(frozen=True)
+class ModelCacheSpec:
+    source_uri: str
+    source_scheme: str
+    cache_key: str
+    namespace: str
+    pvc_name: str
+    pvc_size: str
+    access_mode: str
+    storage_class_name: str | None
+    model_path: str
+    model_uri: str
+    marker_filename: str
+    download_job_name: str
+    hf_token_secret_name: str | None
+    hf_token_secret_key: str | None
+    oci_image_path: str | None
+    oci_registry_auth_secret_name: str | None
+    oci_registry_auth_secret_key: str | None
+
+    @property
+    def marker_path(self) -> str:
+        return f"/cache/{self.model_path}/{self.marker_filename}"
 
 
 def init() -> Path:
@@ -73,6 +101,7 @@ def load_run_configuration(
     _reinitialize_project_config()
 
     platform_data = copy.deepcopy(config.project.get_config("platform"))
+    model_cache = copy.deepcopy(config.project.get_config("model_cache"))
     fournos_config = load_fournos_config(cwd)
     overrides = parse_overrides(
         os.environ.get("FORGE_CONFIG_OVERRIDES", ""),
@@ -109,10 +138,15 @@ def load_run_configuration(
         job_name = f"local-{preset_name}"
 
     namespace_override = overrides.get("namespace") or fournos_config.get("namespace")
-    namespace = namespace_override or derive_namespace(
-        job_name,
-        platform_data["cluster"]["namespace_prefix"],
-        platform_data["cluster"]["namespace_max_length"],
+    default_namespace = platform_data["cluster"].get("namespace_name")
+    namespace = (
+        namespace_override
+        or default_namespace
+        or derive_namespace(
+            job_name,
+            platform_data["cluster"]["namespace_prefix"],
+            platform_data["cluster"]["namespace_max_length"],
+        )
     )
 
     gpu_count = normalize_gpu_count(fournos_config.get("gpu-count"))
@@ -125,10 +159,12 @@ def load_run_configuration(
         preset_alias=preset_alias,
         job_name=job_name,
         namespace=namespace,
-        namespace_is_managed=namespace_override is None,
+        namespace_is_managed=namespace_override is None and default_namespace is None,
         gpu_count=gpu_count,
         platform=platform_data,
+        model_key=model_name,
         model=model,
+        model_cache=model_cache,
         smoke_request=smoke_request,
         benchmark=benchmark,
         fournos_config=fournos_config,
@@ -221,6 +257,76 @@ def derive_namespace(job_name: str, prefix: str, max_length: int) -> str:
             f"Could not derive a valid namespace from job name: {job_name}"
         )
     return namespace
+
+
+def slugify_identifier(value: str, *, max_length: int = 63) -> str:
+    slug = re.sub(r"[^a-z0-9-]+", "-", value.lower())
+    slug = re.sub(r"-{2,}", "-", slug).strip("-")
+    return slug[:max_length].rstrip("-") or "item"
+
+
+def truncate_k8s_name(value: str, *, max_length: int = 63) -> str:
+    return value[:max_length].rstrip("-")
+
+
+def resolve_model_cache(config: ResolvedConfig) -> ModelCacheSpec | None:
+    if not config.model_cache.get("enabled", False):
+        return None
+
+    source_uri = config.model["uri"]
+    if source_uri.startswith(("pvc://", "pvc+hf://")):
+        return None
+
+    if source_uri.startswith("hf://"):
+        source_scheme = "hf"
+    elif source_uri.startswith("oci://"):
+        source_scheme = "oci"
+    else:
+        raise ValueError(
+            f"Unsupported model cache source URI for {config.model_key}: {source_uri}"
+        )
+
+    model_cache_overrides = config.model.get("cache", {})
+    pvc_defaults = config.model_cache["pvc"]
+    pvc_prefix = config.model_cache["pvc"]["name_prefix"]
+    cache_key = hashlib.sha256(source_uri.encode("utf-8")).hexdigest()[:10]
+    pvc_name = truncate_k8s_name(
+        f"{pvc_prefix}-{slugify_identifier(config.model_key, max_length=32)}-{cache_key}"
+    )
+    model_path = pvc_defaults["model_directory_name"]
+
+    return ModelCacheSpec(
+        source_uri=source_uri,
+        source_scheme=source_scheme,
+        cache_key=cache_key,
+        namespace=config.namespace,
+        pvc_name=pvc_name,
+        pvc_size=model_cache_overrides.get("pvc_size", pvc_defaults["size"]),
+        access_mode=model_cache_overrides.get(
+            "access_mode", pvc_defaults["access_mode"]
+        ),
+        storage_class_name=model_cache_overrides.get(
+            "storage_class_name", pvc_defaults.get("storage_class_name")
+        ),
+        model_path=model_path,
+        model_uri=f"pvc://{pvc_name}/{model_path}",
+        marker_filename=config.model_cache["marker_filename"],
+        download_job_name=truncate_k8s_name(f"{pvc_name}-download"),
+        hf_token_secret_name=model_cache_overrides.get(
+            "hf_token_secret_name", config.model_cache["hf"].get("token_secret_name")
+        ),
+        hf_token_secret_key=config.model_cache["hf"].get("token_secret_key"),
+        oci_image_path=model_cache_overrides.get(
+            "oci_image_path", config.model_cache["oci"].get("image_path")
+        ),
+        oci_registry_auth_secret_name=model_cache_overrides.get(
+            "oci_registry_auth_secret_name",
+            config.model_cache["oci"].get("registry_auth_secret_name"),
+        ),
+        oci_registry_auth_secret_key=config.model_cache["oci"].get(
+            "registry_auth_secret_key"
+        ),
+    )
 
 
 def load_yaml(path: Path) -> Any:
@@ -524,6 +630,93 @@ def condition_status(resource: dict[str, Any], condition_type: str) -> str | Non
     return None
 
 
+def pvc_access_mode_matches(actual_modes: list[str], expected_mode: str) -> bool:
+    return expected_mode in actual_modes
+
+
+def wait_for_pvc_bound(
+    pvc_name: str, namespace: str, *, timeout_seconds: int
+) -> dict[str, Any]:
+    def _pvc_bound() -> dict[str, Any] | None:
+        payload = oc_get_json(
+            "persistentvolumeclaim",
+            name=pvc_name,
+            namespace=namespace,
+            ignore_not_found=True,
+        )
+        if not payload:
+            return None
+        if payload.get("status", {}).get("phase") == "Bound":
+            return payload
+        return None
+
+    return wait_until(
+        f"persistentvolumeclaim/{pvc_name} bound in {namespace}",
+        timeout_seconds=timeout_seconds,
+        interval_seconds=5,
+        predicate=_pvc_bound,
+    )
+
+
+def wait_for_job_completion(
+    job_name: str, namespace: str, *, timeout_seconds: int, interval_seconds: int = 10
+) -> dict[str, Any]:
+    def _job_completed() -> dict[str, Any] | None:
+        payload = oc_get_json(
+            "job",
+            name=job_name,
+            namespace=namespace,
+            ignore_not_found=True,
+        )
+        if not payload:
+            return None
+        status = payload.get("status", {})
+        if status.get("succeeded", 0):
+            return payload
+        failed_count = status.get("failed", 0)
+        for condition in status.get("conditions", []):
+            if condition.get("type") == "Failed" and condition.get("status") == "True":
+                raise RuntimeError(
+                    f"job/{job_name} failed: {condition.get('reason') or 'unknown reason'}"
+                )
+        if failed_count:
+            raise RuntimeError(f"job/{job_name} failed after {failed_count} attempt(s)")
+        return None
+
+    return wait_until(
+        f"job/{job_name} completion in {namespace}",
+        timeout_seconds=timeout_seconds,
+        interval_seconds=interval_seconds,
+        predicate=_job_completed,
+    )
+
+
+def job_pod_names(job_name: str, namespace: str) -> list[str]:
+    payload = oc_get_json(
+        "pods",
+        namespace=namespace,
+        selector=f"job-name={job_name}",
+        ignore_not_found=True,
+    )
+    if not payload:
+        return []
+    return [item["metadata"]["name"] for item in payload.get("items", [])]
+
+
+def resolve_default_serviceaccount_image_pull_secret(namespace: str) -> str | None:
+    payload = oc_get_json(
+        "serviceaccount", name="default", namespace=namespace, ignore_not_found=True
+    )
+    if not payload:
+        return None
+
+    for item in payload.get("imagePullSecrets", []):
+        name = item.get("name")
+        if name:
+            return name
+    return None
+
+
 def render_datasciencecluster(config: ResolvedConfig) -> dict[str, Any]:
     template_path = (
         config.config_dir / config.platform["rhoai"]["datasciencecluster_template"]
@@ -545,6 +738,230 @@ def render_gateway(config: ResolvedConfig) -> dict[str, Any]:
     return manifest
 
 
+def render_model_cache_pvc(spec: ModelCacheSpec) -> dict[str, Any]:
+    manifest: dict[str, Any] = {
+        "apiVersion": "v1",
+        "kind": "PersistentVolumeClaim",
+        "metadata": {
+            "name": spec.pvc_name,
+            "namespace": spec.namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "forge.openshift.io/project": "llm_d",
+                "forge.openshift.io/model-cache": "true",
+                "forge.openshift.io/preserve": "true",
+            },
+            "annotations": {
+                "forge.openshift.io/model-cache-key": spec.cache_key,
+                "forge.openshift.io/model-source-uri": spec.source_uri,
+            },
+        },
+        "spec": {
+            "accessModes": [spec.access_mode],
+            "resources": {"requests": {"storage": spec.pvc_size}},
+        },
+    }
+    if spec.storage_class_name:
+        manifest["spec"]["storageClassName"] = spec.storage_class_name
+    return manifest
+
+
+def render_model_cache_job(
+    config: ResolvedConfig, spec: ModelCacheSpec
+) -> dict[str, Any]:
+    common_env = [
+        {"name": "MODEL_SOURCE", "value": spec.source_uri},
+        {"name": "MODEL_TARGET_DIR", "value": f"/cache/{spec.model_path}"},
+        {"name": "MARKER_FILE", "value": spec.marker_path},
+        {"name": "CACHE_KEY", "value": spec.cache_key},
+    ]
+    volumes: list[dict[str, Any]] = [
+        {"name": "cache", "persistentVolumeClaim": {"claimName": spec.pvc_name}}
+    ]
+
+    container: dict[str, Any]
+    if spec.source_scheme == "hf":
+        command = """
+set -euo pipefail
+mkdir -p "${MODEL_TARGET_DIR}"
+rm -rf "${MODEL_TARGET_DIR}"/*
+python -m pip install --quiet --no-cache-dir 'huggingface_hub[hf_xet]'
+python - <<'PY'
+import os
+from huggingface_hub import snapshot_download
+
+token = None
+token_file = os.environ.get("HF_TOKEN_FILE")
+if token_file and os.path.exists(token_file):
+    with open(token_file, encoding="utf-8") as handle:
+        token = handle.read().strip() or None
+
+snapshot_download(
+    repo_id=os.environ["MODEL_SOURCE"][5:],
+    local_dir=os.environ["MODEL_TARGET_DIR"],
+    local_dir_use_symlinks=False,
+    token=token,
+)
+PY
+cat > "${MARKER_FILE}" <<EOF
+{"source_uri":"${MODEL_SOURCE}","cache_key":"${CACHE_KEY}","scheme":"hf"}
+EOF
+"""
+        volume_mounts = [{"name": "cache", "mountPath": "/cache"}]
+        if spec.hf_token_secret_name:
+            volumes.append(
+                {
+                    "name": "hf-token",
+                    "secret": {"secretName": spec.hf_token_secret_name},
+                }
+            )
+            volume_mounts.append(
+                {
+                    "name": "hf-token",
+                    "mountPath": "/var/run/forge/hf-token",
+                    "readOnly": True,
+                }
+            )
+            common_env.append(
+                {
+                    "name": "HF_TOKEN_FILE",
+                    "value": f"/var/run/forge/hf-token/{spec.hf_token_secret_key}",
+                }
+            )
+
+        container = {
+            "name": "hf-model-downloader",
+            "image": config.model_cache["hf"]["downloader_image"],
+            "imagePullPolicy": config.model_cache["download"]["pod_image_pull_policy"],
+            "command": ["/bin/bash", "-ceu", command],
+            "env": common_env,
+            "volumeMounts": volume_mounts,
+        }
+    elif spec.source_scheme == "oci":
+        registry_auth_secret_name = (
+            spec.oci_registry_auth_secret_name
+            or resolve_default_serviceaccount_image_pull_secret(spec.namespace)
+        )
+        command = """
+set -euo pipefail
+mkdir -p "${MODEL_TARGET_DIR}"
+rm -rf "${MODEL_TARGET_DIR}"/*
+auth_args=()
+if [[ -n "${REGISTRY_AUTH_FILE:-}" && -f "${REGISTRY_AUTH_FILE}" ]]; then
+  auth_args+=(--registry-config="${REGISTRY_AUTH_FILE}")
+fi
+oc image extract "${MODEL_SOURCE#oci://}" \
+  --path "${OCI_IMAGE_PATH}:${MODEL_TARGET_DIR}" \
+  --confirm \
+  "${auth_args[@]}"
+cat > "${MARKER_FILE}" <<EOF
+{"source_uri":"${MODEL_SOURCE}","cache_key":"${CACHE_KEY}","scheme":"oci","image_path":"${OCI_IMAGE_PATH}"}
+EOF
+"""
+        volume_mounts = [{"name": "cache", "mountPath": "/cache"}]
+        common_env.append(
+            {"name": "OCI_IMAGE_PATH", "value": spec.oci_image_path or "/"}
+        )
+        if registry_auth_secret_name:
+            volumes.append(
+                {
+                    "name": "registry-auth",
+                    "secret": {"secretName": registry_auth_secret_name},
+                }
+            )
+            volume_mounts.append(
+                {
+                    "name": "registry-auth",
+                    "mountPath": "/var/run/forge/registry-auth",
+                    "readOnly": True,
+                }
+            )
+            common_env.append(
+                {
+                    "name": "REGISTRY_AUTH_FILE",
+                    "value": f"/var/run/forge/registry-auth/{spec.oci_registry_auth_secret_key}",
+                }
+            )
+
+        container = {
+            "name": "oci-model-extractor",
+            "image": config.model_cache["oci"]["extractor_image"],
+            "imagePullPolicy": config.model_cache["download"]["pod_image_pull_policy"],
+            "command": ["/bin/bash", "-ceu", command],
+            "env": common_env,
+            "volumeMounts": volume_mounts,
+        }
+    else:  # pragma: no cover - guarded by resolve_model_cache
+        raise ValueError(f"Unsupported model cache source scheme: {spec.source_scheme}")
+
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": spec.download_job_name,
+            "namespace": spec.namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "forge.openshift.io/project": "llm_d",
+            },
+        },
+        "spec": {
+            "backoffLimit": 0,
+            "activeDeadlineSeconds": config.model_cache["download"][
+                "wait_timeout_seconds"
+            ],
+            "template": {
+                "metadata": {
+                    "labels": {
+                        "job-name": spec.download_job_name,
+                        "app.kubernetes.io/managed-by": "forge",
+                        "forge.openshift.io/project": "llm_d",
+                    }
+                },
+                "spec": {
+                    "serviceAccountName": "default",
+                    "restartPolicy": "Never",
+                    "containers": [container],
+                    "volumes": volumes,
+                },
+            },
+        },
+    }
+
+
+def model_cache_pvc_ready(spec: ModelCacheSpec) -> bool:
+    payload = oc_get_json(
+        "persistentvolumeclaim",
+        name=spec.pvc_name,
+        namespace=spec.namespace,
+        ignore_not_found=True,
+    )
+    if not payload:
+        return False
+
+    annotations = payload.get("metadata", {}).get("annotations", {})
+    return (
+        annotations.get("forge.openshift.io/model-cache-ready") == "true"
+        and annotations.get("forge.openshift.io/model-cache-key") == spec.cache_key
+        and annotations.get("forge.openshift.io/model-source-uri") == spec.source_uri
+    )
+
+
+def annotate_model_cache_pvc(spec: ModelCacheSpec) -> None:
+    oc(
+        "annotate",
+        "persistentvolumeclaim",
+        spec.pvc_name,
+        "-n",
+        spec.namespace,
+        "--overwrite",
+        f"forge.openshift.io/model-cache-ready=true",
+        f"forge.openshift.io/model-cache-key={spec.cache_key}",
+        f"forge.openshift.io/model-source-uri={spec.source_uri}",
+        f"forge.openshift.io/model-uri={spec.model_uri}",
+    )
+
+
 def render_inference_service(config: ResolvedConfig) -> dict[str, Any]:
     template_path = config.config_dir / config.platform["inference_service"]["template"]
     manifest = load_yaml(template_path)
@@ -560,7 +977,10 @@ def render_inference_service(config: ResolvedConfig) -> dict[str, Any]:
         }
     )
 
-    manifest["spec"]["model"]["uri"] = config.model["uri"]
+    cache_spec = resolve_model_cache(config)
+    manifest["spec"]["model"]["uri"] = (
+        cache_spec.model_uri if cache_spec else config.model["uri"]
+    )
     manifest["spec"]["model"]["name"] = config.model["served_model_name"]
     manifest["spec"]["template"]["containers"][0]["resources"] = copy.deepcopy(
         config.model["resources"]
@@ -590,6 +1010,10 @@ def render_guidellm_pvc(config: ResolvedConfig) -> dict[str, Any]:
         "metadata": {
             "name": config.benchmark["job_name"],
             "namespace": config.namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "forge.openshift.io/project": "llm_d",
+            },
         },
         "spec": {
             "accessModes": ["ReadWriteOnce"],
@@ -620,10 +1044,20 @@ def render_guidellm_job(config: ResolvedConfig, endpoint_url: str) -> dict[str, 
         "metadata": {
             "name": config.benchmark["job_name"],
             "namespace": config.namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "forge.openshift.io/project": "llm_d",
+            },
         },
         "spec": {
             "backoffLimit": 0,
             "template": {
+                "metadata": {
+                    "labels": {
+                        "app.kubernetes.io/managed-by": "forge",
+                        "forge.openshift.io/project": "llm_d",
+                    }
+                },
                 "spec": {
                     "serviceAccountName": "default",
                     "restartPolicy": "Never",
@@ -649,7 +1083,7 @@ def render_guidellm_job(config: ResolvedConfig, endpoint_url: str) -> dict[str, 
                             },
                         },
                     ],
-                }
+                },
             },
         },
     }
@@ -667,6 +1101,10 @@ def render_guidellm_copy_pod(
         "metadata": {
             "name": f"{config.benchmark['job_name']}-copy",
             "namespace": config.namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "forge.openshift.io/project": "llm_d",
+            },
         },
         "spec": {
             "restartPolicy": "Never",
