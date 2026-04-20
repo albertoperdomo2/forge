@@ -57,6 +57,7 @@ def test_load_run_configuration_consolidates_config_d(
     assert "model_cache" in consolidated
     assert "models" in consolidated
     assert "runtime" in consolidated
+    assert "scheduler_profiles" in consolidated
     assert "workloads" in consolidated
     assert consolidated["runtime"]["default_preset"] == "smoke"
 
@@ -89,7 +90,7 @@ def test_default_namespace_comes_from_project_config(
     assert config.namespace_is_managed is False
 
 
-def test_render_inference_service_injects_model_and_epp(
+def test_render_inference_service_injects_model_and_scheduler_profile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
@@ -105,6 +106,7 @@ def test_render_inference_service_injects_model_and_epp(
     assert manifest["spec"]["model"]["name"] == "Qwen/Qwen3-0.6B"
     assert manifest["spec"]["model"]["uri"] == cache_spec.model_uri
     assert manifest["spec"]["model"]["name"] == config.model["served_model_name"]
+    assert config.scheduler_profile_key == "approximate-prefix-cache"
     router_args = manifest["spec"]["router"]["scheduler"]["template"]["containers"][0]["args"]
     assert router_args[-2] == "--config-text"
     assert "EndpointPickerConfig" in router_args[-1]

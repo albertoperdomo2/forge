@@ -1,0 +1,2 @@
+approximate-prefix-cache:
+  config_path: scheduler_profiles/approximate-prefix-cache.yaml
