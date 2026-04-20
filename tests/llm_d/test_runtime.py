@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -392,3 +393,84 @@ def test_resolve_endpoint_url_requires_gateway_address(
 
     with pytest.raises(RuntimeError, match="Gateway address"):
         test_toolbox.resolve_endpoint_url(config)
+
+
+def test_wait_until_reraises_runtime_error() -> None:
+    with pytest.raises(RuntimeError, match="terminal failure"):
+        llmd_runtime.wait_until(
+            "test condition",
+            timeout_seconds=1,
+            interval_seconds=0,
+            predicate=lambda: (_ for _ in ()).throw(RuntimeError("terminal failure")),
+        )
+
+
+def test_oc_forwards_timeout_to_run_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_command(args, **kwargs):
+        captured["args"] = list(args)
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(llmd_runtime, "run_command", fake_run_command)
+
+    llmd_runtime.oc("get", "pods", timeout_seconds=42)
+
+    assert captured["args"] == ["oc", "get", "pods"]
+    assert captured["kwargs"]["timeout_seconds"] == 42
+
+
+def test_oc_get_json_returns_none_only_for_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        llmd_runtime,
+        "oc",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args,
+            1,
+            stdout="",
+            stderr='Error from server (NotFound): llminferenceservices.serving.kserve.io "llm-d" not found',
+        ),
+    )
+
+    payload = llmd_runtime.oc_get_json(
+        "llminferenceservice",
+        name="llm-d",
+        namespace="forge-llm-d",
+        ignore_not_found=True,
+    )
+
+    assert payload is None
+
+
+def test_oc_get_json_raises_for_non_not_found_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        llmd_runtime,
+        "oc",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args,
+            1,
+            stdout="",
+            stderr='Error from server (Forbidden): pods is forbidden: User "alice" cannot list resource "pods"',
+        ),
+    )
+
+    with pytest.raises(llmd_runtime.CommandError, match="Forbidden"):
+        llmd_runtime.oc_get_json("pods", namespace="forge-llm-d", ignore_not_found=True)
+
+
+def test_resource_exists_propagates_non_not_found_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        llmd_runtime,
+        "oc_get_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(llmd_runtime.CommandError("boom")),
+    )
+
+    with pytest.raises(llmd_runtime.CommandError, match="boom"):
+        llmd_runtime.resource_exists("namespace", "forge-llm-d")
