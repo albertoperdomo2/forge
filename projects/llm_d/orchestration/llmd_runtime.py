@@ -41,6 +41,8 @@ class ResolvedConfig:
     platform: dict[str, Any]
     model_key: str
     model: dict[str, Any]
+    scheduler_profile_key: str
+    scheduler_profile: dict[str, Any]
     model_cache: dict[str, Any]
     smoke_request: dict[str, Any]
     benchmark: dict[str, Any] | None
@@ -122,6 +124,11 @@ def load_run_configuration(
     model_name = config.project.get_config("runtime.model_key")
     model = copy.deepcopy(config.project.get_config(f"models.{model_name}"))
 
+    scheduler_profile_key = config.project.get_config("runtime.scheduler_profile_key")
+    scheduler_profile = copy.deepcopy(
+        config.project.get_config(f"scheduler_profiles.{scheduler_profile_key}")
+    )
+
     smoke_request_name = config.project.get_config("runtime.smoke_request_key")
     smoke_request = copy.deepcopy(
         config.project.get_config(f"workloads.smoke_requests.{smoke_request_name}")
@@ -165,6 +172,8 @@ def load_run_configuration(
         platform=platform_data,
         model_key=model_name,
         model=model,
+        scheduler_profile_key=scheduler_profile_key,
+        scheduler_profile=scheduler_profile,
         model_cache=model_cache,
         smoke_request=smoke_request,
         benchmark=benchmark,
@@ -953,12 +962,12 @@ def render_inference_service(config: ResolvedConfig) -> dict[str, Any]:
         config.model["resources"]
     )
 
-    epp_path = config.config_dir / config.platform["inference_service"]["epp_config_template"]
-    epp_config = epp_path.read_text(encoding="utf-8")
+    scheduler_profile_path = config.config_dir / config.scheduler_profile["config_path"]
+    scheduler_profile_config = scheduler_profile_path.read_text(encoding="utf-8")
     router_args = manifest["spec"]["router"]["scheduler"]["template"]["containers"][0]["args"]
     if not router_args or router_args[-1] != "--config-text":
         raise ValueError("Expected llm-d router args to end with --config-text")
-    router_args.append(epp_config)
+    router_args.append(scheduler_profile_config)
 
     return manifest
 

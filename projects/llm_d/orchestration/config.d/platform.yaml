@@ -68,7 +68,6 @@ gateway:
 inference_service:
   name: llm-d
   template: manifests/llminferenceservice.yaml
-  epp_config_template: manifests/epp-approximate-prefix-cache.yaml
   workload_deployment_name_suffix: -kserve
   pod_appearance_timeout_seconds: 600
   ready_timeout_seconds: 1800

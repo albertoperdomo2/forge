@@ -3,12 +3,14 @@ __multiple: true
 smoke:
   runtime.selected_preset: smoke
   runtime.model_key: qwen3-0-6b
+  runtime.scheduler_profile_key: approximate-prefix-cache
   runtime.smoke_request_key: default
   runtime.benchmark_key: null
 
 benchmark-short:
   runtime.selected_preset: benchmark-short
   runtime.model_key: llama-3-1-8b-instruct-fp8
+  runtime.scheduler_profile_key: approximate-prefix-cache
   runtime.smoke_request_key: default
   runtime.benchmark_key: short
 
