@@ -358,16 +358,26 @@ def run_command(
     check: bool = True,
     capture_output: bool = True,
     input_text: str | None = None,
+    timeout_seconds: float | None = 300,
 ) -> subprocess.CompletedProcess[str]:
     cmd = [str(arg) for arg in args]
     LOGGER.info("run: %s", " ".join(shlex.quote(arg) for arg in cmd))
-    result = subprocess.run(
-        cmd,
-        check=False,
-        text=True,
-        capture_output=capture_output,
-        input=input_text,
-    )
+    try:
+        result = subprocess.run(
+            cmd,
+            check=False,
+            text=True,
+            capture_output=capture_output,
+            input=input_text,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        LOGGER.error(
+            "Command timed out after %ss: %s",
+            timeout_seconds,
+            " ".join(shlex.quote(arg) for arg in cmd),
+        )
+        raise
 
     if capture_output:
         if result.stdout:
@@ -389,12 +399,14 @@ def oc(
     check: bool = True,
     capture_output: bool = True,
     input_text: str | None = None,
+    timeout_seconds: float | None = 300,
 ) -> subprocess.CompletedProcess[str]:
     return run_command(
         ["oc", *args],
         check=check,
         capture_output=capture_output,
         input_text=input_text,
+        timeout_seconds=timeout_seconds,
     )
 
 
@@ -421,21 +433,41 @@ def oc_get_json(
     args.extend(["-o", "json"])
 
     result = oc(*args, check=not ignore_not_found, capture_output=True)
-    if ignore_not_found and result.returncode != 0:
-        return None
+    if result.returncode != 0:
+        if ignore_not_found and _is_oc_not_found_error(result.stderr):
+            return None
+        raise CommandError(
+            f"oc {' '.join(shlex.quote(arg) for arg in args)} failed with exit code "
+            f"{result.returncode}: {result.stderr.strip()}"
+        )
+    if not result.stdout:
+        raise CommandError(f"oc {' '.join(shlex.quote(arg) for arg in args)} returned no output")
     return json.loads(result.stdout)
 
 
 def resource_exists(kind: str, name: str, *, namespace: str | None = None) -> bool:
-    result = oc(
-        "get",
-        kind,
-        name,
-        *([] if namespace is None else ["-n", namespace]),
-        check=False,
-        capture_output=True,
+    return (
+        oc_get_json(
+            kind,
+            name=name,
+            namespace=namespace,
+            ignore_not_found=True,
+        )
+        is not None
     )
-    return result.returncode == 0
+
+
+def _is_oc_not_found_error(stderr: str | None) -> bool:
+    if not stderr:
+        return False
+
+    normalized = stderr.lower()
+    if "error from server (notfound)" in normalized:
+        return True
+    if "no resources found" in normalized:
+        return True
+
+    return bool(re.search(r"\bnot found\b", normalized))
 
 
 def wait_until(
@@ -455,6 +487,8 @@ def wait_until(
                 return value
             last_error = None
         except Exception as exc:  # pragma: no cover - exercised in integration paths
+            if isinstance(exc, RuntimeError):
+                raise
             last_error = exc
             LOGGER.info("waiting for %s: %s", description, exc)
         time.sleep(interval_seconds)
