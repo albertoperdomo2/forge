@@ -1,0 +1,40 @@
+# Unit tests for projects/core/dsl (task decorators, execute_tasks, failure/always/skip).
+name: Toolbox DSL tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          set -o errexit
+          python -m pip install --upgrade pip
+          python -m pip install pytest pyyaml jinja2
+
+      - name: Run projects/core/tests
+        run: |
+          set -o errexit
+          # Tree + docstrings (what is being tested), then execute with one line per test + result.
+          python -m pytest --collect-only -vv -o addopts='-ra --strict-markers --strict-config'
+          echo ""
+          python -m pytest -vv -o addopts='-ra --strict-markers --strict-config'

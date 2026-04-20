@@ -108,7 +108,7 @@ custom_env_vars:
 ./forge_launcher.py enter --here
 
 # Run specific command in container
-./forge_launcher.py enter "pytest tests/"
+./forge_launcher.py enter "pytest projects/core/tests"
 
 # Check what environment variables will be exported
 ./forge_launcher.py --verbose enter "env | grep FORGE"

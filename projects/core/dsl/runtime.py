@@ -116,11 +116,13 @@ def execute_tasks(function_args: dict = None):
                 raise RuntimeError(f"No tasks found for file: {rel_filename}")
 
             execution_error = None
+            task_index = 0
 
             try:
-                while file_tasks:
-                    current_task_info = file_tasks.pop(0)
+                while task_index < len(file_tasks):
+                    current_task_info = file_tasks[task_index]
                     _execute_single_task(current_task_info, args, shared_context)
+                    task_index += 1
 
             except (KeyboardInterrupt, SignalError):
                 logger.info("")
@@ -139,21 +141,31 @@ def execute_tasks(function_args: dict = None):
                 # Save error to re-raise after always tasks execute
                 execution_error = e
 
-            # Always execute "always" tasks from this file
-            if file_tasks:
+            # After a failure, skip pending non-@always tasks; still run pending @always tasks
+            pending = file_tasks[task_index + 1 :] if task_index < len(file_tasks) else []
+            always_pending = [t for t in pending if t.get("always_execute")]
+            if always_pending:
                 logging.warning("Executing the @always tasks ...")
-                while file_tasks:
-                    try:
-                        current_task_info = file_tasks.pop(0)
-                        _execute_single_task(current_task_info, args, shared_context)
+            for current_task_info in pending:
+                if not current_task_info.get("always_execute"):
+                    logger.info("")
+                    logger.info("~" * 80)
+                    logger.info(
+                        f"==> SKIPPING TASK: {current_task_info['name']} "
+                        "(not @always; aborted after earlier failure)"
+                    )
+                    logger.info("~" * 80)
+                    continue
+                try:
+                    _execute_single_task(current_task_info, args, shared_context)
 
-                    except Exception as e:
-                        # If normal tasks succeeded but always task failed, raise always task error
-                        if execution_error is None:
-                            execution_error = e
+                except Exception as always_exc:
+                    # If normal tasks succeeded but always task failed, raise always task error
+                    if execution_error is None:
+                        execution_error = always_exc
 
-                        logger.error(f"==> ALWAYS TASK ALSO FAILED: {e}")
-                        logger.info("")
+                    logger.error(f"==> ALWAYS TASK ALSO FAILED: {always_exc}")
+                    logger.info("")
 
             # Re-raise original error if normal tasks failed
             if execution_error:
@@ -225,6 +237,7 @@ def _execute_single_task(task_info, args, shared_context):
                 retry_config["attempts"],
                 retry_config["delay"],
                 retry_config["backoff"],
+                retry_config.get("retry_on_exceptions", False),
                 readonly_args,
                 context,
             )
@@ -246,9 +259,9 @@ def _execute_single_task(task_info, args, shared_context):
         co_filename = task_func.original_func.__code__.co_filename
         try:
             co_filename = Path(co_filename).relative_to(env.FORGE_HOME)
-        except ValueError as e:
+        except ValueError as path_err:
             logging.warning(
-                f"Path {co_filename} isn't relative to FORGE_HOME={env.FORGE_HOME} ({e})"
+                f"Path {co_filename} isn't relative to FORGE_HOME={env.FORGE_HOME} ({path_err})"
             )
             pass  # Use absolute path if file is outside FORGE_HOME
 
