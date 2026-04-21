@@ -116,6 +116,7 @@ def execute_tasks(function_args: dict = None):
                 raise RuntimeError(f"No tasks found for file: {rel_filename}")
 
             execution_error = None
+            always_task_exceptions = []
             task_index = 0
 
             try:
@@ -160,20 +161,29 @@ def execute_tasks(function_args: dict = None):
                     _execute_single_task(current_task_info, args, shared_context)
 
                 except Exception as always_exc:
-                    # If normal tasks succeeded but always task failed, raise always task error
-                    if execution_error is None:
-                        execution_error = always_exc
-
+                    # Collect all always task exceptions
+                    always_task_exceptions.append(always_exc)
                     logger.error(f"==> ALWAYS TASK ALSO FAILED: {always_exc}")
                     logger.info("")
 
-            # Re-raise original error if normal tasks failed
+            # Re-raise accumulated errors
+            all_exceptions = []
             if execution_error:
+                all_exceptions.append(execution_error)
+            if always_task_exceptions:
+                all_exceptions.extend(always_task_exceptions)
+
+            if all_exceptions:
                 log_completion_banner(
                     function_args,
-                    status=f"FAILED ({execution_error.__class__.__name__})",
+                    status=f"FAILED ({len(all_exceptions)} exception(s))",
                 )
-                raise execution_error
+                if len(all_exceptions) == 1:
+                    raise all_exceptions[0]
+                else:
+                    raise ExceptionGroup(
+                        "Task execution failed with multiple exceptions", all_exceptions
+                    )
 
             # Log completion banner if execution was successful
             log_completion_banner(function_args)
