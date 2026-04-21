@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Launch Caliper from a FORGE checkout without requiring a console_scripts install.
+set -euo pipefail
+
+_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_repo_root="$(cd "${_script_dir}/.." && pwd)"
+
+if [[ -x "${_repo_root}/.venv/bin/python" ]]; then
+  _python="${_repo_root}/.venv/bin/python"
+elif [[ -n "${PYTHON:-}" ]]; then
+  _python="${PYTHON}"
+else
+  _python="$(command -v python3 || command -v python)"
+fi
+
+export PYTHONPATH="${_repo_root}${PYTHONPATH:+:${PYTHONPATH}}"
+exec "${_python}" -m projects.caliper.cli.main "$@"

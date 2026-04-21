@@ -1,0 +1,24 @@
+env_key: PSAP_FORGE_MLFLOW_EXPORT_SECRET_PATH
+description: |
+  Vault to push data to MLFlow
+
+content:
+  mlflow-secret.yaml:
+    description: |
+      Caliper secret config file for exporting to MLFlow:
+        tracking_uri: ...
+        username: "..."
+        password: "..."
+        insecure_tls: true
+
+  tracking_uri:
+    description: |
+      the URI of the MLFlow endpoint, so that the CI engine can censor it in the logs
+
+  username:
+    description: |
+      the mlflow username, so that the CI engine can censor it in the logs
+
+  password:
+    description: |
+      the mlflow password, so that the CI engine can censor it in the logs
