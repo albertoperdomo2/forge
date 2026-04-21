@@ -20,23 +20,7 @@ from projects.core.dsl import (
     toolbox,
 )
 
-
-# Set up clean logger without prefix
-def setup_clean_logger(name: str):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-
-    if not logger.handlers:
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(logging.Formatter("%(message)s"))
-        logger.addHandler(console_handler)
-
-    logger.propagate = False
-    return logger
-
-
-logger = setup_clean_logger("TOOLBOX")
+logger = logging.getLogger("DSL")
 
 
 def _capture_all_container_logs(pod_name: str, namespace: str, artifact_dir):
