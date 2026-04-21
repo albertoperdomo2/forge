@@ -54,7 +54,7 @@ def submit_job():
     # job_args is always a list, format accordingly
     args_str = " ".join(job_args)
 
-    display_name = f"{project_name} {args_str}"
+    display_name = f"{project_name} {args_str}".strip()
     config.project.set_config("fournos.job.display_name", display_name)
     logger.info(f"Set job display name: {display_name}")
 
