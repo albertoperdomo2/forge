@@ -23,15 +23,28 @@ from projects.core.dsl import (
 logger = logging.getLogger("TOOLBOX")
 
 
-def _capture_all_container_logs(pod_name: str, namespace: str, artifact_dir):
+def _capture_all_container_logs(buildrun_name: str, namespace: str, artifact_dir):
     """
-    Capture logs from all containers in a pod
+    Capture logs from all containers in a BuildRun's pod
 
     Args:
-        pod_name: Name of the pod
+        buildrun_name: Name of the BuildRun (used to find the actual pod)
         namespace: Kubernetes namespace
         artifact_dir: Directory to save log files
     """
+    # Find the actual pod name using BuildRun labels
+    pod_result = shell.run(
+        f"oc get pods -n {namespace} -l buildrun.shipwright.io/name={buildrun_name} -o jsonpath='{{.items[0].metadata.name}}'",
+        check=False,
+    )
+
+    if not pod_result.success or not pod_result.stdout.strip():
+        logger.warning(f"Could not find pod for BuildRun {buildrun_name}")
+        return
+
+    pod_name = pod_result.stdout.strip()
+    logger.info(f"Found pod {pod_name} for BuildRun {buildrun_name}")
+
     # Get list of all containers in the pod
     result = shell.run(
         f"oc get pod {pod_name} -n {namespace} -o jsonpath='{{.spec.containers[*].name}}'",
