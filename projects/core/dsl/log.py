@@ -30,7 +30,6 @@ def setup_clean_logger(name: str):
 
 
 # Configure clean logging for DSL operations
-logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = setup_clean_logger("DSL")
 
 

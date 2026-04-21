@@ -58,7 +58,7 @@ def submit(ctx, cluster, project, args, namespace, override, commit):
         cluster = config.project.get_config("cluster.name")
         if not cluster:
             raise ValueError("--cluster or cluster.name is mandatory")
-    logging.info(f"Using cluster {cluster}")
+    logger.info(f"Using cluster {cluster}")
 
     if project:
         config.project.set_config("ci_job.project", project)
@@ -67,19 +67,19 @@ def submit(ctx, cluster, project, args, namespace, override, commit):
         if not project:
             raise ValueError("--project or ci_job.project is mandatory")
 
-    logging.info(f"Using project {project}")
+    logger.info(f"Using project {project}")
 
     if args_list:
         config.project.set_config("ci_job.args", args_list)
-        logging.info(f"Using args {args_list}")
+        logger.info(f"Using args {args_list}")
 
     if namespace:
         config.project.set_config("fournos.namespace", namespace)
-        logging.info(f"Using namespace {namespace}")
+        logger.info(f"Using namespace {namespace}")
 
     if extra_overrides:
         config.project.set_config("extra_overrides", extra_overrides)
-        logging.info(f"Using overrides {extra_overrides}")
+        logger.info(f"Using overrides {extra_overrides}")
 
     # Empty the fournos job environment variables
     config.project.set_config("fournos.job.env", {})
@@ -87,7 +87,7 @@ def submit(ctx, cluster, project, args, namespace, override, commit):
     # Set commit SHA if provided
     if commit:
         config.project.set_config("fournos.job.extra_env", {"PULL_PULL_SHA": commit})
-        logging.info(f"Using commit SHA {commit}")
+        logger.info(f"Using commit SHA {commit}")
 
     return submit_mod.submit_job()
 

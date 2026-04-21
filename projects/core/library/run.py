@@ -3,7 +3,7 @@ import os
 import signal
 import subprocess
 
-logging.getLogger().setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def init():
@@ -17,7 +17,7 @@ def init():
         try:
             os.setpgrp()
         except Exception as e:
-            logging.warning(f"Cannot call os.setpgrp: {e}")
+            logger.warning(f"Cannot call os.setpgrp: {e}")
 
 
 class SignalError(SystemExit):
@@ -46,7 +46,7 @@ def run(
     decode_stderr=True,
 ):
     if log_command:
-        logging.info(f"run: {command}")
+        logger.info(f"run: {command}")
 
     args = {}
 
@@ -101,6 +101,6 @@ def run_and_catch(exc, fct, *args, **kwargs):
     try:
         fct(*args, **kwargs)
     except Exception as e:
-        logging.error(f"{e.__class__.__name__}: {e}")
+        logger.error(f"{e.__class__.__name__}: {e}")
         exc = exc or e
     return exc

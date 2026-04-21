@@ -11,7 +11,7 @@ def prepare():
 
     try:
         config_file_content = pathlib.Path(config.project.config_path).read_text()
-        logging.info(f"Configuration file: {config_file_content}")
+        logger.info(f"Configuration file: {config_file_content}")
 
         logger.info("✅ Prepare phase completed successfully")
         return 0

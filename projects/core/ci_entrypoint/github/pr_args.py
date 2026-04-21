@@ -18,19 +18,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 REQUIRED_AUTHOR_ASSOCIATION = "CONTRIBUTOR"
 
 DEFAULT_REPO_OWNER = "openshift-psap"
 DEFAULT_REPO_NAME = "forge"
-
-
-def setup_logging():
-    """Set up logging configuration."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s: %(message)s",
-        handlers=[logging.StreamHandler(sys.stderr)],
-    )
 
 
 def get_directive_handlers() -> dict[str, Callable[[str], dict[str, Any]]]:
@@ -89,7 +82,7 @@ def handle_test_directive(line: str) -> dict[str, Any]:
             }
         )
 
-        logging.info(f"Jump CI configuration: target_project={target_project}, args={args}")
+        logger.info(f"Jump CI configuration: target_project={target_project}, args={args}")
     else:
         # Build result with test info and PR positional arguments
         result.update(
@@ -313,7 +306,7 @@ def parse_directives(text: str) -> tuple[dict[str, Any], list[str]]:
                 raise ValueError(f"Error parsing directive '{line}': {e}") from e
         else:
             # Unknown directive - log warning but still track it
-            logging.warning(f"Unknown directive ignored: {line}")
+            logger.warning(f"Unknown directive ignored: {line}")
             found_directives.append(f"# UNKNOWN: {line}")
 
     if not has_test:
@@ -339,12 +332,12 @@ def fetch_url(url: str, cache_file: Path | None = None) -> dict[str, Any]:
 
     # Check cache first
     if cache_file and cache_file.exists():
-        logging.info(f"Using cached file: {cache_file}")
+        logger.info(f"Using cached file: {cache_file}")
         with open(cache_file) as f:
             return json.load(f)
 
     # Fetch from URL
-    logging.info(f"Fetching from URL: {url}")
+    logger.info(f"Fetching from URL: {url}")
     try:
         with urllib.request.urlopen(url) as response:
             data = json.load(response)
@@ -403,8 +396,8 @@ def parse_pr_arguments(
         f"https://api.github.com/repos/{repo_owner}/{repo_name}/issues/{pull_number}/comments"
     )
 
-    logging.info(f"# PR URL: {pr_url}")
-    logging.info(f"# PR comments URL: {pr_comments_url}")
+    logger.info(f"# PR URL: {pr_url}")
+    logger.info(f"# PR comments URL: {pr_comments_url}")
 
     # Set up caching for OpenShift CI
     pr_cache_file = None
@@ -434,7 +427,7 @@ def parse_pr_arguments(
 
     test_anchor = f"/test {test_name}"
 
-    logging.info(
+    logger.info(
         f"# Looking for comments from author '{pr_author}' or '{REQUIRED_AUTHOR_ASSOCIATION}' containing '{test_anchor}'"
     )
 
@@ -469,15 +462,15 @@ def main():
     """
     Main function for testing the PR arguments parser.
 
-    Reads environment variables and logging.infos the parsed configuration to stdout.
+    Reads environment variables and prints the parsed configuration to stdout.
     Special argument '--help-directives' shows supported directives.
     """
     # Handle special help argument
     if len(sys.argv) > 1 and sys.argv[1] == "--help-directives":
-        logging.info("Supported GitHub PR directives:")
+        print("Supported GitHub PR directives:")
         for directive, description in get_supported_directives().items():
-            logging.info(f"  {directive}: {description}")
-        logging.info(f"\nSupported prefixes: {', '.join(get_directive_prefixes())}")
+            print(f"  {directive}: {description}")
+        print(f"\nSupported prefixes: {', '.join(get_directive_prefixes())}")
         return
 
     try:
@@ -488,21 +481,21 @@ def main():
         pull_number_str = os.environ.get("PULL_NUMBER") or 1
 
         if not repo_owner:
-            logging.error("REPO_OWNER environment variable not defined")
+            logger.error("REPO_OWNER environment variable not defined")
             sys.exit(1)
 
         if not repo_name:
-            logging.error("REPO_NAME environment variable not defined")
+            logger.error("REPO_NAME environment variable not defined")
             sys.exit(1)
 
         if not pull_number_str:
-            logging.error("PULL_NUMBER environment variable not defined")
+            logger.error("PULL_NUMBER environment variable not defined")
             sys.exit(1)
 
         try:
             pull_number = int(pull_number_str)
         except ValueError:
-            logging.error(f"PULL_NUMBER must be an integer, got: {pull_number_str}")
+            logger.error(f"PULL_NUMBER must be an integer, got: {pull_number_str}")
             sys.exit(1)
 
         # Optional parameters
@@ -529,10 +522,9 @@ def main():
                 print(f"{key}: {value}")
 
     except Exception as e:
-        logging.error(f"ERROR: {e}")
+        logger.exception(f"{e.__class__.__name__}: {e}")
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    setup_logging()
     main()

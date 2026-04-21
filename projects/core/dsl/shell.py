@@ -6,8 +6,6 @@ from pathlib import Path
 import projects.core.library.env as env
 from projects.core.library.run import SignalError
 
-# Configure logging to show info messages
-logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("DSL")
 logger.propagate = False  # Don't show logger prefix
 

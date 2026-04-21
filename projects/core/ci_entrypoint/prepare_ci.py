@@ -77,7 +77,7 @@ def setup_dual_output():
     artifact_dir = os.environ.get("ARTIFACT_DIR")
 
     if not artifact_dir:
-        logging.warning("ARTIFACT_DIR not defined, not saving $ARTIFACT_DIR/run.log")
+        logger.warning("ARTIFACT_DIR not defined, not saving $ARTIFACT_DIR/run.log")
         return None
 
     log_file_path = Path(artifact_dir) / "run.log"
@@ -85,7 +85,7 @@ def setup_dual_output():
     try:
         log_file_path.parent.mkdir(parents=True, exist_ok=True)
     except Exception as e:
-        logging.warning(f"Failed to create directory: {e}")
+        logger.warning(f"Failed to create directory: {e}")
         return None
 
     if log_file_path.exists():
@@ -135,11 +135,11 @@ def setup_dual_output():
                             log_file.flush()
                         except (OSError, ValueError) as e:
                             # Pipe was closed, exit gracefully
-                            logging.exception(f"Dual output thread file operations failed: {e}")
+                            logger.exception(f"Dual output thread file operations failed: {e}")
                             break
                     # If no data, loop continues and checks stop_event
             except Exception as e:
-                logging.exception(f"Dual output thread failed: {e}")
+                logger.exception(f"Dual output thread failed: {e}")
                 pass  # Exit gracefully on any error
 
     # 4. Start a background thread to act as the 'tee' process
@@ -340,7 +340,7 @@ def ci_banner(project: str, operation: str, args: list[str]):
         if result.returncode == 0:
             lines = result.stdout.split("\n")[:10]  # head 10
             for line in lines:
-                logging.info(line)
+                logger.info(line)
         else:
             logger.warning("Could not access git history (main..) ...")
     except Exception as e:

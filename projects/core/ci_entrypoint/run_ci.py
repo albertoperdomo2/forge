@@ -41,7 +41,7 @@ def setup_logging():
 
 
 # Set up logging
-setup_logging()
+
 logger = logging.getLogger(__name__)
 
 FORGE_HOME = Path(__file__).resolve().parent.parent.parent.parent
@@ -147,6 +147,8 @@ def install_extra_packages(packages):
 
 
 def prepare():
+    setup_logging()
+
     # Set up signal handlers for graceful interruption
     setup_signal_handlers()
 
@@ -475,8 +477,8 @@ def execute_project_operation(
 
         sys.exit(result.returncode)
 
-    except Exception:
-        logging.exception("Unexpected exception")
+    except Exception as e:
+        logger.exception(f"Unexpected exception {e.__class__.__name__}: {e}")
 
         # Emergency cleanup of dual output to prevent hanging
         try:

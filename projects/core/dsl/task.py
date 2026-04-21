@@ -13,8 +13,7 @@ from .script_manager import get_script_manager
 
 LINE_WIDTH = 80
 
-# Configure logging to show info messages
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+
 logger = logging.getLogger("DSL")
 logger.propagate = False  # Don't show logger prefix
 
@@ -48,7 +47,7 @@ def _ensure_is_task(func, decorator_name):
     return True
 
 
-def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
+def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *args, **kwargs):
     """
     Execute a function with retry logic.
 
@@ -57,6 +56,7 @@ def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
         attempts: Number of retry attempts
         delay: Initial delay between retries in seconds
         backoff: Multiplier for delay on each retry
+        retry_on_exceptions: If True, retry on raised exceptions (never on KeyboardInterrupt)
         *args, **kwargs: Arguments to pass to the function
 
     Returns:
@@ -69,6 +69,7 @@ def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
     retry_attempts = retry_config.get("attempts", attempts)
     retry_delay = retry_config.get("delay", delay)
     retry_backoff = retry_config.get("backoff", backoff)
+    retry_on_exc = retry_config.get("retry_on_exceptions", retry_on_exceptions)
 
     current_delay = retry_delay
 
@@ -105,14 +106,37 @@ def _execute_with_retry(func, attempts, delay, backoff, *args, **kwargs):
         except KeyboardInterrupt:
             # Don't retry on keyboard interrupt, just re-raise immediately
             raise
-        except Exception as e:
-            # Exception means abort, don't retry
-            logger.error(f"==> TASK EXCEPTION: {func.__name__} failed with exception")
-            logger.info("")
-            raise e
+        except Exception as exc:
+            if not retry_on_exc:
+                logger.error(f"==> TASK EXCEPTION: {func.__name__} failed with exception")
+                logger.info("")
+                raise exc
 
-    # This should not be reached due to the logic above, but kept for safety
-    raise RetryFailure(f"Unexpected end of retry loop for task {func.__name__}")
+            if attempt >= retry_attempts - 1:
+                logger.error(f"==> ALL ATTEMPTS FAILED: {retry_attempts}/{retry_attempts}")
+                logger.info("")
+                raise RetryFailure(
+                    f"All {retry_attempts} attempts failed for task {func.__name__} : "
+                    f"{func.__doc__ or 'No description'} (last error: {exc.__class__.__name__}: {exc})"
+                ) from exc
+
+            logger.info("")
+            logger.info("~" * LINE_WIDTH)
+            logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
+            logger.warning(
+                f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} "
+                f"({exc.__class__.__name__}: {exc})"
+            )
+            logger.info(f"~~ RETRY in {current_delay:.0f}s")
+            logger.info("~" * LINE_WIDTH)
+            time.sleep(current_delay)
+            logger.info("")
+            current_delay *= retry_backoff
+
+    raise RetryFailure(
+        f"All {retry_attempts} attempts failed for task {func.__name__} : "
+        f"{func.__doc__ or 'No description'} (exceptions retried until exhausted)"
+    )
 
 
 def task_only(decorator_func):
@@ -124,7 +148,9 @@ def task_only(decorator_func):
 
     Handles both simple decorators and decorator factories:
 
-    Simple decorator usage:
+    Simple decorator usage (single parameter must be named ``func`` so factories
+    like ``when(condition)`` are not mistaken for ``@decorator`` on a lambda):
+
         @task_only
         def always(func):
             func._always_execute = True
@@ -145,16 +171,16 @@ def task_only(decorator_func):
         sig = inspect.signature(decorator_func)
         params = list(sig.parameters.values())
 
-        # Check if this is a simple decorator that takes a single function argument
+        # Simple decorator case: @always(func) — single parameter must be named like
+        # the wrapped callable (e.g. "func"), not a factory argument such as "condition".
         if (
             len(params) == 1
-            and params[0].annotation in (inspect.Parameter.empty, "func", callable)
+            and params[0].name == "func"
             and len(args) == 1
             and len(kwargs) == 0
             and callable(args[0])
             and hasattr(args[0], "__name__")
         ):
-            # Simple decorator case: @always
             func = args[0]
             _ensure_is_task(func, decorator_func.__name__)
 
@@ -261,6 +287,8 @@ def when(condition):
 
     def decorator(func):
         func._when_condition = condition
+        if hasattr(func, "_task_info"):
+            func._task_info["condition"] = condition
         return func
 
     return decorator
@@ -281,9 +309,10 @@ def always(func):
     return func
 
 
-def retry(attempts=3, delay=1, backoff=1.0):
+@task_only
+def retry(attempts=3, delay=1, backoff=1.0, retry_on_exceptions=False):
     """
-    Simple retry decorator
+    Retry decorator for @task functions.
 
     Must be applied to a function that is already decorated with @task.
 
@@ -291,11 +320,17 @@ def retry(attempts=3, delay=1, backoff=1.0):
         attempts: Number of retry attempts
         delay: Initial delay between retries in seconds
         backoff: Multiplier for delay on each retry
+        retry_on_exceptions: If True, also retry when the task raises (never on KeyboardInterrupt)
     """
 
     def decorator(func):
         # Store retry config on function (runtime will handle the actual retry)
-        retry_config = {"attempts": attempts, "delay": delay, "backoff": backoff}
+        retry_config = {
+            "attempts": attempts,
+            "delay": delay,
+            "backoff": backoff,
+            "retry_on_exceptions": retry_on_exceptions,
+        }
         func._retry_config = retry_config
 
         # If this is already a registered task, update its retry config
