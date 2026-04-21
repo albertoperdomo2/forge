@@ -145,7 +145,7 @@ def execute_tasks(function_args: dict = None):
             pending = file_tasks[task_index + 1 :] if task_index < len(file_tasks) else []
             always_pending = [t for t in pending if t.get("always_execute")]
             if always_pending:
-                logging.warning("Executing the @always tasks ...")
+                logger.warning("Executing the @always tasks ...")
             for current_task_info in pending:
                 if not current_task_info.get("always_execute"):
                     logger.info("")
@@ -260,7 +260,7 @@ def _execute_single_task(task_info, args, shared_context):
         try:
             co_filename = Path(co_filename).relative_to(env.FORGE_HOME)
         except ValueError as path_err:
-            logging.warning(
+            logger.warning(
                 f"Path {co_filename} isn't relative to FORGE_HOME={env.FORGE_HOME} ({path_err})"
             )
             pass  # Use absolute path if file is outside FORGE_HOME

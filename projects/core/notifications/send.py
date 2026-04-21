@@ -9,6 +9,9 @@ import yaml
 import projects.core.notifications.github.api as github_api
 import projects.core.notifications.slack.api as slack_api
 
+logger = logging.getLogger(__name__)
+
+
 GITHUB_APP_PEM_FILE = "topsail-bot.2024-09-18.private-key.pem"
 GITHUB_APP_CLIENT_ID_FILE = "topsail-bot.clientid"
 SLACK_TOKEN_FILE = "topsail-bot.slack-token"
@@ -32,12 +35,12 @@ def get_secrets():
         warn.append(f"{secret_env_key} not defined, cannot access the Github secrets")
     else:
         for warning in warn:
-            logging.warning(warning)
+            logger.warning(warning)
         return None, None
 
     secret_dir = pathlib.Path(os.environ[secret_env_key])
     if not secret_dir.exists():
-        logging.fatal(f"{secret_env_key} points to a non-existing directory ...")
+        logger.fatal(f"{secret_env_key} points to a non-existing directory ...")
         return None, None
 
     return secret_dir, secret_env_key
@@ -49,11 +52,11 @@ def send_job_completion_notification(
     pr_number = get_pr_number()
 
     if not github_api:
-        logging.info("Github API not available, don't send notification to github")
+        logger.info("Github API not available, don't send notification to github")
         github = False
 
     if os.environ.get("JOB_TYPE") == "periodic":
-        logging.info("Running from a Periodic job, don't send notification to github")
+        logger.info("Running from a Periodic job, don't send notification to github")
         github = False
 
     secret_dir, secret_env_key = get_secrets()
@@ -95,38 +98,38 @@ def send_job_completion_notification_to_github(
     abort = False
 
     if None in (pr_number,):
-        logging.error("github: Cannot figure out the PR number")
+        logger.error("github: Cannot figure out the PR number")
         abort = True
 
     if None in (org, repo):
-        logging.error("github: Cannot access the org/repo")
+        logger.error("github: Cannot access the org/repo")
         abort = True
 
     if None in (pem_file, client_id):
-        logging.error("github: Cannot access the secret files")
+        logger.error("github: Cannot access the secret files")
         abort = True
 
     if abort:
-        logging.error("github: Aborting due to previous error(s).")
+        logger.error("github: Aborting due to previous error(s).")
         return
 
     user_token = github_api.get_user_token(pem_file, client_id, org, repo)
     if not user_token:
-        logging.error("github: Couldn't fetch the user token. Is the app installed in the repo?")
+        logger.error("github: Couldn't fetch the user token. Is the app installed in the repo?")
         return
 
     if dry_run:
-        logging.info(f"Github notification:\n{message}")
-        logging.info("***")
-        logging.info("***")
-        logging.info("***\n")
+        logger.info(f"Github notification:\n{message}")
+        logger.info("***")
+        logger.info("***")
+        logger.info("***\n")
 
         return True
 
     resp = github_api.send_notification(org, repo, user_token, pr_number, message)
 
     if not resp.ok:
-        logging.fatal(f"Github notification post failed :/ {resp.text}")
+        logger.fatal(f"Github notification post failed :/ {resp.text}")
 
     return resp.ok
 
@@ -300,22 +303,22 @@ def send_job_completion_notification_to_slack(
             channel_message = get_slack_channel_message(anchor, pr_data)
 
         if dry_run:
-            logging.info("Posting Slack channel notification ...")
+            logger.info("Posting Slack channel notification ...")
         else:
             channel_msg_ts, ok = slack_api.send_message(client, message=channel_message)
             if not ok:
                 return True
 
     if dry_run:
-        logging.info(f"Slack channel notification:\n{channel_message}")
+        logger.info(f"Slack channel notification:\n{channel_message}")
 
     thread_message = get_slack_thread_message(reason, status)
 
     if dry_run:
-        logging.info(f"Slack thread notification:\n{thread_message}")
-        logging.info("***")
-        logging.info("***")
-        logging.info("***\n")
+        logger.info(f"Slack thread notification:\n{thread_message}")
+        logger.info("***")
+        logger.info("***")
+        logger.info("***\n")
 
         return True
 
@@ -332,7 +335,7 @@ def get_pr_number():
         return os.environ.get("PULL_NUMBER")
 
     else:
-        logging.warning("Test not running from a well-known CI engine, cannot extract a PR number.")
+        logger.warning("Test not running from a well-known CI engine, cannot extract a PR number.")
         return
 
 
@@ -366,7 +369,7 @@ def get_ci_base_link(is_raw_file=False, is_dir=False):
         )
 
     else:
-        logging.warning(
+        logger.warning(
             "Test not running from a well-known CI engine, cannot extract the artifacts link."
         )
 
@@ -384,11 +387,11 @@ def get_github_secrets(secret_dir, secret_env_key):
     client_id_file = secret_dir / GITHUB_APP_CLIENT_ID_FILE
 
     if not pem_file.exists():
-        logging.warning(f"Github App private key does not exists ({pem_file}) in {secret_env_key}")
+        logger.warning(f"Github App private key does not exists ({pem_file}) in {secret_env_key}")
         return None, None
 
     if not client_id_file.exists():
-        logging.warning(
+        logger.warning(
             f"Github App clientid file does not exists ({client_id_file}) in {secret_env_key}"
         )
         return None, None
@@ -402,7 +405,7 @@ def get_slack_secrets(secret_dir, secret_env_key):
     token_file = secret_dir / SLACK_TOKEN_FILE
 
     if not token_file.exists():
-        logging.warning(
+        logger.warning(
             f"{token_file.name} not found in {secret_env_key}. Cannot send the Slack notification"
         )
         return None
@@ -437,14 +440,14 @@ total_points: 6
 def send_cpt_notification(regression_summary_path, title, slack, dry_run):
     summary_path = pathlib.Path(regression_summary_path)
     if not summary_path.exists():
-        logging.fatal(f"Regression summary doesn't exist :/ ({regression_summary_path})")
+        logger.fatal(f"Regression summary doesn't exist :/ ({regression_summary_path})")
         return True
 
     try:
         with open(summary_path) as f:
             summary = yaml.safe_load(f)
     except Exception as e:
-        logging.fatal(f"Failed to load regression summary: {e}")
+        logger.fatal(f"Failed to load regression summary: {e}")
         return True
 
     secret_dir, secret_env_key = get_secrets()
@@ -465,7 +468,7 @@ def send_cpt_notification_to_slack(secret_dir, secret_env_key, title, summary, d
 
     client = slack_api.init_client(token)
     if not client:
-        logging.fatal("Couldn't get the slack client ...")
+        logger.fatal("Couldn't get the slack client ...")
         return True
     safe_title = html.escape(title)
     channel_msg_ts, channel_message = slack_api.search_channel_message(client, safe_title)
@@ -473,18 +476,18 @@ def send_cpt_notification_to_slack(secret_dir, secret_env_key, title, summary, d
     if not channel_msg_ts:
         channel_message = f"🧵 Thread for `{title}` continuous performance testing"
         if dry_run:
-            logging.info(f"Posting Slack channel notification ...\n{channel_message}")
+            logger.info(f"Posting Slack channel notification ...\n{channel_message}")
         else:
             channel_msg_ts, channel_ok = slack_api.send_message(client, message=channel_message)
 
     try:
         thread_message = get_slack_cpt_message(summary)
     except Exception as e:
-        logging.fatal(f"Failed to generate the slack notification message: {e}")
+        logger.fatal(f"Failed to generate the slack notification message: {e}")
         return True
 
     if dry_run:
-        logging.info(f"Posting Slack thread notification ...\n{thread_message}")
+        logger.info(f"Posting Slack thread notification ...\n{thread_message}")
         ok = True
     else:
         _, ok = slack_api.send_message(client, message=thread_message, main_ts=channel_msg_ts)

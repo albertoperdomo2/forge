@@ -6,6 +6,9 @@ import requests
 
 from . import gen_jwt
 
+logger = logging.getLogger(__name__)
+
+
 COMMON_HEADERS = {
     "Accept": "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
@@ -32,7 +35,7 @@ def get_user_token(pem_file, client_id, org, repo):
         installation_id = installation_resp.json()["id"]
     except Exception as e:
         msg = f"Failed to get the user token: {e}"
-        logging.error(msg)
+        logger.error(msg)
         raise e
 
     # Get the user token
@@ -66,7 +69,7 @@ def fetch_pr_data(org: str, repo: str, pr_number: str):
 
     response = requests.get(url, headers=COMMON_HEADERS)
     if not response.ok:
-        logging.warning(f"Error fetching PR creation time: {response.text}")
+        logger.warning(f"Error fetching PR creation time: {response.text}")
 
         return 0, None  # XXX: allow the notifications pipeline still to proceed
 

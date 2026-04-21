@@ -13,7 +13,7 @@ import yaml
 
 from . import env
 
-logging.getLogger().setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
 VARIABLE_OVERRIDES_FILENAME = "000__ci_metadata/variable_overrides.yaml"
 
@@ -47,10 +47,10 @@ class Config:
 
         if not self.config_path.exists():
             msg = f"Configuration file '{self.config_path}' does not exist :/"
-            logging.error(msg)
+            logger.error(msg)
             raise ValueError(msg)
 
-        logging.info(f"Loading configuration from {self.config_path} ...")
+        logger.info(f"Loading configuration from {self.config_path} ...")
         with open(self.config_path) as config_f:
             self.config = yaml.safe_load(config_f)
 
@@ -106,7 +106,7 @@ class Config:
         variable_overrides_path = env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
 
         if not variable_overrides_path.exists():
-            logging.debug(
+            logger.debug(
                 f"save_config_overrides: {variable_overrides_path} does not exist, nothing to save."
             )
             self.config["overrides"] = {}
@@ -124,7 +124,7 @@ class Config:
             variable_overrides_path = env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
 
         if not variable_overrides_path.exists():
-            logging.debug(
+            logger.debug(
                 f"apply_config_overrides: {variable_overrides_path} does not exist, nothing to override."
             )
 
@@ -135,7 +135,7 @@ class Config:
 
         if not isinstance(variable_overrides, dict):
             msg = f"Wrong type for the variable overrides file. Expected a dictionnary, got {variable_overrides.__class__.__name__}"
-            logging.fatal(msg)
+            logger.fatal(msg)
             raise ValueError(msg)
 
         for key, value in variable_overrides.items():
@@ -161,14 +161,14 @@ class Config:
                 key, print=False
             )  # ensure that key has been set, raises an exception otherwise
             if log:
-                logging.info(f"config override: {key} --> {actual_value}")
+                logger.info(f"config override: {key} --> {actual_value}")
 
     def apply_preset(self, name):
         values = self.get_preset(name)
         if not values:
             raise ValueError(f"No preset found with name '{name}'")
 
-        logging.info(f"Applying preset '{name}' ==> {values}")
+        logger.info(f"Applying preset '{name}' ==> {values}")
         for key, value in values.items():
             if key == "extends":
                 for extend_name in value:
@@ -176,7 +176,7 @@ class Config:
                 continue
 
             msg = f"preset[{name}] {key} --> {value}"
-            logging.info(msg)
+            logger.info(msg)
             with open(env.ARTIFACT_DIR / "presets_applied", "a") as f:
                 print(msg, file=f)
 
@@ -217,12 +217,12 @@ class Config:
         except IndexError as ex:
             if default_value != ...:
                 if warn:
-                    logging.warning(
+                    logger.warning(
                         f"get_config: {jsonpath} --> missing. Returning the default value: {default_value}"
                     )
                 return default_value
 
-            logging.error(f"get_config: {jsonpath} --> {ex}")
+            logger.error(f"get_config: {jsonpath} --> {ex}")
             raise KeyError(f"Key '{jsonpath}' not found in {self.config_path}") from ex
 
         if isinstance(value, str) and value.startswith("*$@"):
@@ -231,7 +231,7 @@ class Config:
         value = self.resolve_reference(value, handled_secretly)
 
         if print and not handled_secretly:
-            logging.info(f"get_config: {jsonpath} --> {value}")
+            logger.info(f"get_config: {jsonpath} --> {value}")
 
         return value
 
@@ -242,11 +242,11 @@ class Config:
             )  # will raise an exception if the jsonpath does not exist
             jsonpath_ng.parse(jsonpath).update(self.config, value)
         except Exception as ex:
-            logging.error(f"set_config: {jsonpath}={value} --> {ex}")
+            logger.error(f"set_config: {jsonpath}={value} --> {ex}")
             raise
 
         if print:
-            logging.info(f"set_config: {jsonpath} --> {value}")
+            logger.info(f"set_config: {jsonpath} --> {value}")
 
         self.save_config()
 
@@ -265,7 +265,7 @@ class Config:
         def secret_file_dereference():
             if not handled_secretly:
                 msg = f"{value} is a secret dereference, but get_config(..., handled_secretly=False). Aborting"
-                logging.fatal(msg)
+                logger.fatal(msg)
                 raise ValueError(msg)
 
             ref_key = value.removeprefix("*$@")
@@ -301,7 +301,7 @@ class Config:
         if value.startswith("*@"):
             # value can be printed here, it's a reference to a secret, not a secret value
             msg = f"resolve_reference: '*@' references not supported (not sure how to handle it wrt to secrets) --> {value}"
-            logging.fatal(msg)
+            logger.fatal(msg)
             raise ValueError(msg)
 
         if not (value.startswith("@") or "{@" in value):
@@ -313,7 +313,7 @@ class Config:
         new_value = simple_dereference() if value.startswith("@") else multi_dereference()
 
         if not handled_secretly:
-            logging.info(f"resolve_reference: {value} ==> '{new_value}'")
+            logger.info(f"resolve_reference: {value} ==> '{new_value}'")
 
         return copy.deepcopy(new_value)
 
@@ -343,7 +343,7 @@ def __get_config_path(orchestration_dir):
     if config_path_final.exists():
         config_path_final.unlink()
 
-    logging.info(f"Copying the configuration from {config_file_src} to the artifact dir ...")
+    logger.info(f"Copying the configuration from {config_file_src} to the artifact dir ...")
     shutil.copyfile(config_file_src, config_path_final)
 
     return config_path_final, config_file_src
@@ -383,7 +383,7 @@ def init(orchestration_dir, *, apply_config_overrides=True):
     global project
 
     if project:
-        logging.info("config.init: project config already configured.")
+        logger.info("config.init: project config already configured.")
         return
 
     config_path, src_config = __get_config_path(orchestration_dir)
@@ -393,7 +393,7 @@ def init(orchestration_dir, *, apply_config_overrides=True):
     env.ARTIFACT_DIR / VARIABLE_OVERRIDES_FILENAME
 
     if not apply_config_overrides:
-        logging.info(
+        logger.info(
             "config.init: running with 'apply_config_overrides', "
             "skipping the overrides. Saving it as 'overrides' "
             "field in the project configuration."

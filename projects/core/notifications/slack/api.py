@@ -3,6 +3,9 @@ import logging
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
+logger = logging.getLogger(__name__)
+
+
 CHANNEL_ID = "C07NS5TAKPA"
 MAX_CALLS = 10
 
@@ -34,7 +37,7 @@ def search_channel_message(client, message_anchor: str, not_before=None):
                 ]  # in case it is not in the first 20
 
         except SlackApiError as e:
-            logging.warning(f"Error fetching history: {e}")
+            logger.warning(f"Error fetching history: {e}")
             return None, None
 
         for message in history:
@@ -44,7 +47,7 @@ def search_channel_message(client, message_anchor: str, not_before=None):
             return message["ts"], message["text"]
 
     if calls == MAX_CALLS:
-        logging.info(f"Slack text search stopped due to MAX_CALLS ({MAX_CALLS}) exceeded.")
+        logger.info(f"Slack text search stopped due to MAX_CALLS ({MAX_CALLS}) exceeded.")
 
     return None, None
 
@@ -59,7 +62,7 @@ def send_message(client, message: str, main_ts: str = None):
         )
 
     except SlackApiError as e:
-        logging.warning(f"Error posting message: {e}")
+        logger.warning(f"Error posting message: {e}")
         return None, False
 
     return result["ts"], True

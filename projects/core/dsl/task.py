@@ -13,8 +13,7 @@ from .script_manager import get_script_manager
 
 LINE_WIDTH = 80
 
-# Configure logging to show info messages
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+
 logger = logging.getLogger("DSL")
 logger.propagate = False  # Don't show logger prefix
 
