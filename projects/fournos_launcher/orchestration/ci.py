@@ -10,6 +10,7 @@ import types
 
 import click
 
+from projects.core.ci_entrypoint.prepare_ci import CI_METADATA_DIRNAME
 from projects.core.library import ci as ci_lib
 from projects.core.library import config, env
 from projects.fournos_launcher.orchestration import submit as submit_mod
@@ -24,7 +25,7 @@ def _set_job_owner_from_pull_request():
 
     Checks for pull_request.json file and extracts user.login to set as fournos.job.owner
     """
-    pull_request_file = env.ARTIFACT_DIR / "000__ci_metadata" / "pull_request.json"
+    pull_request_file = env.ARTIFACT_DIR / CI_METADATA_DIRNAME / "pull_request.json"
 
     # Guard: Check if file exists
     if not pull_request_file.exists():
