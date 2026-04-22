@@ -96,8 +96,15 @@ def submit_job():
     config.project.set_config("fournos.job.display_name", display_name)
     logger.info(f"Set job display name: {display_name}")
 
+    # Validate required configuration before job submission
+    cluster_name = config.project.get_config("cluster.name")
+    if not cluster_name:
+        raise ValueError(
+            "cluster.name must be configured in config.yaml - cannot submit job without target cluster"
+        )
+
     submit_and_wait(
-        cluster_name=config.project.get_config("cluster.name"),
+        cluster_name=cluster_name,
         project=config.project.get_config("ci_job.project"),
         args=config.project.get_config("ci_job.args"),
         variables_overrides=overrides,
