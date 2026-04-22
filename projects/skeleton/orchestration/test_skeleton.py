@@ -1,5 +1,6 @@
 import logging
 import pathlib
+import signal
 import time
 
 import yaml
@@ -8,6 +9,28 @@ from projects.core.library import config, env, run, vault
 from projects.skeleton.toolbox.cluster_info.main import run as cluster_info
 
 logger = logging.getLogger(__name__)
+
+
+def _signal_handler_sigint(sig, frame):
+    """Sample SIGINT signal handler for skeleton project."""
+    env.reset_artifact_dir()
+    # Sample handler - does nothing else
+
+
+def _signal_handler_sigterm(sig, frame):
+    """Sample SIGTERM signal handler for skeleton project."""
+    env.reset_artifact_dir()
+    # Sample handler - does nothing else
+
+
+def _setup_sample_signal_handlers():
+    """Set up sample signal handlers for demonstration."""
+    try:
+        signal.signal(signal.SIGINT, _signal_handler_sigint)
+        signal.signal(signal.SIGTERM, _signal_handler_sigterm)
+        logger.debug("Sample signal handlers installed")
+    except Exception as e:
+        logger.warning(f"Failed to set up sample signal handlers: {e}")
 
 
 def init(strict_vault_validation=True):
