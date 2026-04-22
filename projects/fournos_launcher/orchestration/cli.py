@@ -11,6 +11,7 @@ import click
 
 from projects.core.library import config
 from projects.core.library.cli import safe_cli_command
+from projects.fournos_launcher.orchestration import job_management
 from projects.fournos_launcher.orchestration import submit as submit_mod
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,15 @@ def submit(ctx, cluster, project, args, namespace, override, commit):
         logger.info(f"Using commit SHA {commit}")
 
     return submit_mod.submit_job()
+
+
+@main.command()
+@click.pass_context
+@safe_cli_command
+def shutdown_jobs(ctx):
+    """Shutdown any running FournosJobs for this CI run."""
+    job_management.shutdown_fjobs_on_interrupt()
+    return 0
 
 
 if __name__ == "__main__":

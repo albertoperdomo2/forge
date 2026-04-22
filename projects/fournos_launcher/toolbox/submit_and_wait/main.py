@@ -36,6 +36,7 @@ def run(
     pipeline_name: str = "",
     env: dict = None,
     status_dest=None,
+    ci_label: str = None,
 ):
     """
     Submit a FOURNOS job and wait for completion
@@ -52,6 +53,7 @@ def run(
         pipeline_name: Name of the pipeline to execute (default: empty)
         env: Dictionary of environment variables to set (default: empty dict)
         status_dest: Directory to save status information and pod logs (default: {artifact_dir}/artifacts)
+        ci_label: CI run label for tracking and cancellation (default: None)
 
     Examples:
         # Called by entrypoint with config values:
@@ -173,7 +175,6 @@ def wait_for_job_completion(args, ctx):
     status_result = shell.run(
         f'oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o jsonpath="{{.status.phase}}"',
         check=False,
-        log_stdout=False,
     )
 
     if not status_result.success:
@@ -189,6 +190,21 @@ def wait_for_job_completion(args, ctx):
 
     status = status_result.stdout.strip()
 
+    # Check if shutdown has been requested
+    shutdown_result = shell.run(
+        f'oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o jsonpath="{{.spec.shutdown}}"',
+        check=False,
+    )
+
+    if shutdown_result.success and shutdown_result.stdout.strip():
+        shutdown_value = shutdown_result.stdout.strip()
+        logger.warning(
+            f"Job {ctx.final_job_name} has spec.shutdown={shutdown_value} - aborting wait"
+        )
+        raise RuntimeError(
+            f"Job {ctx.final_job_name} shutdown requested: spec.shutdown={shutdown_value}"
+        )
+
     if status in ["Succeeded"]:
         return f"Job {ctx.final_job_name} completed successfully"
 
@@ -197,7 +213,6 @@ def wait_for_job_completion(args, ctx):
         failure_result = shell.run(
             f'oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o jsonpath="{{.status.message}}"',
             check=False,
-            log_stdout=False,
         )
         failure_msg = failure_result.stdout.strip() if failure_result.success else "Unknown failure"
         raise RuntimeError(f"Job {ctx.final_job_name} failed: {failure_msg}")  # Abort on failure
@@ -213,6 +228,10 @@ def wait_for_job_completion(args, ctx):
 @task
 def capture_final_job_status(args, ctx):
     """Capture final job status and details"""
+    # Guard: Check if job name was generated (might not exist if early validation failed)
+    if not hasattr(ctx, "final_job_name"):
+        return "No job name available - skipping status capture"
+
     # Get full job details
     shell.run(
         f"oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o yaml",
@@ -228,6 +247,10 @@ def capture_final_job_status(args, ctx):
 def capture_pod_information(args, ctx):
     """Capture pod status and logs for the FOURNOS job"""
 
+    # Guard: Check if job name was generated (might not exist if early validation failed)
+    if not hasattr(ctx, "final_job_name"):
+        return "No job name available - skipping pod information capture"
+
     # List all pods with the FOURNOS job label
     label_selector = f"fournos.dev/job-name={ctx.final_job_name}"
 
@@ -242,7 +265,6 @@ def capture_pod_information(args, ctx):
     pod_list_result = shell.run(
         f'oc get pods -l {label_selector} -n {args.namespace} -o jsonpath="{{.items[*].metadata.name}}"',
         check=False,
-        log_stdout=False,
     )
 
     if not (pod_list_result.success and pod_list_result.stdout.strip()):
@@ -269,11 +291,25 @@ def capture_pod_information(args, ctx):
 def cleanup_job(args, ctx):
     """Clean up the job object"""
 
+    # Guard: Check if job name was generated (might not exist if early validation failed)
+    if not hasattr(ctx, "final_job_name"):
+        return "No job name available - skipping job cleanup"
+
+    # Check if shutdown has been requested - if so, preserve the job to let it export its artifacts
+    shutdown_result = shell.run(
+        f'oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o jsonpath="{{.spec.shutdown}}"',
+        check=False,
+    )
+
+    if shutdown_result.success and shutdown_result.stdout.strip():
+        shutdown_value = shutdown_result.stdout.strip()
+        return f"Job has spec.shutdown={shutdown_value} - preserving it to let it export its artifacts, skipping deletion"
+
     shell.run(
         f"oc delete fournosjob {ctx.final_job_name} -n {args.namespace} --ignore-not-found",
     )
 
-    return "No manifest file to clean up"
+    return "Job cleanup completed"
 
 
 # Create the main function using the toolbox library
