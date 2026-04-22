@@ -1,3 +1,4 @@
+import logging
 import os
 import pathlib
 import time
@@ -22,6 +23,14 @@ def reset_artifact_dir():
 
 def init(daily_artifact_dir=False):
     global ARTIFACT_DIR, BASE_ARTIFACT_DIR
+
+    # Configure global logging to show INFO level messages
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s: %(message)s",
+        force=True,  # Override any existing basicConfig
+    )
+
     if "ARTIFACT_DIR" in os.environ:
         artifact_dir = pathlib.Path(os.environ["ARTIFACT_DIR"])
 
