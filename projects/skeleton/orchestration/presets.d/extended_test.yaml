@@ -1,0 +1,2 @@
+skeleton.test.duration_seconds: 300  # Run test for 5 minutes
+skeleton.collect_cluster_info: true      # Enable cluster info gathering for extended tests

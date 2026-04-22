@@ -1,5 +1,6 @@
 import logging
 import pathlib
+import time
 
 import yaml
 
@@ -18,6 +19,10 @@ def init(strict_vault_validation=True):
 
 def test():
     logger.info("=== Skeleton Project Test Phase ===")
+
+    # Get test duration configuration
+    test_duration = config.project.get_config("skeleton.test.duration_seconds")
+    logger.info(f"Test duration: {test_duration} seconds")
 
     if config.project.get_config("skeleton.deep_testing"):
         logger.warning("Running the (fake) deep testing ...")
@@ -41,6 +46,29 @@ def test():
     )
     logger.info("")
     logger.info(f"Fake test configuration:\n{yaml_cfg}")
+
+    # Run timed test loop
+    start_time = time.time()
+    test_iteration = 0
+
+    logger.info(f"Starting {test_duration}s test loop...")
+
+    while time.time() - start_time < test_duration:
+        test_iteration += 1
+        elapsed = time.time() - start_time
+        remaining = test_duration - elapsed
+
+        logger.info(
+            f"Test iteration {test_iteration} - Elapsed: {elapsed:.1f}s, Remaining: {remaining:.1f}s"
+        )
+
+        # Simulate some test work with explicit waiting message
+        wait_time = min(30.0, remaining)
+        logger.info(f"⏳ Waiting {wait_time:.1f}s before next iteration...")
+        time.sleep(wait_time)
+
+    elapsed_total = time.time() - start_time
+    logger.info(f"✅ Completed {test_iteration} test iterations in {elapsed_total:.1f}s")
 
     if not config.project.get_config("skeleton.collect_cluster_info"):
         logger.warning("⚠️ Cluster information gathering not enabled. Returning early.")
