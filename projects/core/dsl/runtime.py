@@ -105,6 +105,7 @@ def execute_tasks(function_args: dict = None):
             # Generate metadata files
             _generate_execution_metadata(function_args, caller_frame, meta_dir)
             _generate_restart_script(function_args, caller_frame, meta_dir)
+            _generate_env_file(meta_dir)
 
             # Execute tasks only from the calling file
             script_manager = get_script_manager()
@@ -334,6 +335,17 @@ def _generate_execution_metadata(function_args: dict, caller_frame, meta_dir):
         yaml.dump(metadata, f, default_flow_style=False, sort_keys=False)
 
     logger.debug(f"Generated execution metadata: {metadata_file}")
+
+
+def _generate_env_file(meta_dir):
+    """Generate a file with environment variables as key/value pairs"""
+    env_file = meta_dir / "env.txt"
+
+    with open(env_file, "w") as f:
+        for key, value in sorted(os.environ.items()):
+            f.write(f"{key}={value}\n")
+
+    logger.debug(f"Generated environment file: {env_file}")
 
 
 def _setup_execution_logging(artifact_dir):
