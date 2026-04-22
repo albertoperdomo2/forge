@@ -3,6 +3,7 @@ import pathlib
 import time
 
 ARTIFACT_DIR = None
+BASE_ARTIFACT_DIR = None  # Immutable copy of the initial ARTIFACT_DIR
 FORGE_HOME = pathlib.Path(__file__).parents[3]
 
 
@@ -11,8 +12,16 @@ def _set_artifact_dir(value):
     ARTIFACT_DIR = value
 
 
-def init(daily_artifact_dir=False):
+def reset_artifact_dir():
+    """Reset ARTIFACT_DIR to its original BASE_ARTIFACT_DIR value."""
     global ARTIFACT_DIR
+    if BASE_ARTIFACT_DIR is not None:
+        ARTIFACT_DIR = BASE_ARTIFACT_DIR
+        os.environ["ARTIFACT_DIR"] = str(BASE_ARTIFACT_DIR)
+
+
+def init(daily_artifact_dir=False):
+    global ARTIFACT_DIR, BASE_ARTIFACT_DIR
     if "ARTIFACT_DIR" in os.environ:
         artifact_dir = pathlib.Path(os.environ["ARTIFACT_DIR"])
 
@@ -25,6 +34,12 @@ def init(daily_artifact_dir=False):
         os.environ["ARTIFACT_DIR"] = str(artifact_dir)
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    # Set BASE_ARTIFACT_DIR to the initial value (immutable)
+    if BASE_ARTIFACT_DIR is None:
+        BASE_ARTIFACT_DIR = artifact_dir
+        # Also expose it as an environment variable
+        os.environ["FORGE_BASE_ARTIFACT_DIR"] = str(BASE_ARTIFACT_DIR)
 
     _set_artifact_dir(artifact_dir)
 
