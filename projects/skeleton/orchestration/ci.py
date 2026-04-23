@@ -14,6 +14,7 @@ import prepare_skeleton
 import test_skeleton
 
 from projects.core.library import ci as ci_lib
+from projects.core.library.export import caliper_export_command
 
 
 @click.group()
@@ -49,6 +50,9 @@ def test(ctx):
 def pre_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
     return prepare_skeleton.cleanup()
+
+
+main.add_command(caliper_export_command)
 
 
 if __name__ == "__main__":

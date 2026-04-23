@@ -1,5 +1,6 @@
 vaults:
 - psap-forge-notifications
+- psap-forge-mlflow-export
 
 skeleton:
   collect_cluster_info: false
@@ -12,3 +13,27 @@ skeleton:
   deep_testing: false
   test:
     duration_seconds: 30  # Default test duration in seconds
+
+caliper:
+  export:
+    from: null
+    verbose: true
+    dry_run: false
+    backend:
+      mlflow:
+        enabled: true
+        secrets:
+          vault:
+            name: psap-forge-mlflow-export
+            key: mlflow-secret.yaml
+
+        config:
+          # Same keys/values as docs/caliper/mlflow-config.example.yaml
+          experiment: forge-skeleton
+          run_name:
+          description: >
+            Caliper export from FORGE
+          source_script: skeleton project
+          tags: {}
+          parameters: {}
+          metrics: {}
