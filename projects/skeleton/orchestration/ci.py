@@ -20,7 +20,7 @@ from projects.core.library import ci as ci_lib
 @click.pass_context
 @ci_lib.safe_ci_function
 def main(ctx):
-    """Skeleton Example Project CI Operations for FORGE."""
+    """Skeleton example project CI operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
     # for the time being, FOURNOS doesn't provide the secrets ':-)
     strict_vault_validation = False
