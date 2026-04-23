@@ -1,51 +1,10 @@
-"""Unified run model and plugin protocol for post-processing."""
+"""Types shared by the file export pipeline (artifact uploads)."""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-
-
-@dataclass
-class TestBaseNode:
-    """Directory containing __test_labels__.yaml."""
-
-    directory: Path
-    labels: dict[str, Any]
-    artifact_paths: list[Path] = field(default_factory=list)
-
-
-@dataclass
-class UnifiedResultRecord:
-    """One parsed facet / test result with distinguishing labels."""
-
-    test_base_path: str
-    distinguishing_labels: dict[str, Any]
-    metrics: dict[str, Any]
-    run_identity: dict[str, Any] = field(default_factory=dict)
-    parse_notes: list[str] = field(default_factory=list)
-
-
-@dataclass
-class ParseResult:
-    """Output of plugin parse pass."""
-
-    records: list[UnifiedResultRecord]
-    warnings: list[str] = field(default_factory=list)
-
-
-@dataclass
-class UnifiedRunModel:
-    """Reloadable unified representation after parsing."""
-
-    plugin_module: str
-    base_directory: str
-    test_nodes: list[TestBaseNode]
-    unified_result_records: list[UnifiedResultRecord]
-    parse_cache_ref: str | None = None
-    schema_version: str = "1"
 
 
 @dataclass
@@ -59,51 +18,9 @@ class FileExportManifest:
 
 @dataclass
 class FileExportBackendResult:
-    """Per-backend outcome."""
+    """Per-backend export outcome."""
 
     backend: str
     status: str  # success | failure | skipped
     detail: str = ""
-    metadata: dict[str, Any] | None = None
-
-
-@dataclass
-class RegressionFinding:
-    """Single KPI regression outcome."""
-
-    kpi_id: str
-    current_value: Any
-    baseline_value: Any
-    direction: str
-    status: str
-
-
-class PostProcessingPlugin(ABC):
-    """Project plugin: parse required; other hooks optional with defaults."""
-
-    @abstractmethod
-    def parse(self, base_dir: Path, nodes: list[TestBaseNode]) -> ParseResult:
-        """Parse each labeled test base into unified records."""
-
-    def visualize(
-        self,
-        model: UnifiedRunModel,
-        output_dir: Path,
-        report_ids: list[str] | None,
-        group_id: str | None,
-        visualize_config: dict[str, Any] | None,
-    ) -> list[str]:
-        """Write plots/HTML; return list of created file paths."""
-        return []
-
-    def kpi_catalog(self) -> list[dict[str, Any]]:
-        """KPI definitions (id, name, unit, higher_is_better)."""
-        return []
-
-    def compute_kpis(self, model: UnifiedRunModel) -> list[dict[str, Any]]:
-        """Return canonical-shaped KPI dicts (pre-validated)."""
-        return []
-
-    def build_ai_eval_payload(self, model: UnifiedRunModel) -> dict[str, Any]:
-        """Structured JSON for AI agent evaluation."""
-        return {"schema_version": "1", "run_id": "", "metrics": {}}
+    metadata: dict[str, Any] | None = field(default=None)
