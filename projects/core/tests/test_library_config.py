@@ -26,18 +26,14 @@ def test_init_consolidates_config_chunks_into_top_level_sections(tmp_path: Path)
     _write_yaml(
         orchestration_dir / "config.yaml",
         {
-            "runtime": {
-                "keep": "from-base",
-                "nested": {"base_value": 1},
-            },
             "shared": {"source": "config-file"},
         },
     )
     _write_yaml(
         orchestration_dir / "config.d" / "runtime.yaml",
         {
-            "nested": {"chunk_value": 2},
             "override": "from-chunk",
+            "nested": {"chunk_value": 2},
         },
     )
     _write_yaml(
@@ -47,15 +43,18 @@ def test_init_consolidates_config_chunks_into_top_level_sections(tmp_path: Path)
 
     core_config.init(orchestration_dir)
 
-    assert core_config.project.get_config("runtime.keep", print=False) == "from-base"
     assert core_config.project.get_config("runtime.override", print=False) == "from-chunk"
-    assert core_config.project.get_config("runtime.nested.base_value", print=False) == 1
     assert core_config.project.get_config("runtime.nested.chunk_value", print=False) == 2
     assert core_config.project.get_config("platform.name", print=False) == "rhoai"
+    assert core_config.project.get_config("shared.source", print=False) == "config-file"
 
     consolidated = yaml.safe_load((env.ARTIFACT_DIR / "config.yaml").read_text())
-    assert consolidated["runtime"]["nested"] == {"base_value": 1, "chunk_value": 2}
+    assert consolidated["runtime"] == {
+        "override": "from-chunk",
+        "nested": {"chunk_value": 2},
+    }
     assert consolidated["platform"] == {"name": "rhoai", "channel": "stable"}
+    assert consolidated["shared"] == {"source": "config-file"}
 
 
 def test_init_supports_projects_defined_only_with_config_d(tmp_path: Path) -> None:
@@ -77,3 +76,39 @@ def test_init_supports_projects_defined_only_with_config_d(tmp_path: Path) -> No
     consolidated = yaml.safe_load((env.ARTIFACT_DIR / "config.yaml").read_text())
     assert consolidated["runtime"]["default_preset"] == "smoke"
     assert consolidated["platform"]["namespace"] == "test-ns"
+
+
+def test_init_rejects_empty_config_d_when_config_yaml_is_missing(tmp_path: Path) -> None:
+    orchestration_dir = tmp_path / "orchestration"
+    (orchestration_dir / "config.d").mkdir(parents=True)
+
+    with pytest.raises(ValueError, match="config YAML chunks"):
+        core_config.init(orchestration_dir)
+
+
+def test_init_rejects_overlapping_sections_between_config_and_config_d(
+    tmp_path: Path,
+) -> None:
+    orchestration_dir = tmp_path / "orchestration"
+    _write_yaml(
+        orchestration_dir / "config.yaml",
+        {"runtime": {"keep": "from-base"}},
+    )
+    _write_yaml(
+        orchestration_dir / "config.d" / "runtime.yaml",
+        {"override": "from-chunk"},
+    )
+
+    with pytest.raises(ValueError, match="defined in both"):
+        core_config.init(orchestration_dir)
+
+
+def test_init_ignores_yml_config_chunks(tmp_path: Path) -> None:
+    orchestration_dir = tmp_path / "orchestration"
+    _write_yaml(
+        orchestration_dir / "config.d" / "runtime.yml",
+        {"default_preset": "smoke"},
+    )
+
+    with pytest.raises(ValueError, match="config YAML chunks"):
+        core_config.init(orchestration_dir)

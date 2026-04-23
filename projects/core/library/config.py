@@ -335,12 +335,13 @@ class Config:
 def __get_config_path(orchestration_dir):
     config_file_src = orchestration_dir / "config.yaml"
     config_dir_src = orchestration_dir / "config.d"
+    config_chunk_files = _get_config_chunk_files(config_dir_src)
     config_path_final = pathlib.Path(env.ARTIFACT_DIR / "config.yaml")
 
-    if not config_file_src.exists() and not config_dir_src.exists():
+    if not config_file_src.exists() and not config_chunk_files:
         raise ValueError(
             f"Cannot find the source config file at {config_file_src} "
-            f"or config directory at {config_dir_src}"
+            f"or config YAML chunks under {config_dir_src}"
         )
 
     if config_path_final.exists():
@@ -350,9 +351,11 @@ def __get_config_path(orchestration_dir):
         f"Consolidating the configuration from {config_file_src} "
         f"and {config_dir_src} to the artifact dir ..."
     )
+    consolidated_config = _load_project_config(config_file_src, config_chunk_files)
+
     with open(config_path_final, "w") as config_f:
         yaml.safe_dump(
-            _load_project_config(orchestration_dir),
+            consolidated_config,
             config_f,
             indent=4,
             default_flow_style=False,
@@ -362,43 +365,35 @@ def __get_config_path(orchestration_dir):
     return config_path_final, config_file_src
 
 
-def _load_project_config(orchestration_dir):
-    config_file_src = orchestration_dir / "config.yaml"
-    config_dir_src = orchestration_dir / "config.d"
+def _get_config_chunk_files(config_dir_src):
+    if not config_dir_src.is_dir():
+        return []
 
+    return sorted(config_dir_src.glob("*.yaml"))
+
+
+def _load_project_config(config_file_src, config_chunk_files):
     config = {}
     if config_file_src.exists():
         with open(config_file_src) as config_f:
             config = yaml.safe_load(config_f) or {}
 
-    if not config_dir_src.exists():
+    if not config_chunk_files:
         return config
 
-    for chunk_file in sorted(config_dir_src.glob("*.yaml")):
+    for chunk_file in config_chunk_files:
         with open(chunk_file) as chunk_f:
             chunk_value = yaml.safe_load(chunk_f)
 
         key = chunk_file.stem
         if key in config:
-            config[key] = _merge_config_values(config[key], chunk_value)
-        else:
-            config[key] = chunk_value
+            raise ValueError(
+                f"Configuration section '{key}' is defined in both "
+                f"{config_file_src} and {chunk_file}"
+            )
+        config[key] = chunk_value
 
     return config
-
-
-def _merge_config_values(base_value, chunk_value):
-    if not isinstance(base_value, dict) or not isinstance(chunk_value, dict):
-        return copy.deepcopy(chunk_value)
-
-    merged = copy.deepcopy(base_value)
-    for key, value in chunk_value.items():
-        if key in merged:
-            merged[key] = _merge_config_values(merged[key], value)
-        else:
-            merged[key] = copy.deepcopy(value)
-
-    return merged
 
 
 REQUIRES_ANNOTATION_ARG_NAME = "_cfg"
