@@ -10,3 +10,5 @@ skeleton:
     max_requests: 30
   extra_properties: {} # for the preset to give any extra property
   deep_testing: false
+  test:
+    duration_seconds: 30  # Default test duration in seconds

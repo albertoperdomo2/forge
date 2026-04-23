@@ -3,6 +3,10 @@ kind: FournosJob
 metadata:
   name: {{ ctx.final_job_name }}
   namespace: {{ args.namespace }}
+  {% if args.ci_label -%}
+  labels:
+    ci-run: {{ args.ci_label }}
+  {%- endif %}
 spec:
   owner: {{ args.owner }}
   displayName: {{ args.display_name }}

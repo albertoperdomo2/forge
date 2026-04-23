@@ -1,13 +1,48 @@
 import logging
 import os
 import pathlib
+import signal
 
 from projects.core.library import config, env, run, vault
+from projects.fournos_launcher.orchestration import job_management
 from projects.fournos_launcher.toolbox.submit_and_wait.main import (
     run as submit_and_wait,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _signal_handler_sigint(sig, frame):
+    """Handle SIGINT (Ctrl+C) for FOURNOS launcher."""
+    print("\n🚫 FOURNOS launcher received SIGINT - shutting down jobs...")
+    env.reset_artifact_dir()
+    job_management.shutdown_fjobs_on_interrupt()
+    # Don't call sys.exit here - let the original handler handle it
+
+
+def _signal_handler_sigterm(sig, frame):
+    """Handle SIGTERM for FOURNOS launcher."""
+    print("\n🛑 FOURNOS launcher received SIGTERM - shutting down jobs...")
+    env.reset_artifact_dir()
+    job_management.shutdown_fjobs_on_interrupt()
+    # Don't call sys.exit here - let the original handler handle it
+
+
+def _setup_signal_handlers():
+    """Set up signal handlers for FOURNOS job shutdown."""
+    try:
+        # Store original handlers
+        original_sigint = signal.signal(signal.SIGINT, _signal_handler_sigint)
+        original_sigterm = signal.signal(signal.SIGTERM, _signal_handler_sigterm)
+
+        logger.debug("FOURNOS signal handlers installed")
+
+        # Store references so we can restore them if needed
+        _setup_signal_handlers._original_sigint = original_sigint
+        _setup_signal_handlers._original_sigterm = original_sigterm
+
+    except Exception as e:
+        logger.warning(f"Failed to set up FOURNOS signal handlers: {e}")
 
 
 def init():
@@ -31,6 +66,9 @@ def prepare_env():
 
 
 def submit_job():
+    # Set up signal handlers for graceful job shutdown on interruption
+    _setup_signal_handlers()
+
     overrides = {}
     overrides.update(config.project.get_config("overrides"))
     overrides.update(config.project.get_config("extra_overrides"))
@@ -58,8 +96,15 @@ def submit_job():
     config.project.set_config("fournos.job.display_name", display_name)
     logger.info(f"Set job display name: {display_name}")
 
+    # Validate required configuration before job submission
+    cluster_name = config.project.get_config("cluster.name")
+    if not cluster_name:
+        raise ValueError(
+            "cluster.name must be configured in config.yaml - cannot submit job without target cluster"
+        )
+
     submit_and_wait(
-        cluster_name=config.project.get_config("cluster.name"),
+        cluster_name=cluster_name,
         project=config.project.get_config("ci_job.project"),
         args=config.project.get_config("ci_job.args"),
         variables_overrides=overrides,
@@ -69,6 +114,7 @@ def submit_job():
         pipeline_name=config.project.get_config("fournos.job.pipeline_name"),
         env=env_dict,
         status_dest=env.ARTIFACT_DIR,
+        ci_label=config.project.get_config("fournos.job.ci_label"),
     )
 
     return 0

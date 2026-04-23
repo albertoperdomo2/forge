@@ -48,10 +48,21 @@ FORGE_HOME = Path(__file__).resolve().parent.parent.parent.parent
 
 EXTRA_PACKAGES = []
 
+# Global reference to child process for signal forwarding
+_child_process = None
+
 
 def signal_handler_sigint(sig, frame):
     """Handle SIGINT (Ctrl+C) gracefully."""
-    print("\n🚫 Received SIGINT (Ctrl+C) - Interrupting CI operation...")
+    logger.info("🚫 Received SIGINT (Ctrl+C) - Interrupting CI operation...")
+
+    # Forward signal to child process first
+    if _child_process and _child_process.poll() is None:  # Child is still running
+        logger.info("📡 Forwarding SIGINT to child process...")
+        try:
+            _child_process.send_signal(signal.SIGINT)
+        except (OSError, ProcessLookupError):
+            pass  # Child may have already terminated
 
     # Emergency cleanup of dual output
     prepare_ci.shutdown_dual_output()
@@ -61,7 +72,15 @@ def signal_handler_sigint(sig, frame):
 
 def signal_handler_sigterm(sig, frame):
     """Handle SIGTERM gracefully."""
-    print("\n🛑 Received SIGTERM - Terminating CI operation...")
+    logger.info("🛑 Received SIGTERM - Terminating CI operation...")
+
+    # Forward signal to child process first
+    if _child_process and _child_process.poll() is None:  # Child is still running
+        logger.info("📡 Forwarding SIGTERM to child process...")
+        try:
+            _child_process.send_signal(signal.SIGTERM)
+        except (OSError, ProcessLookupError):
+            pass  # Child may have already terminated
 
     # Emergency cleanup of dual output
     prepare_ci.shutdown_dual_output()
@@ -148,9 +167,6 @@ def install_extra_packages(packages):
 
 def prepare():
     setup_logging()
-
-    # Set up signal handlers for graceful interruption
-    setup_signal_handlers()
 
     # Install click package using uv (as non-root user)
     install_extra_packages(EXTRA_PACKAGES)
@@ -443,13 +459,27 @@ def execute_project_operation(
         # Track start time for duration calculation
         start_time = time.time()
 
-        result = subprocess.run(
+        # Set up signal handlers for graceful interruption (safe to call multiple times)
+        setup_signal_handlers()
+
+        # Use Popen to get access to process object for signal forwarding
+        global _child_process
+        _child_process = subprocess.Popen(
             cmd,
-            check=False,  # Don't raise exception on non-zero exit
             stdin=None,  # Inherit stdin for pdb/debugging
             stdout=None,  # Inherit stdout for pdb/debugging
             stderr=None,  # Inherit stderr for pdb/debugging
         )
+
+        # Wait for process to complete
+        result_code = _child_process.wait()
+
+        # Create result object similar to subprocess.run()
+        class Result:
+            def __init__(self, returncode):
+                self.returncode = returncode
+
+        result = Result(result_code)
         click.echo()
         click.echo(
             f"▶️  Execution of {project} {operation} {' '.join(args)} returned {result.returncode}"

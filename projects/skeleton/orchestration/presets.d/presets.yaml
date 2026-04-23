@@ -7,3 +7,9 @@ side_testing:
   skeleton.extra_properties:
     load_shape: round
     request_type: text_completions
+
+quick_test:
+  skeleton.test.duration_seconds: 10  # Quick 10 second test
+
+long_test:
+  skeleton.test.duration_seconds: 600  # Long 10 minute test
