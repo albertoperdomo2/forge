@@ -369,7 +369,7 @@ def _get_config_chunk_files(config_dir_src):
     if not config_dir_src.is_dir():
         return []
 
-    return sorted(config_dir_src.glob("*.yaml"))
+    return sorted([*config_dir_src.glob("*.yaml"), *config_dir_src.glob("*.yml")])
 
 
 def _load_project_config(config_file_src, config_chunk_files):

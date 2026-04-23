@@ -103,12 +103,13 @@ def test_init_rejects_overlapping_sections_between_config_and_config_d(
         core_config.init(orchestration_dir)
 
 
-def test_init_ignores_yml_config_chunks(tmp_path: Path) -> None:
+def test_init_supports_yml_config_chunks(tmp_path: Path) -> None:
     orchestration_dir = tmp_path / "orchestration"
     _write_yaml(
         orchestration_dir / "config.d" / "runtime.yml",
         {"default_preset": "smoke"},
     )
 
-    with pytest.raises(ValueError, match="config YAML chunks"):
-        core_config.init(orchestration_dir)
+    core_config.init(orchestration_dir)
+
+    assert core_config.project.get_config("runtime.default_preset", print=False) == "smoke"
