@@ -49,7 +49,8 @@ def _display_error_summary(e: Exception) -> None:
     # mind that any thing below a '---\n' will be cut in the notification
 
     # Add the full stacktrace
-    summary_lines.append("--- 📍 STACKTRACE")
+    summary_lines.append(f"--- 📍{e.__class__.__name__} STACKTRACE ---")
+    summary_lines.append(f"--- 📍{str(e)}")
     summary_lines.append("")
 
     full_traceback = traceback.format_exc().splitlines()
