@@ -49,15 +49,12 @@ ENV UV_SYSTEM_PYTHON=1
 WORKDIR ${APP_HOME}
 ENV HOME=${APP_HOME}
 
-# Copy project configuration
-COPY pyproject.toml ./
-
-# Install Python dependencies using uv
-RUN uv lock && \
-    uv pip install --system -r pyproject.toml
-
-# Copy the application code
+# Full tree is required for editable install (setuptools `packages` under `projects/`).
+# Single source of truth: `uv pip install -e ".[caliper]"` reads [project] + optional caliper deps from pyproject.toml.
 COPY . .
+
+RUN uv lock && \
+    uv pip install --system -e ".[caliper]"
 
 # Create non-root user for security
 RUN groupadd -g 1001 ${APP_NAME} && \
