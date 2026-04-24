@@ -5,11 +5,12 @@ description: |
 content:
   mlflow-secret.yaml:
     description: |
-      Caliper secret config file for exporting to MLFlow:
-        tracking_uri: ...
-        username: "..."
-        password: "..."
-        insecure_tls: true
+      Caliper secret config file for exporting to MLFlow
+    sample: |
+      tracking_uri: ...
+      username: "..."
+      password: "..."
+      insecure_tls: true
 
   tracking_uri:
     description: |
@@ -22,3 +23,12 @@ content:
   password:
     description: |
       the mlflow password, so that the CI engine can censor it in the logs
+
+  aws.credentials:
+    description: |
+       the AWS credential file:
+    sample: |
+      [default]
+      aws_access_key_id = "..."
+      aws_secret_access_key = "..."
+      region = "..."
