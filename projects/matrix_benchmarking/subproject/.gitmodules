@@ -1,0 +1,3 @@
+[submodule "src/workload"]
+	path = src/workload
+	url = https://github.com/openshift-psap/matrix-benchmarking-plugins
