@@ -25,7 +25,8 @@ caliper:
         secrets:
           vault:
             name: psap-forge-mlflow-export
-            key: mlflow-secret.yaml
+            mlflow_secret: mlflow-secret.yaml
+            aws_secret: aws.credentials
 
         config:
           # Same keys/values as docs/caliper/mlflow-config.example.yaml
