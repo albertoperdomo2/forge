@@ -342,8 +342,14 @@ def get_pr_number():
 # returns a tuple (base_link, link_suffix)
 def get_ci_base_link(is_raw_file=False, is_dir=False):
     if os.environ.get("OPENSHIFT_CI") == "true":
-        job_spec = json.loads(os.environ["JOB_SPEC"])
-
+        try:
+            job_spec = json.loads(os.environ["JOB_SPEC"])
+        except KeyError:
+            logger.error("JOB_SPEC environment variable is not set")
+            raise
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse JOB_SPEC as JSON: %s", e)
+            raise
         test_name = os.environ["JOB_NAME_SAFE"]
         test_path = os.environ.get(
             "FORGE_OPENSHIFT_CI_STEP_DIR", "FORGE_OPENSHIFT_CI_STEP_DIR_missing"
