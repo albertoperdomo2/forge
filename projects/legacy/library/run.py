@@ -239,7 +239,8 @@ class Parallel:
                 # kill all processes in my group
                 # (the group was started with the os.setpgrp() above)
                 os.killpg(0, signal.SIGKILL)
-                sys.exit(1)
+                print("bye")
+                raise SystemExit(1)
 
         return False  # If we returned True here, any exception would be suppressed!
 
