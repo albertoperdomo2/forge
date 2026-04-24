@@ -21,7 +21,10 @@ class CaliperExportMlflowVaultContentRef(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     name: str = Field(..., description="Vault name (see ``$FORGE_HOME/vaults/<name>.yaml``).")
-    key: str = Field(..., description="Content key in that vault (filename / logical key).")
+    mlflow_secret: str = Field(
+        ..., description="Content key in that vault (filename / logical key)."
+    )
+    aws_secret: str = Field(..., description="Content key in that vault (filename / logical key).")
 
 
 class CaliperExportMlflowSecretsSpec(BaseModel):

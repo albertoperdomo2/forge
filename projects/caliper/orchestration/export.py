@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -71,13 +72,23 @@ def run_from_orchestration_config(
         )
 
     vault_name = export_cfg.backend.mlflow.secrets.vault.name
-    vault_key = export_cfg.backend.mlflow.secrets.vault.key
-    mlflow_secrets_path = vault_lib.get_vault_content_path(vault_name, vault_key)
+    vault_mlflow_secret = export_cfg.backend.mlflow.secrets.vault.mlflow_secret
+    mlflow_secrets_path = vault_lib.get_vault_content_path(vault_name, vault_mlflow_secret)
 
     if mlflow_secrets_path is None:
-        raise ValueError(f"Vault {vault_name}/{vault_key} missing :/")
+        raise ValueError(f"Vault {vault_name}/{vault_mlflow_secret} missing :/")
     elif not mlflow_secrets_path.exists():
-        raise FileNotFoundError(f"Vault {vault_name}/{vault_key} file missing :/")
+        raise FileNotFoundError(f"Vault {vault_name}/{vault_mlflow_secret} file missing :/")
+
+    vault_aws_secret = export_cfg.backend.mlflow.secrets.vault.aws_secret
+    aws_secrets_path = vault_lib.get_vault_content_path(vault_name, vault_aws_secret)
+    if aws_secrets_path is None:
+        raise ValueError(f"Vault {vault_name}/{vault_aws_secret} missing :/")
+    elif not aws_secrets_path.exists():
+        raise FileNotFoundError(f"Vault {vault_name}/{vault_aws_secret} file missing :/")
+
+    # Must be the AWS *INI* file from the vault, not the MLflow YAML; botocore parses INI.
+    os.environ["AWS_SHARED_CREDENTIALS_FILE"] = str(aws_secrets_path)
 
     # Only ``backend.mlflow.config`` (inline mapping or file path) is MLflow settings
     # (``experiment``, ``run_name``, etc.). The whole ``CaliperExportBackendMlflow`` object
