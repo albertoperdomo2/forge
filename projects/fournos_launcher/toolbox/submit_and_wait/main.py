@@ -288,6 +288,65 @@ def capture_pod_information(args, ctx):
 
 @always
 @task
+def capture_pipelinerun_specs(args, ctx):
+    """
+    Persist each Tekton ``PipelineRun`` (``pr``) ``.spec`` for runs labeled with
+    ``fournos.dev/job-name=<job>`` (e.g. ``fournos.dev/job-name=forge-skeleton-20260424-090246``),
+    before the FournosJob is deleted.
+    """
+    if not hasattr(ctx, "final_job_name"):
+        return "No job name available — skipping PipelineRun spec capture"
+
+    artifact_dir = args.artifact_dir / "artifacts"
+    shell.mkdir(str(artifact_dir))
+
+    fj_name = ctx.final_job_name
+    ns = args.namespace
+    # Same label the workload uses to associate PipelineRuns with this Fournos job
+    label = f"fournos.dev/job-name={fj_name}"
+
+    yaml_list = shell.run(
+        f"oc get pipelinerun -n {ns} -l {label!r} -oyaml",
+        check=False,
+        stdout_dest=artifact_dir / "pipelinerun.yaml",
+    )
+    if not (yaml_list.success and yaml_list.stdout and yaml_list.stdout.strip()):
+        return f"No PipelineRun query result (label {label!r}): {yaml_list.stderr or yaml_list.stdout or 'empty'}"
+
+    return f"Wrote the PipelineRun spec file under {artifact_dir} (label {label})"
+
+
+@always
+@task
+def capture_pod_specs(args, ctx):
+    """
+    Persist each workload Pod ``.spec`` for pods labeled
+    ``fournos.dev/job-name=<job>`` (e.g. ``fournos.dev/job-name=forge-skeleton-20260424-090246``),
+    before the FournosJob is deleted.
+    """
+    if not hasattr(ctx, "final_job_name"):
+        return "No job name available — skipping pod spec capture"
+
+    artifact_dir = args.artifact_dir / "artifacts"
+    shell.mkdir(str(artifact_dir))
+
+    fj_name = ctx.final_job_name
+    ns = args.namespace
+    label = f"fournos.dev/job-name={fj_name}"
+
+    yaml_list = shell.run(
+        f"oc get pods -l {label!r} -n {ns} -oyaml",
+        check=False,
+        stdout_dest=artifact_dir / "pods.yaml",
+    )
+    if not (yaml_list.success and yaml_list.stdout and yaml_list.stdout.strip()):
+        return f"No pods for label {label!r} (or list failed): {yaml_list.stderr or ''}".strip()
+
+    return f"Wrote the pod spec file under {artifact_dir} (label {label})"
+
+
+@always
+@task
 def cleanup_job(args, ctx):
     """Clean up the job object"""
 
