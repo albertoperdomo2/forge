@@ -37,6 +37,7 @@ def run(
     env: dict = None,
     status_dest=None,
     ci_label: str = None,
+    exclusive: bool = True,
 ):
     """
     Submit a FOURNOS job and wait for completion
@@ -54,6 +55,7 @@ def run(
         env: Dictionary of environment variables to set (default: empty dict)
         status_dest: Directory to save status information and pod logs (default: {artifact_dir}/artifacts)
         ci_label: CI run label for tracking and cancellation (default: None)
+        exclusive: Whether the job should run exclusively on its nodes (default: True)
 
     Examples:
         # Called by entrypoint with config values:

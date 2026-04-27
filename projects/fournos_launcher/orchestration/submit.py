@@ -115,6 +115,7 @@ def submit_job():
         env=env_dict,
         status_dest=env.ARTIFACT_DIR,
         ci_label=config.project.get_config("fournos.job.ci_label"),
+        exclusive=config.project.get_config("fournos.job.exclusive"),
     )
 
     return 0
