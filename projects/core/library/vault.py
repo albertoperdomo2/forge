@@ -148,6 +148,9 @@ class VaultManager:
         Returns:
             True if vault is valid, False if validation failed
         """
+        # Override strict parameter if globally disabled
+        global _strict_validation_enabled
+        effective_strict = strict and _strict_validation_enabled
         vault = self.get_vault(vault_name)
         if vault is None:
             logger.error(f"Vault '{vault_name}' is not defined")
@@ -158,7 +161,7 @@ class VaultManager:
         # Validate vault description
         if not vault.description or not vault.description.strip():
             msg = f"Vault '{vault_name}' is missing description"
-            if strict:
+            if effective_strict:
                 logger.error(msg)
                 all_valid = False
             else:
@@ -167,7 +170,7 @@ class VaultManager:
         # Check if environment variable is set
         if vault.env_key not in os.environ:
             msg = f"Vault '{vault_name}' requires environment variable {vault.env_key} to be set"
-            if strict:
+            if effective_strict:
                 logger.error(msg)
                 return False
             else:
@@ -177,7 +180,7 @@ class VaultManager:
         secret_dir = vault.secret_dir
         if not secret_dir.exists():
             msg = f"Vault '{vault_name}' secret directory does not exist: {secret_dir}"
-            if strict:
+            if effective_strict:
                 logger.error(msg)
                 return False
             else:
@@ -189,7 +192,7 @@ class VaultManager:
             # Validate content description
             if not content_def.description or not content_def.description.strip():
                 msg = f"Vault '{vault_name}' content '{content_name}' is missing description"
-                if strict:
+                if effective_strict:
                     logger.error(msg)
                     all_valid = False
                 else:
@@ -199,7 +202,7 @@ class VaultManager:
             content_path = content_def.file_path
             if content_path is None or not content_path.exists():
                 msg = f"Vault '{vault_name}' missing content '{content_name}' at: {content_path}"
-                if strict:
+                if effective_strict:
                     logger.error(msg)
                     all_valid = False
                 else:
@@ -219,7 +222,7 @@ class VaultManager:
 
                 if filename not in defined_files:
                     msg = f"Vault '{vault_name}' contains extra file '{filename}' at '{file_path}' not defined in specification"
-                    if strict:
+                    if effective_strict:
                         logger.error(msg)
                         all_valid = False
                     else:
@@ -316,20 +319,19 @@ class VaultManager:
         return all_valid
 
 
-def _filter_and_validate_vaults(
-    vault_manager: VaultManager, vaults: list[str], strict: bool = True
-):
+def _filter_and_validate_vaults(vault_manager: VaultManager, vaults: list[str]):
     """
     Filter vault manager to only include specified vaults and validate them
 
     Args:
         vault_manager: The vault manager instance to filter
         vaults: List of vault names to keep and validate
-        strict: Don't raise exception if the vault validation fails
     Raises:
         ValueError: If requested vaults don't exist
         RuntimeError: If vault validation fails
     """
+    strict = _strict_validation_enabled
+
     # Filter to only keep specified vaults, removing unnecessary ones
     available_vaults = set(vault_manager.list_vaults())
     requested_vaults = set(vaults)
@@ -372,8 +374,20 @@ def _filter_and_validate_vaults(
 # Global vault manager instance
 _vault_manager: VaultManager | None = None
 
+# Global strict validation flag
+_strict_validation_enabled: bool = True
 
-def init(vaults: list[str] = None, strict: bool = True):
+
+def disable_strict_validation():
+    """Disable strict validation globally for all vault operations"""
+    global _strict_validation_enabled
+    _strict_validation_enabled = False
+    logger.info("Vault strict validation disabled globally")
+
+
+def init(
+    vaults: list[str] = None,
+):
     """Initialize the vault manager
 
     - Initialize the vault manager
@@ -384,7 +398,7 @@ def init(vaults: list[str] = None, strict: bool = True):
 
     """
 
-    global _vault_manager
+    global _vault_manager, _strict_validation_enabled
     if _vault_manager is not None:
         logger.warning("VaultManager already initialized")
         return
@@ -394,7 +408,7 @@ def init(vaults: list[str] = None, strict: bool = True):
     if not vaults:
         return
 
-    _filter_and_validate_vaults(_vault_manager, vaults, strict)
+    _filter_and_validate_vaults(_vault_manager, vaults)
 
 
 def get_vault_manager() -> VaultManager:

@@ -107,22 +107,46 @@ The vault system enforces strict validation to ensure security and documentation
 **Strict mode** (default): Fails on any validation error
 **Warning mode**: Logs warnings but continues execution
 
+Validation strictness is controlled globally:
+
+```python
+from projects.core.library import vault
+
+# Disable strict validation globally (before initialization)
+vault.disable_strict_validation()
+
+# All subsequent vault operations will use warning mode
+vault.init(['psap-forge-ci'])  # Uses non-strict validation
+```
+
+**When to use non-strict mode:**
+- Development environments where vaults may be incomplete
+- CI environments where some secrets are not available
+- Testing scenarios where vault validation should not block execution
+- Gradual vault migration where some legacy files may exist
+
+**Important:** Call `disable_strict_validation()` before any vault initialization or operations.
+
 ### Using the Validation System
 
 ```python
+from projects.core.library import vault
 from projects.core.library.vault import get_vault_manager
+
+# Control validation strictness globally
+vault.disable_strict_validation()  # Optional: disable strict mode
 
 # Initialize vault manager
 vault_manager = get_vault_manager()
 
 # Validate a specific vault
-is_valid = vault_manager.validate_vault('psap-forge-ci', strict=True)
+is_valid = vault_manager.validate_vault('psap-forge-ci')
 
 # Validate all project vaults
-is_valid = vault_manager.validate_project_vaults('llm_d', strict=True)
+is_valid = vault_manager.validate_project_vaults('llm_d')
 
 # Validate all defined vaults
-is_valid = vault_manager.validate_all_vaults(strict=True)
+is_valid = vault_manager.validate_all_vaults()
 ```
 
 ### Getting Vault Content Paths
@@ -214,8 +238,8 @@ In `projects/my-project/orchestration/vaults.yaml`:
 ```python
 from projects.core.library.vault import validate_project_vaults
 
-# Validate the new vault
-validate_project_vaults('my-project', strict=True)
+# Validate the new vault (uses global strict validation setting)
+validate_project_vaults('my-project')
 ```
 
 ### 6. Expose the env var to the `forge_launcher`
