@@ -99,8 +99,6 @@ def run_artifacts_export(
     *,
     from_path: Path,
     backend: tuple[str, ...] | list[str],
-    s3_bucket: str | None = None,
-    s3_prefix: str = "",
     mlflow_tracking_uri: str | None = None,
     mlflow_experiment: str | None = None,
     mlflow_run_id: str | None = None,
@@ -127,7 +125,7 @@ def run_artifacts_export(
     backends = [b.strip().lower() for b in backend if b.strip()]
     if not backends:
         click.echo(
-            "Specify at least one --backend: s3 and/or mlflow "
+            "Specify at least one --backend: mlflow "
             "(e.g. --from ./out --backend mlflow --mlflow-endpoint http://...).",
             err=True,
         )
@@ -209,9 +207,6 @@ def run_artifacts_export(
         click.echo(f"  Backends: {', '.join(backends)}", err=True)
         click.echo(f"  Dry run: {dry_run}", err=True)
         click.echo(f"  Upload workers: {upload_workers}", err=True)
-        if "s3" in backends:
-            click.echo(f"  S3 bucket: {s3_bucket or '(not set)'}", err=True)
-            click.echo(f"  S3 prefix: {repr(s3_prefix)}", err=True)
         if "mlflow" in backends:
             for line in artifacts_export_mlflow_verbose_lines(
                 tracking_uri=mlflow_tracking_uri,
@@ -228,8 +223,6 @@ def run_artifacts_export(
             source=from_path,
             backends=backends,
             dry_run=dry_run,
-            s3_bucket=s3_bucket,
-            s3_prefix=s3_prefix,
             mlflow_tracking_uri=mlflow_tracking_uri,
             mlflow_experiment=mlflow_experiment,
             mlflow_run_id=mlflow_run_id,

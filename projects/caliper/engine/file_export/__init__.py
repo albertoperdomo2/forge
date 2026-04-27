@@ -1,1 +1,1 @@
-"""File artifact export to S3, MLflow, etc."""
+"""File artifact export to MLflow, etc."""

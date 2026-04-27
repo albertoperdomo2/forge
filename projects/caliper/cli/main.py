@@ -37,9 +37,7 @@ def artifacts_group() -> None:
     required=True,
     help="File or directory to upload (artifact path).",
 )
-@click.option("--backend", multiple=True, type=str, help="Repeat: s3, and/or mlflow.")
-@click.option("--s3-bucket", default=None, envvar="CALIPER_S3_BUCKET")
-@click.option("--s3-prefix", default="", envvar="CALIPER_S3_PREFIX")
+@click.option("--backend", multiple=True, type=str, help="Repeat: mlflow.")
 @click.option(
     "--mlflow-tracking-uri",
     "--mlflow-endpoint",
@@ -94,15 +92,13 @@ def artifacts_group() -> None:
     type=click.IntRange(min=1, max=64),
     default=10,
     show_default=True,
-    help="Parallel upload threads (S3 / MLflow).",
+    help="Parallel upload threads (MLflow).",
 )
 @click.pass_context
 def artifacts_export(
     ctx: click.Context,
     from_path: Path,
     backend: tuple[str, ...],
-    s3_bucket: str | None,
-    s3_prefix: str,
     mlflow_tracking_uri: str | None,
     mlflow_experiment: str | None,
     mlflow_run_id: str | None,
@@ -115,12 +111,12 @@ def artifacts_export(
     status_yaml_path: Path | None,
     upload_workers: int,
 ) -> None:
-    """Upload file artifacts to S3 and/or MLflow."""
+    """Upload file artifacts to MLflow."""
     backends = [b.strip().lower() for b in backend if b.strip()]
     if not backends:
         _exit_with_help(
             ctx,
-            "Specify at least one --backend: s3 and/or mlflow "
+            "Specify at least one --backend: mlflow "
             "(e.g. --from ./out --backend mlflow --mlflow-endpoint http://...).",
             code=1,
         )
@@ -135,8 +131,6 @@ def artifacts_export(
     code = run_artifacts_export(
         from_path=from_path,
         backend=backends,
-        s3_bucket=s3_bucket,
-        s3_prefix=s3_prefix,
         mlflow_tracking_uri=mlflow_tracking_uri,
         mlflow_experiment=mlflow_experiment,
         mlflow_run_id=mlflow_run_id,

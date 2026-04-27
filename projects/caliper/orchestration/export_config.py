@@ -24,7 +24,6 @@ class CaliperExportMlflowVaultContentRef(BaseModel):
     mlflow_secret: str = Field(
         ..., description="Content key in that vault (filename / logical key)."
     )
-    aws_secret: str = Field(..., description="Content key in that vault (filename / logical key).")
 
 
 class CaliperExportMlflowSecretsSpec(BaseModel):
@@ -83,9 +82,6 @@ class CaliperOrchestrationExportConfig(BaseModel):
     dry_run: bool = False
     upload_workers: int = Field(10, ge=1, le=64)
 
-    s3_bucket: str | None = None
-    s3_prefix: str = ""
-
     mlflow_experiment: str | None = None
     mlflow_run_id: str | None = None
     mlflow_run_name: str | None = None
@@ -95,7 +91,7 @@ class CaliperOrchestrationExportConfig(BaseModel):
         b = self.backend
         if b.mlflow is not None and b.mlflow.enabled:
             return self
-        # Future: s3, etc.
+        # Future: other backends, etc.
         raise ValueError(
             "caliper.export must enable at least one backend (e.g. backend.mlflow.enabled: true)"
         )

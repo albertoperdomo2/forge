@@ -8,7 +8,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from projects.caliper.engine.file_export import mlflow_backend, s3
+from projects.caliper.engine.file_export import mlflow_backend
 from projects.caliper.engine.model import FileExportBackendResult
 
 
@@ -33,8 +33,6 @@ def run_file_export(
     source: Path,
     backends: list[str],
     dry_run: bool,
-    s3_bucket: str | None,
-    s3_prefix: str,
     mlflow_tracking_uri: str | None,
     mlflow_experiment: str | None,
     mlflow_run_id: str | None,
@@ -67,7 +65,7 @@ def run_file_export(
                 print(f"caliper:   … {p}", file=sys.stderr)
     results: list[FileExportBackendResult] = []
     for b in backends:
-        if b not in ("s3", "mlflow"):
+        if b not in ("mlflow",):
             results.append(
                 FileExportBackendResult(backend=b, status="skipped", detail="unknown backend")
             )
@@ -87,22 +85,6 @@ def run_file_export(
         try:
             if verbose:
                 print(f"caliper: starting backend {b!r} …", file=sys.stderr)
-            if b == "s3":
-                if not s3_bucket:
-                    raise ValueError("S3 backend requires --s3-bucket or S3_BUCKET env")
-                detail = s3.upload_tree(
-                    source=source,
-                    paths=paths,
-                    bucket=s3_bucket,
-                    prefix=s3_prefix or "caliper",
-                    upload_workers=upload_workers,
-                )
-                results.append(
-                    FileExportBackendResult(backend="s3", status="success", detail=detail)
-                )
-                if verbose:
-                    print(f"caliper: backend {b!r} finished ({detail})", file=sys.stderr)
-            else:
                 detail, ml_meta = mlflow_backend.log_artifacts(
                     artifact_root=source,
                     paths=paths,
