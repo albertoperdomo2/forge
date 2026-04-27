@@ -65,8 +65,11 @@ def _display_error_summary(e: Exception) -> None:
     for line in summary_lines:
         logger.error(line)
 
-    # Write to FAILURES file
-    _write_error_summary_to_file(summary_lines)
+    if env.ARTIFACT_DIR is None:
+        logging.error("env.ARTIFACT_DIR not set, cannot generate the error summary file")
+    else:
+        # Write to FAILURES file
+        _write_error_summary_to_file(summary_lines)
 
     logger.error("=" * 80)
 
