@@ -33,11 +33,18 @@ def _setup_sample_signal_handlers():
         logger.warning(f"Failed to set up sample signal handlers: {e}")
 
 
-def init(strict_vault_validation=True):
+def init(skip_vault_init=False, strict_vault_validation=True):
     env.init()
     run.init()
     config.init(pathlib.Path(__file__).parent)
-    vault.init(config.project.get_config("vaults"), strict=strict_vault_validation)
+    if skip_vault_init:
+        logger.info("Skipping vault initialization as requested")
+        return
+
+    if not strict_vault_validation:
+        vault.disable_strict_validation()
+
+    vault.init(config.project.get_config("vaults"))
 
 
 def test():
@@ -115,3 +122,24 @@ def test():
     logger.info(f"Check {cluster_nodes_dest.parent} directory for detailed cluster information.")
 
     return 0
+
+
+def resolve_hardware_request(hardware_spec: dict):
+    """
+    Resolve hardware requirements for FournosJob based on skeleton project configuration.
+
+    This is a stub implementation. Update spec.hardware based on project configuration.
+
+    Args:
+        hardware_spec: The current spec.hardware dict from the FournosJob. This object should be updated.
+
+    """
+    logger.info("Hardware resolution: stub implementation - no changes made")
+
+    # Stub implementation - could be extended to:
+    # - Read hardware config from project config
+    # - Set hardware requirements based on workload needs
+    # - Handle different hardware profiles (GPU, CPU, memory requirements)
+    # - Example: return {"gpu": {"type": "nvidia-tesla-v100", "count": 1}, "memory": "32Gi"}
+
+    return hardware_spec

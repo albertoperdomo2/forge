@@ -15,6 +15,7 @@ import prepare_skeleton
 import test_skeleton
 
 from projects.caliper.orchestration.export import run_from_orchestration_config
+from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
 from projects.core.library import ci as ci_lib
 from projects.core.library import config, env
 from projects.core.library.export import caliper_export_command
@@ -36,9 +37,11 @@ def _caliper_export_at_end() -> int:
 def main(ctx):
     """Skeleton example project CI operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
-    # for the time being, FOURNOS doesn't provide the secrets ':-)
-    strict_vault_validation = False
-    test_skeleton.init(strict_vault_validation=strict_vault_validation)
+
+    # Skip vault initialization for resolve_fournos_config command since vaults aren't available yet
+    skip_vault_init = ctx.invoked_subcommand == "resolve-fournos-config"
+
+    test_skeleton.init(skip_vault_init=skip_vault_init)
 
 
 @main.command()
@@ -69,6 +72,12 @@ def pre_cleanup(ctx):
 
 
 main.add_command(caliper_export_command)
+main.add_command(
+    create_fournos_resolve_command(
+        vault_list_func=lambda: config.project.get_config("vaults"),
+        hardware_resolver_func=test_skeleton.resolve_hardware_request,
+    )
+)
 
 
 if __name__ == "__main__":
