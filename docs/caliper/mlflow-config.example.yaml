@@ -1,0 +1,38 @@
+# Experiment name (created if missing).
+experiment: kpouget
+
+# New run: optional display name for the run in the MLflow UI.
+run_name: gpu-a100-batch-001
+
+# Attach artifacts to an existing run instead of creating one (UUID from the server).
+# Omit for a new run, or when you only use run_name.
+# run_id: "a1b2c3d4e5f6789012345678abcdef01"
+
+# --- Run metadata (Notes / Tags / Params in MLflow) ---
+
+# Shown as the run note (tag mlflow.note.content).
+description: >
+  Caliper export from nightly benchmark 2026-04-16.
+  Compare with previous week’s baseline.
+
+# Entry script name for MLflow (tag mlflow.source.name). Preferred over source_name for clarity.
+source_script: my_custom_script.py
+
+# Arbitrary MLflow tags (set_tag per key). Values are coerced to strings.
+tags:
+  env: prod
+  region: us-east-1
+  team: perf
+  version: "1.4.2"
+
+# MLflow Parameters (Run → Parameters); values become strings when logged.
+parameters:
+  batch_size: 64
+  learning_rate: 0.001
+  epochs: 90
+  mixed_precision: true
+  optimizer: adamw
+
+# MLflow Metrics (Run → Metrics); values must be numbers (int or float).
+metrics:
+  train_duration: 3600.5

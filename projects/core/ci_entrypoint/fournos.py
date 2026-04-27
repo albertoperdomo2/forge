@@ -8,6 +8,7 @@ variable processing and configuration transformation.
 
 import logging
 import os
+import shlex
 from pathlib import Path
 
 import yaml
@@ -51,7 +52,17 @@ def process_fournos_environment():
 
                 key, value = line.split("=", 1)
                 key = key.strip()
-                value = value.strip()
+
+                # Properly unescape shell-quoted value
+                try:
+                    # Handle shell quoting/escaping properly
+                    value = shlex.split(value)[0] if value else ""
+                except ValueError:
+                    # If shlex fails, fall back to simple strip for backwards compatibility
+                    logger.warning(
+                        f"Failed to parse shell-escaped value on line {line_num}, using raw value"
+                    )
+                    value = value.strip()
 
                 if key:
                     env_vars[key] = value
