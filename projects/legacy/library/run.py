@@ -5,7 +5,6 @@ import os
 import pathlib
 import signal
 import subprocess
-import sys
 import traceback
 
 try:
@@ -240,7 +239,7 @@ class Parallel:
                 # (the group was started with the os.setpgrp() above)
                 os.killpg(0, signal.SIGKILL)
                 print("bye")
-                raise SystemExit(1)
+                raise SystemExit(1) from None
 
         return False  # If we returned True here, any exception would be suppressed!
 
