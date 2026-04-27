@@ -27,5 +27,8 @@ fournos:
       OPENSHIFT_CI_job: [JOB_TYPE, JOB_NAME, JOB_SPEC, OPENSHIFT_CI, JOB_NAME_SAFE, BUILD_ID]
       OPENSHIFT_CI_git_pr: [PULL_PULL_SHA, PULL_NUMBER, PULL_BASE_REF, REPO_NAME, REPO_OWNER, PULL_BASE_SHA, JOB_NAME, PULL_TITLE, PULL_REFS, PULL_HEAD_REF]
     extra_env: {}
+    hardware:
+      gpu_count: null
+      gpu_type: null
   on_abort:
     shutdown_value: Stop  # Value to set for spec.shutdown when aborting jobs (Stop or Terminate)

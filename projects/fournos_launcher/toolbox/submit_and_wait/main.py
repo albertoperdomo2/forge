@@ -38,6 +38,8 @@ def run(
     status_dest=None,
     ci_label: str = None,
     exclusive: bool = True,
+    gpu_count: int = None,
+    gpu_type: str = None,
 ):
     """
     Submit a FOURNOS job and wait for completion
@@ -56,6 +58,8 @@ def run(
         status_dest: Directory to save status information and pod logs (default: {artifact_dir}/artifacts)
         ci_label: CI run label for tracking and cancellation (default: None)
         exclusive: Whether the job should run exclusively on its nodes (default: True)
+        gpu_count: Number of GPUs required for the job (default: None)
+        gpu_type: Type of GPU required for the job (default: None)
 
     Examples:
         # Called by entrypoint with config values:
@@ -69,7 +73,9 @@ def run(
             display_name="LLM Testing Job",
             pipeline_name="test-pipeline",
             env={"DEBUG": "1", "LOG_LEVEL": "info"},
-            status_dest="/path/to/artifacts"
+            status_dest="/path/to/artifacts",
+            gpu_count=2,
+            gpu_type="nvidia-tesla-v100",
         )
     """
     # Set defaults

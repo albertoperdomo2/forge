@@ -13,6 +13,11 @@ spec:
   cluster: {{ args.cluster_name }}
   exclusive: {{ args.exclusive }}
   pipeline: {{ args.pipeline_name }}
+  {% if args.gpu_count and args.gpu_type -%}
+  hardware:
+    gpuCount: {{ args.gpu_count }}
+    gpuType: {{ args.gpu_type }}
+  {%- endif %}
   forge:
     project: {{ args.project }}
     args:

@@ -103,6 +103,18 @@ def submit_job():
             "cluster.name must be configured in config.yaml - cannot submit job without target cluster"
         )
 
+    # Get GPU hardware configuration
+    gpu_count = config.project.get_config("fournos.job.hardware.gpu_count")
+    gpu_type = config.project.get_config("fournos.job.hardware.gpu_type")
+
+    # Validate GPU configuration - both must be present or both must be missing
+    gpu_config_present = (gpu_count is not None, gpu_type is not None)
+    if gpu_config_present[0] != gpu_config_present[1]:
+        raise ValueError(
+            "GPU configuration invalid: both gpu_count and gpu_type must be specified together, "
+            f"or both must be null. Got gpu_count={gpu_count}, gpu_type={gpu_type}"
+        )
+
     submit_and_wait(
         cluster_name=cluster_name,
         project=config.project.get_config("ci_job.project"),
@@ -116,6 +128,8 @@ def submit_job():
         status_dest=env.ARTIFACT_DIR,
         ci_label=config.project.get_config("fournos.job.ci_label"),
         exclusive=config.project.get_config("fournos.job.exclusive"),
+        gpu_count=gpu_count,
+        gpu_type=gpu_type,
     )
 
     return 0
