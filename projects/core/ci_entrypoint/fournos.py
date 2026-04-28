@@ -8,126 +8,114 @@ variable processing and configuration transformation.
 
 import logging
 import os
-import shlex
 from pathlib import Path
 
 import yaml
 
+from projects.core.library import run
+
 logger = logging.getLogger(__name__)
 
 
-def process_fournos_environment():
+def process_fjob_environment(fjob_spec):
     """
-    Process FOURNOS environment variables from forge_config.env file.
+    Process FOURNOS environment variables from FournosJob YAML.
 
-    If $ARTIFACT_DIR/forge_config.env exists:
-    - Parse it (key=value format)
-    - Update environment variables
-    - Move the file to CI_METADATA_DIRNAME
+    Reads environment variables from FournosJob spec.env section and sets them.
     """
-    artifact_dir = os.environ.get("ARTIFACT_DIR")
-    if not artifact_dir:
-        logger.warning("ARTIFACT_DIR not set, cannot process FOURNOS environment")
-        return
-
-    artifact_path = Path(artifact_dir)
-    env_config_path = artifact_path / "forge_config.env"
-
-    if not env_config_path.exists():
-        logger.warning("forge_config.env not found, skipping FOURNOS environment processing")
-        return
 
     try:
-        # Read and parse the environment file
-        env_vars = {}
-        with open(env_config_path) as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
+        # Extract environment variables from spec.env
+        env_vars = fjob_spec.get("env", {})
+        if not env_vars:
+            logger.info("No environment variables found in FournosJob spec")
+            return
 
-                if "=" not in line:
-                    logger.warning(f"Ignoring invalid line {line_num} in {env_config_path}: {line}")
-                    continue
-
-                key, value = line.split("=", 1)
-                key = key.strip()
-
-                # Properly unescape shell-quoted value
-                try:
-                    # Handle shell quoting/escaping properly
-                    value = shlex.split(value)[0] if value else ""
-                except ValueError:
-                    # If shlex fails, fall back to simple strip for backwards compatibility
-                    logger.warning(
-                        f"Failed to parse shell-escaped value on line {line_num}, using raw value"
-                    )
-                    value = value.strip()
-
-                if key:
-                    env_vars[key] = value
-
-        logger.info(f"Loaded {len(env_vars)} environment variables from {env_config_path}")
+        logger.info(f"Loading {len(env_vars)} environment variables from FournosJob")
 
         # Update environment variables
         for key, value in env_vars.items():
-            os.environ[key] = value
+            os.environ[key] = str(value)
             logger.debug(f"Set environment variable: {key}={value}")
 
-        from .prepare_ci import CI_METADATA_DIRNAME
-
-        # Create CI metadata directory and move the file
-        (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
-        moved_env_path = artifact_path / CI_METADATA_DIRNAME / "forge_config.env"
-        env_config_path.rename(moved_env_path)
-        logger.info(f"Moved forge_config.env to {moved_env_path}")
+        logger.info(f"Successfully set {len(env_vars)} environment variables from FournosJob")
 
     except Exception as e:
         logger.exception(f"Failed to process FOURNOS environment: {e}")
         raise
 
 
-def transform_fournos_config_to_variable_overrides(forge_config: dict) -> dict:
+def transform_fournos_config_to_variable_overrides(fjob: dict) -> dict:
     """
-    Transform FOURNOS forge_config format to variable_overrides format.
+    Transform FournosJob format to variable_overrides format.
 
     Args:
-        forge_config: Dictionary containing FOURNOS config with keys:
-                     - project: project name
-                     - args: list of arguments
-                     - configOverrides: dict of config overrides
+        fjob: Full FournosJob dictionary with metadata and spec sections
 
     Returns:
         Dictionary in variable_overrides format:
-        - project -> project.name
-        - args -> project.args
-        - configOverrides entries are flattened directly
+        - spec.forge.project -> project.name
+        - spec.forge.args -> project.args
+        - spec.forge.configOverrides entries are flattened directly
+        - spec.exclusive -> ci_job.exclusive
+        - spec.hardware -> ci_job.hardware
+        - spec.cluster -> ci_job.cluster
+        - spec.owner -> ci_job.owner
+        - metadata.name -> ci_job.fjob
+        - spec.displayName -> ci_job.name
     """
     variable_overrides = {}
 
-    # Transform project -> project.name
-    if "project" in forge_config:
-        variable_overrides["project.name"] = forge_config["project"]
+    # Extract metadata and spec sections
+    metadata = fjob.get("metadata", {})
+    fjob_spec = fjob.get("spec", {})
 
-    # Transform args -> project.args
-    if "args" in forge_config:
-        variable_overrides["project.args"] = forge_config["args"]
+    # Process forge configuration
+    forge_config = fjob_spec.get("forge", {})
+    if forge_config:
+        # Transform project -> project.name
+        if "project" in forge_config:
+            variable_overrides["project.name"] = forge_config["project"]
 
-    # Add all configOverrides entries directly (flatten them)
-    config_overrides = forge_config.get("configOverrides", {})
-    variable_overrides.update(config_overrides)
+        # Transform args -> project.args
+        if "args" in forge_config:
+            variable_overrides["project.args"] = forge_config["args"]
+
+        # Add all configOverrides entries directly (flatten them)
+        config_overrides = forge_config.get("configOverrides", {})
+        variable_overrides.update(config_overrides)
+
+    # Add ci_job mappings from spec
+    if "exclusive" in fjob_spec:
+        variable_overrides["ci_job.exclusive"] = fjob_spec["exclusive"]
+
+    if "hardware" in fjob_spec:
+        variable_overrides["ci_job.hardware"] = fjob_spec["hardware"]
+
+    if "cluster" in fjob_spec:
+        variable_overrides["ci_job.cluster"] = fjob_spec["cluster"]
+
+    if "displayName" in fjob_spec:
+        variable_overrides["ci_job.name"] = fjob_spec["displayName"]
+
+    if "owner" in fjob_spec:
+        variable_overrides["ci_job.owner"] = fjob_spec["owner"]
+
+    # Add ci_job mappings from metadata
+    if "name" in metadata:
+        variable_overrides["ci_job.fjob"] = metadata["name"]
 
     return variable_overrides
 
 
-def parse_and_save_pr_arguments_fournos() -> Path | None:
+def parse_and_save_pr_arguments_fournos():
     """
     Parse GitHub PR arguments for FOURNOS CI environment.
 
-    Reads forge_config.yaml and converts it to variable_overrides.yaml format.
+    Reads FournosJob YAML and converts forge spec to variable_overrides.yaml format.
 
     Returns:
-        Path to saved file if successful, None otherwise
+        Parsed variable overrides or None on failure
     """
     artifact_dir = os.environ.get("ARTIFACT_DIR")
     if not artifact_dir:
@@ -135,57 +123,40 @@ def parse_and_save_pr_arguments_fournos() -> Path | None:
         return None
 
     artifact_path = Path(artifact_dir)
-    forge_config_path = artifact_path / "forge_config.yaml"
+    from .prepare_ci import CI_METADATA_DIRNAME
 
-    if not forge_config_path.exists():
-        logger.warning(
-            f"forge_config.yaml not found at '{forge_config_path}', skipping FOURNOS PR argument parsing"
-        )
-        return None
+    metadata_dir = artifact_path / CI_METADATA_DIRNAME
+    # Create CI metadata directory
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+
+    # Fetch and save FournosJob YAML
+    fjob, fjob_spec = fetch_and_save_fjob_yaml(metadata_dir / "fjob.yaml")
+
+    if not fjob_spec:
+        raise ValueError("FournosJob YAML not found, cannot parse FOURNOS PR arguments")
 
     try:
-        prepare_fournos_vault()
+        prepare_vault(fjob_spec)
+        process_fjob_environment(fjob_spec)
+        variable_overrides = process_forge_config(fjob_spec, metadata_dir, fjob)
 
-        # Read and parse the FOURNOS config
-        with open(forge_config_path) as f:
-            forge_config = yaml.safe_load(f)
-
-        logger.info(f"Loaded FOURNOS config from {forge_config_path}")
-        logger.debug(f"Config content: {forge_config}")
-
-        from .prepare_ci import CI_METADATA_DIRNAME
-
-        # Create CI metadata directory
-        (artifact_path / CI_METADATA_DIRNAME).mkdir(parents=True, exist_ok=True)
-
-        # Move forge_config.yaml to CI metadata directory
-        moved_config_path = artifact_path / CI_METADATA_DIRNAME / "forge_config.yaml"
-        forge_config_path.rename(moved_config_path)
-        logger.info(f"Moved forge_config.yaml to {moved_config_path}")
-
-        # Transform forge_config to variable_overrides format
-        variable_overrides = transform_fournos_config_to_variable_overrides(forge_config)
-
-        output_file = artifact_path / CI_METADATA_DIRNAME / "variable_overrides.yaml"
-        with open(output_file, "w") as f:
-            yaml.dump(variable_overrides, f, default_flow_style=False, sort_keys=True)
-
-        logger.info(f"Saved FOURNOS variable overrides to {output_file}")
-        logger.info(f"Configuration contains {len(variable_overrides)} override(s)")
-
-        return output_file
+        logger.info("Successfully parsed FOURNOS configuration")
+        return variable_overrides
 
     except Exception as e:
         logger.exception(f"Failed to parse FOURNOS config: {e}")
         raise
 
 
-def prepare_fournos_vault() -> None:
+def prepare_vault(fjob_spec) -> None:
     """
     Prepare vault system for FOURNOS CI operations.
 
     Scans $FOURNOS_SECRETS for vault directories and sets up
     environment variables to match vault definitions.
+
+    Args:
+        fjob_spec: The spec section from a FournosJob object
 
     Raises:
         RuntimeError: If vault preparation fails
@@ -205,18 +176,21 @@ def prepare_fournos_vault() -> None:
         if not fournos_secrets_path.is_dir():
             raise RuntimeError(f"FOURNOS_SECRETS is not a directory: {fournos_secrets_path}")
 
-        vault_dirs = [d for d in fournos_secrets_path.iterdir() if d.is_dir()]
-
-        if not vault_dirs:
-            logger.warning("No vault directories found in FOURNOS_SECRETS")
+        # Get required vaults from FournosJob spec.secretRefs
+        required_vaults = fjob_spec.get("secretRefs", [])
+        if not required_vaults:
+            logger.info("No secretRefs found in FournosJob spec, skipping vault preparation")
             return
 
-        processed_count = 0
-        for vault_dir in vault_dirs:
-            vault_name = vault_dir.name
+        logger.info(f"Preparing {len(required_vaults)} vaults from secretRefs: {required_vaults}")
 
-            if vault_name.startswith("."):
-                continue  # ignore K8s special dirs
+        processed_count = 0
+        for vault_name in required_vaults:
+            vault_dir = fournos_secrets_path / vault_name
+
+            # Verify vault directory exists
+            if not vault_dir.exists() or not vault_dir.is_dir():
+                raise RuntimeError(f"Required vault directory not found: {vault_dir}")
 
             vault_def_file = vaults_dir / f"{vault_name}.yaml"
 
@@ -243,3 +217,70 @@ def prepare_fournos_vault() -> None:
     except Exception as e:
         logger.exception(f"Failed to prepare FOURNOS vault system: {e}")
         raise RuntimeError(f"FOURNOS vault preparation failed: {e}") from e
+
+
+def process_forge_config(fjob_spec, metadata_dir, fjob):
+    """
+    Process FOURNOS configuration from FournosJob.
+
+    Handles vault preparation and environment variable setup.
+
+    Args:
+        fjob_spec: The spec section from a FournosJob object
+        metadata_dir: Path to CI metadata directory
+        fjob: The full FournosJob object with metadata and spec
+    """
+    logger.info("Processing FOURNOS fjob to variable_overrides format")
+    logger.debug(f"Full fjob content: {fjob}")
+
+    # Transform full fjob to variable_overrides format
+    variable_overrides = transform_fournos_config_to_variable_overrides(fjob)
+
+    output_file = metadata_dir / "variable_overrides.yaml"
+    with open(output_file, "w") as f:
+        yaml.dump(variable_overrides, f, default_flow_style=False, sort_keys=True)
+
+    logger.info(f"Saved FOURNOS variable overrides to {output_file}")
+    logger.info(f"Configuration contains {len(variable_overrides)} override(s)")
+
+    logger.info("Successfully processed FOURNOS configuration")
+    return variable_overrides
+
+
+def fetch_and_save_fjob_yaml(fjob_yaml_dest):
+    """
+    Fetch FournosJob YAML and save to artifact directory.
+
+    Args:
+        fjob_yaml_dest: Path where to save the FournosJob YAML
+
+    Returns:
+        Tuple of (full_fjob, fjob_spec), or (None, None) if not found
+    """
+
+    namespace = "psap-automation-wip"
+
+    result = run.run(
+        f"oc get fjobs -n {namespace} -oyaml",
+        capture_stdout=True,
+    )
+
+    fjobs_data = yaml.safe_load(result.stdout)
+    if not (fjobs_data and "items" in fjobs_data and fjobs_data["items"]):
+        logger.warning("No FournosJobs found")
+        return None, None
+
+    # Take the last fjob from the list
+    fjob = fjobs_data["items"][-1]
+
+    try:
+        del fjob["status"]
+    except KeyError:
+        pass  # ignore
+
+    with open(fjob_yaml_dest, "w") as f:
+        yaml.dump(fjob, f, default_flow_style=False, sort_keys=False)
+
+    logger.info(f"Saved FournosJob YAML to {fjob_yaml_dest}")
+
+    return fjob, fjob["spec"]
