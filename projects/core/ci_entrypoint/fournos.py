@@ -144,6 +144,8 @@ def parse_and_save_pr_arguments_fournos() -> Path | None:
         return None
 
     try:
+        prepare_fournos_vault()
+
         # Read and parse the FOURNOS config
         with open(forge_config_path) as f:
             forge_config = yaml.safe_load(f)
@@ -176,3 +178,68 @@ def parse_and_save_pr_arguments_fournos() -> Path | None:
     except Exception as e:
         logger.exception(f"Failed to parse FOURNOS config: {e}")
         raise
+
+
+def prepare_fournos_vault() -> None:
+    """
+    Prepare vault system for FOURNOS CI operations.
+
+    Scans $FOURNOS_SECRETS for vault directories and sets up
+    environment variables to match vault definitions.
+
+    Raises:
+        RuntimeError: If vault preparation fails
+    """
+    try:
+        fournos_secrets = os.environ.get("FOURNOS_SECRETS")
+        if not fournos_secrets:
+            logger.warning("FOURNOS_SECRETS not set, skipping vault preparation")
+            return
+
+        forge_home = Path(
+            os.environ.get("FORGE_HOME", Path(__file__).resolve().parent.parent.parent.parent)
+        )
+        vaults_dir = forge_home / "vaults"
+
+        fournos_secrets_path = Path(fournos_secrets)
+        if not fournos_secrets_path.is_dir():
+            raise RuntimeError(f"FOURNOS_SECRETS is not a directory: {fournos_secrets_path}")
+
+        vault_dirs = [d for d in fournos_secrets_path.iterdir() if d.is_dir()]
+
+        if not vault_dirs:
+            logger.warning("No vault directories found in FOURNOS_SECRETS")
+            return
+
+        processed_count = 0
+        for vault_dir in vault_dirs:
+            vault_name = vault_dir.name
+
+            if vault_name.startswith("."):
+                continue  # ignore K8s special dirs
+
+            vault_def_file = vaults_dir / f"{vault_name}.yaml"
+
+            if not vault_def_file.exists():
+                raise RuntimeError(f"Vault definition file not found: {vault_def_file}")
+
+            try:
+                with open(vault_def_file) as f:
+                    vault_def = yaml.safe_load(f)
+            except Exception as e:
+                raise RuntimeError(f"Failed to load vault definition {vault_def_file}: {e}") from e
+
+            env_key = vault_def.get("env_key")
+            if not env_key:
+                raise RuntimeError(f"Missing env_key in vault definition: {vault_def_file}")
+
+            # Set environment variable
+            os.environ[env_key] = str(vault_dir)
+            logger.info(f"Set {env_key}={vault_dir}")
+            processed_count += 1
+
+        logger.info(f"Processed {processed_count} FOURNOS vaults successfully")
+
+    except Exception as e:
+        logger.exception(f"Failed to prepare FOURNOS vault system: {e}")
+        raise RuntimeError(f"FOURNOS vault preparation failed: {e}") from e
