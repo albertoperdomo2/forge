@@ -78,10 +78,8 @@ class Config:
         # Define mandatory fields structure
         mandatory_fields = {
             "presets": {},  # Special case: always create as empty dict
-            "cluster": dict.fromkeys(["name"]),
             "project": dict.fromkeys(["name", "args"]),
-            "exec_list": dict.fromkeys(["_only_", "prepare", "pre_cleanup", "test"]),
-            "ci_job": dict.fromkeys(["name", "project", "args"]),
+            "ci_job": dict.fromkeys(["name", "fjob", "cluster", "exclusive", "hardware", "owner"]),
         }
 
         # Apply the mandatory field structure

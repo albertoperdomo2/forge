@@ -73,7 +73,8 @@ def init():
         config.project.apply_preset(preset)
 
     test_mod.init()
-    vault.init(config.project.get_config("vaults"), strict=False)
+    vault.disable_strict_validation()
+    vault.init(config.project.get_config("vaults"))
 
 
 @main.command()
