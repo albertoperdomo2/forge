@@ -232,8 +232,6 @@ def parse_and_save_pr_arguments_ocpci() -> Path | None:
 
     # Optional parameters
     test_name = os.environ.get("TEST_NAME")
-    shared_dir_str = os.environ.get("SHARED_DIR")
-    shared_dir = Path(shared_dir_str) if shared_dir_str else None
 
     logger.info(f"Parsing GitHub PR arguments for {repo_owner}/{repo_name}#{pull_number}")
 
@@ -249,7 +247,7 @@ def parse_and_save_pr_arguments_ocpci() -> Path | None:
             repo_name=repo_name,
             pull_number=pull_number,
             test_name=test_name,
-            shared_dir=shared_dir,
+            artifact_path=artifact_path,
         )
 
         output_file = artifact_path / CI_METADATA_DIRNAME / "variable_overrides.yaml"

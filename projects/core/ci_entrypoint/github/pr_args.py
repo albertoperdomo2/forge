@@ -18,6 +18,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+# Avoid circular import - define locally
+CI_METADATA_DIRNAME = "000__ci_metadata"
+
 logger = logging.getLogger(__name__)
 
 REQUIRED_AUTHOR_ASSOCIATION = "CONTRIBUTOR"
@@ -37,10 +40,6 @@ def get_directive_handlers() -> dict[str, Callable[[str], dict[str, Any]]]:
     return {
         "/test": handle_test_directive,
         "/var": handle_var_directive,
-        "/skip": handle_skip_directive,
-        "/only": handle_only_directive,
-        "/project": handle_project_directive,
-        "/cluster": handle_cluster_directive,
     }
 
 
@@ -128,78 +127,6 @@ def handle_var_directive(line: str) -> dict[str, Any]:
         raise Exception(f"Invalid /var directive: {line} - {e}") from e
 
 
-def handle_skip_directive(line: str) -> dict[str, Any]:
-    """
-    Handle /skip directive for disabling test executions.
-
-    Format: /skip test1 test2 test3
-
-    Args:
-        line: The directive line
-
-    Returns:
-        Dictionary with execution control flags
-    """
-
-    skip_items = line[6:].split()
-    result = {}
-    for item in skip_items:
-        result[f"exec_list.{item}"] = False
-
-    return result
-
-
-def handle_only_directive(line: str) -> dict[str, Any]:
-    """
-    Handle /only directive for enabling only specific test executions.
-
-    Format: /only test1 test2
-
-    Args:
-        line: The directive line
-
-    Returns:
-        Dictionary with execution control flags
-    """
-    only_items = line[6:].split()
-    result = {"exec_list._only_": True}
-    for item in only_items:
-        result[f"exec_list.{item}"] = True
-    return result
-
-
-def handle_project_directive(line: str) -> dict[str, Any]:
-    """
-    Handle /project directive for setting project override.
-
-    Format: /project project_name
-
-    Args:
-        line: The directive line
-
-    Returns:
-        Dictionary with project configuration
-    """
-    project_name = line[9:].strip()
-    return {"project.name": project_name}
-
-
-def handle_cluster_directive(line: str) -> dict[str, Any]:
-    """
-    Handle /cluster directive for setting cluster override.
-
-    Format: /cluster cluster_name
-
-    Args:
-        line: The directive line
-
-    Returns:
-        Dictionary with cluster configuration
-    """
-    cluster_name = line[9:].strip()
-    return {"cluster.name": cluster_name}
-
-
 def get_directive_prefixes() -> list[str]:
     """
     Get a list of supported directive prefixes.
@@ -224,28 +151,6 @@ def get_supported_directives() -> dict[str, str]:
                             /var timeout: 300
                             /var cluster.size: large
                    Note: Variables are merged into the final configuration and can override defaults.""",
-        "/skip": """Skip specific test executions by name.
-                    Format: /skip test1 test2 test3
-                    Example: /skip unit-tests integration-tests
-                    Effect: Sets exec_list.{test_name}: false for each specified test.
-                    Use case: Temporarily disable failing or unnecessary test components.""",
-        "/only": """Enable only specific test executions, disabling all others.
-                    Format: /only test1 test2
-                    Example: /only smoke-tests performance-tests
-                    Effect: Sets exec_list._only_: true and exec_list.{test_name}: true
-                    Note: This is exclusive - all non-specified tests will be disabled.""",
-        "/project": """Override the project name for the test execution.
-                       Format: /project project_name
-                       Example: /project llm-load-test
-                                /project custom-benchmark
-                       Effect: Sets project.name in configuration.
-                       Use case: Run tests against a different project than the default.""",
-        "/cluster": """Override the target cluster name for test execution.
-                       Format: /cluster cluster_name
-                       Example: /cluster production-cluster
-                                /cluster staging-env
-                       Effect: Sets cluster.name in configuration.
-                       Use case: Target tests at specific cluster environments.""",
         "/test": """Execute a test command with optional arguments.
                     Format: /test test_name project_name [arg1] [arg2] ...
                     Example: /test jump-ci cluster target_project
@@ -257,7 +162,9 @@ def get_supported_directives() -> dict[str, str]:
     }
 
 
-def parse_directives(text: str) -> tuple[dict[str, Any], list[str]]:
+def parse_directives(
+    text: str, artifact_path: Path | None = None, last_comment: str | None = None
+) -> tuple[dict[str, Any], list[str]]:
     """
     Parse all directives from the given text using handler mapping.
 
@@ -266,6 +173,8 @@ def parse_directives(text: str) -> tuple[dict[str, Any], list[str]]:
 
     Args:
         text: Text containing directives (PR body + comments)
+        artifact_path: Artifact directory path for saving last comment
+        last_comment: Last comment text to save
 
     Returns:
         Tuple of (configuration dictionary, list of found directive lines)
@@ -273,6 +182,15 @@ def parse_directives(text: str) -> tuple[dict[str, Any], list[str]]:
     Raises:
         Exception: If any directive has invalid format
     """
+    # Save last comment if provided
+    if artifact_path and last_comment:
+        metadata_dir = artifact_path / CI_METADATA_DIRNAME
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+        comment_file = metadata_dir / "pr_trigger_comment.txt"
+        with open(comment_file, "w") as f:
+            f.write(last_comment)
+        logger.info(f"Saved last comment to {comment_file}")
+
     config = {}
     found_directives = []
     directive_handlers = get_directive_handlers()
@@ -306,8 +224,7 @@ def parse_directives(text: str) -> tuple[dict[str, Any], list[str]]:
                 raise ValueError(f"Error parsing directive '{line}': {e}") from e
         else:
             # Unknown directive - log warning but still track it
-            logger.warning(f"Unknown directive ignored: {line}")
-            found_directives.append(f"# UNKNOWN: {line}")
+            logger.debug(f"Unknown directive ignored: {line}")
 
     if not has_test:
         raise ValueError("/test directive not found in the PR last comment")
@@ -359,7 +276,7 @@ def parse_pr_arguments(
     repo_name: str,
     pull_number: int,
     test_name: str | None = None,
-    shared_dir: Path | None = None,
+    artifact_path: Path | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Parse GitHub PR arguments and configuration from comments.
@@ -369,7 +286,7 @@ def parse_pr_arguments(
         repo_name: GitHub repository name
         pull_number: Pull request number
         test_name: Test name to search for (if not provided, derived from environment)
-        shared_dir: Shared directory for caching (OpenShift CI)
+        artifact_path: Artifact directory path for saving last comment
 
     Returns:
         Tuple of (configuration dictionary with parsed arguments and directives, list of found directive lines)
@@ -399,15 +316,8 @@ def parse_pr_arguments(
     logger.info(f"# PR URL: {pr_url}")
     logger.info(f"# PR comments URL: {pr_comments_url}")
 
-    # Set up caching for OpenShift CI
-    pr_cache_file = None
-    comments_cache_file = None
-    if shared_dir:
-        pr_cache_file = shared_dir / "pr.json"
-        comments_cache_file = shared_dir / "pr_last_comment_page.json"
-
     # Fetch PR data
-    pr_data = fetch_url(pr_url, pr_cache_file)
+    pr_data = fetch_url(pr_url)
 
     # Calculate last comment page
     pr_comments_count = pr_data.get("comments", 0)
@@ -420,7 +330,7 @@ def parse_pr_arguments(
 
     # Fetch last comment page
     last_comment_page_url = f"{pr_comments_url}?page={last_comment_page}"
-    last_comment_page_data = fetch_url(last_comment_page_url, comments_cache_file)
+    last_comment_page_data = fetch_url(last_comment_page_url)
 
     # Find the last relevant comment
     pr_author = pr_data["user"]["login"]
@@ -453,7 +363,9 @@ def parse_pr_arguments(
     combined_text = (pr_data.get("body", "") or "") + "\n" + last_user_test_comment
 
     # Parse directives using the modular parser
-    config, found_directives = parse_directives(combined_text)
+    config, found_directives = parse_directives(
+        combined_text, artifact_path, last_user_test_comment
+    )
 
     return config, found_directives
 
@@ -500,8 +412,8 @@ def main():
 
         # Optional parameters
         test_name = os.environ.get("TEST_NAME") or "jump-ci"
-        shared_dir_str = os.environ.get("SHARED_DIR")
-        shared_dir = Path(shared_dir_str) if shared_dir_str else None
+        artifact_dir_str = os.environ.get("ARTIFACT_DIR")
+        artifact_path = Path(artifact_dir_str) if artifact_dir_str else None
 
         # Parse PR arguments
         config, found_directives = parse_pr_arguments(
@@ -509,7 +421,7 @@ def main():
             repo_name=repo_name,
             pull_number=pull_number,
             test_name=test_name,
-            shared_dir=shared_dir,
+            artifact_path=artifact_path,
         )
 
         # Output configuration in YAML-like format (matching original script)
