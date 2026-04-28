@@ -252,18 +252,28 @@ def parse_and_save_pr_arguments_ocpci() -> Path | None:
 
         output_file = artifact_path / CI_METADATA_DIRNAME / "variable_overrides.yaml"
 
+        # Filter out help output before saving to variable overrides
+        config_for_overrides = {k: v for k, v in config.items() if k != "__help_output__"}
+
         with open(output_file, "w") as f:
-            yaml.dump(config, f, default_flow_style=False, sort_keys=True)
+            yaml.dump(config_for_overrides, f, default_flow_style=False, sort_keys=True)
 
         logger.info(f"Saved PR arguments to {output_file}")
-        logger.info(f"Configuration contains {len(config)} override(s)")
+        logger.info(f"Configuration contains {len(config_for_overrides)} override(s)")
 
         # Save directives to text file
         pr_config_file = artifact_path / CI_METADATA_DIRNAME / "pr_config.txt"
         with open(pr_config_file, "w") as f:
             if found_directives:
                 for directive in found_directives:
-                    f.write(f"{directive}\n")
+                    if directive.startswith("/help"):
+                        # Write help text from config if available
+                        if "__help_output__" in config:
+                            f.write(config["__help_output__"])
+                        else:
+                            f.write(f"{directive}\n")
+                    else:
+                        f.write(f"{directive}\n")
             else:
                 f.write("# No directives found\n")
 

@@ -18,6 +18,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from .directive_parser import create_help_directive_handler, parse_directives_generic
+
 # Avoid circular import - define locally
 CI_METADATA_DIRNAME = "000__ci_metadata"
 
@@ -40,6 +42,7 @@ def get_directive_handlers() -> dict[str, Callable[[str], dict[str, Any]]]:
     return {
         "/test": handle_test_directive,
         "/var": handle_var_directive,
+        "/help": handle_help_directive,
     }
 
 
@@ -127,6 +130,96 @@ def handle_var_directive(line: str) -> dict[str, Any]:
         raise Exception(f"Invalid /var directive: {line} - {e}") from e
 
 
+def format_help_text(directives_dict: dict[str, str], title: str) -> str:
+    """
+    Format directives help text with semantic line breaks and proper formatting.
+
+    Args:
+        directives_dict: Dictionary of directives and their descriptions
+        title: Title for the help section (e.g., "Supported GitHub PR directives")
+
+    Returns:
+        Formatted help text string
+    """
+    help_text = f"## {title}:\n"
+
+    for directive, description in directives_dict.items():
+        # Skip /help directive since it's redundant in help output
+        if directive == "/help":
+            continue
+
+        # Preserve original newlines but normalize whitespace within lines
+        help_text += f"\n{directive}\n"
+
+        # Split on semantic breaks: Format:, Effect:, Example:, Note:
+        semantic_breaks = ["Format:", "Effect:", "Example:", "Note:"]
+
+        # Find positions of semantic breaks while preserving newlines
+        parts = [description.strip()]
+        for break_word in semantic_breaks:
+            new_parts = []
+            for part in parts:
+                if break_word in part:
+                    split_parts = part.split(break_word)
+                    if len(split_parts) > 1:
+                        new_parts.append(split_parts[0].strip())
+                        for sp in split_parts[1:]:
+                            new_parts.append(f"{break_word} {sp.strip()}")
+                    else:
+                        new_parts.append(part)
+                else:
+                    new_parts.append(part)
+            parts = new_parts
+
+        # Format each part with proper indentation, preserving intentional newlines
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+
+            # Handle each line within the part separately to preserve newlines
+            lines = part.split("\n")
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    help_text += "\n"  # Preserve empty lines
+                    continue
+
+                # Normalize whitespace within the line
+                clean_line = " ".join(line.split())
+
+                # Split long lines at 80 characters
+                if len(clean_line) > 80:
+                    words = clean_line.split()
+                    current_line = ""
+                    for word in words:
+                        if len(current_line + " " + word) > 80 and current_line:
+                            help_text += f"  {current_line}\n"
+                            current_line = word
+                        else:
+                            current_line = current_line + " " + word if current_line else word
+                    if current_line:
+                        help_text += f"  {current_line}\n"
+                else:
+                    help_text += f"  {clean_line}\n"
+
+    return help_text
+
+
+def handle_help_directive(line: str) -> dict[str, Any]:
+    """Handle /help directive for GitHub PR directives."""
+    # Create help directive handler using the factory
+    _help_handler = create_help_directive_handler(
+        get_supported_directives(), "GitHub PR", format_help_text
+    )
+
+    _help_handler(line)  # Process and store help text
+    # Return help text in format expected by GitHub system
+    if hasattr(_help_handler, "_help_text"):
+        return {"__help_output__": _help_handler._help_text}
+    return {}
+
+
 def get_directive_prefixes() -> list[str]:
     """
     Get a list of supported directive prefixes.
@@ -145,20 +238,21 @@ def get_supported_directives() -> dict[str, str]:
         Dictionary mapping directive names to detailed descriptions
     """
     return {
+        "/test": """Execute a test command with optional arguments.
+
+                    Format: /test fournos project_name [arg1] [arg2] ...
+                    Example: /test fournos llm_d preset1 preset2
+                             /test forunos skeleton preset1 preset2
+                    Note: This is the primary directive for triggering CI test runs.""",
         "/var": """Set configuration variables in YAML format.
                    Format: /var key: value
-                   Example: /var debug: true
-                            /var timeout: 300
-                            /var cluster.size: large
-                   Note: Variables are merged into the final configuration and can override defaults.""",
-        "/test": """Execute a test command with optional arguments.
-                    Format: /test test_name project_name [arg1] [arg2] ...
-                    Example: /test jump-ci cluster target_project
-                             /test llm-d skeleton arg1 arg2
-                    Effect: Extracts ci_job.{name,project,args}.
-                    Special: For jump-ci, format is /test jump-ci cluster target_project [args]
-                             which also sets jump_ci.{cluster,project,args} for remote execution.
-                    Note: This is the primary directive for triggering CI test runs.""",
+                   Example: /var tests.llmd.inference_service.model: facebook-opt-125m
+                            /var tests.llmd.flavors: [simple, simple-tp4, simple-tp2-x4]
+                            /var tests.llmd.benchmarks.guidellm.rate: "1,10,50".
+                   """,
+        "/help": """Show all supported GitHub PR directives.
+                   Format: /help
+                   Effect: Logs available directive information to help users understand available options.""",
     }
 
 
@@ -191,43 +285,15 @@ def parse_directives(
             f.write(last_comment)
         logger.info(f"Saved last comment to {comment_file}")
 
-    config = {}
-    found_directives = []
     directive_handlers = get_directive_handlers()
 
-    has_test = False
-    # Process each line for directives
-    for line in text.split("\n"):
-        line = line.strip()
-
-        # Skip empty lines and non-directive lines
-        if not line or not line.startswith("/"):
-            continue
-
-        if line.startswith("/test"):
-            has_test = True
-
-        # Find matching directive handler
-        handler = None
-        for prefix, handler_func in directive_handlers.items():
-            if line.startswith(prefix + " ") or line == prefix:
-                handler = handler_func
-                break
-
-        if handler:
-            try:
-                # Call handler and merge results
-                result = handler(line)
-                config.update(result)
-                found_directives.append(line)
-            except Exception as e:
-                raise ValueError(f"Error parsing directive '{line}': {e}") from e
-        else:
-            # Unknown directive - log warning but still track it
-            logger.debug(f"Unknown directive ignored: {line}")
-
-    if not has_test:
-        raise ValueError("/test directive not found in the PR last comment")
+    # Use shared parsing logic
+    config, found_directives = parse_directives_generic(
+        text=text,
+        directive_handlers=directive_handlers,
+        system_name="GitHub PR",
+        required_directives=["/test"],
+    )
 
     return config, found_directives
 
@@ -379,7 +445,7 @@ def main():
     """
     # Handle special help argument
     if len(sys.argv) > 1 and sys.argv[1] == "--help-directives":
-        print("Supported GitHub PR directives:")
+        print("Forge CI PR directives:")
         for directive, description in get_supported_directives().items():
             print(f"  {directive}: {description}")
         print(f"\nSupported prefixes: {', '.join(get_directive_prefixes())}")
