@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -79,6 +80,17 @@ def run_from_orchestration_config(
     elif not mlflow_secrets_path.exists():
         raise FileNotFoundError(f"Vault {vault_name}/{vault_mlflow_secret} file missing :/")
 
+    # Get AWS credentials if provided
+    vault_aws_secret = export_cfg.backend.mlflow.secrets.vault.aws_secret
+    aws_credentials_path = None
+    if vault_aws_secret:
+        aws_credentials_path = vault_lib.get_vault_content_path(vault_name, vault_aws_secret)
+
+        if aws_credentials_path is None:
+            raise ValueError(f"Vault {vault_name}/{vault_aws_secret} missing :/")
+        elif not aws_credentials_path.exists():
+            raise FileNotFoundError(f"Vault {vault_name}/{vault_aws_secret} file missing :/")
+
     # Only ``backend.mlflow.config`` (inline mapping or file path) is MLflow settings
     # (``experiment``, ``run_name``, etc.). The whole ``CaliperExportBackendMlflow`` object
     # must not be passed as ``mlflow_config_data`` or the experiment stays nested and is ignored.
@@ -100,15 +112,27 @@ def run_from_orchestration_config(
     if mlflow_config_data is not None:
         mlflow_kwargs["mlflow_config_data"] = mlflow_config_data
 
-    ret = run_artifacts_export(
-        from_path=from_path,
-        status_yaml_path=status_yaml,
-        dry_run=export_cfg.dry_run,
-        verbose=export_cfg.verbose,
-        upload_workers=export_cfg.upload_workers,
-        backend=backends,
-        **mlflow_kwargs,
-    )
+    # Set AWS shared credentials file for MLflow S3 artifact storage (if provided)
+    previous_aws_creds = os.environ.get("AWS_SHARED_CREDENTIALS_FILE")
+    try:
+        if aws_credentials_path is not None:
+            os.environ["AWS_SHARED_CREDENTIALS_FILE"] = str(aws_credentials_path)
+
+        ret = run_artifacts_export(
+            from_path=from_path,
+            status_yaml_path=status_yaml,
+            dry_run=export_cfg.dry_run,
+            verbose=export_cfg.verbose,
+            upload_workers=export_cfg.upload_workers,
+            backend=backends,
+            **mlflow_kwargs,
+        )
+    finally:
+        # Restore previous AWS credentials environment variable
+        if previous_aws_creds is None:
+            os.environ.pop("AWS_SHARED_CREDENTIALS_FILE", None)
+        else:
+            os.environ["AWS_SHARED_CREDENTIALS_FILE"] = previous_aws_creds
 
     if ret != 0:
         raise RuntimeError(f"Caliper export failed (ret code = {ret})")
