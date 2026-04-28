@@ -4,7 +4,7 @@ import pathlib
 import signal
 
 from projects.core.library import config, env, run, vault
-from projects.fournos_launcher.orchestration import job_management
+from projects.fournos_launcher.orchestration import job_management, pr_args
 from projects.fournos_launcher.toolbox.submit_and_wait.main import (
     run as submit_and_wait,
 )
@@ -48,6 +48,7 @@ def _setup_signal_handlers():
 def init():
     env.init()
     run.init()
+    pr_args.apply_pr_directives()
     config.init(pathlib.Path(__file__).parent, apply_config_overrides=False)
     config.project.apply_config_overrides(ignore_not_found=True)
     config.project.filter_out_used_overrides()
