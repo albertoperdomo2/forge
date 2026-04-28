@@ -197,12 +197,9 @@ def parse_and_save_pr_arguments() -> Path | None:
     """
     # Check which CI environment we're in
     if os.environ.get("FOURNOS_CI") == "true":
-        # Process FOURNOS environment variables first
-        fournos.process_fournos_environment()
-
-        return fournos.parse_and_save_pr_arguments_fournos()
+        fournos.parse_and_save_pr_arguments_fournos()
     else:
-        return parse_and_save_pr_arguments_ocpci()
+        parse_and_save_pr_arguments_ocpci()
 
 
 def parse_and_save_pr_arguments_ocpci() -> Path | None:
@@ -555,11 +552,7 @@ def prepare(
         validate_prerequisites()
 
         # Parse and save PR arguments if in PR context
-        pr_args_file = parse_and_save_pr_arguments()
-        if pr_args_file and verbose:
-            logger.info(f"PR arguments saved to: {pr_args_file}")
-        elif pr_args_file:
-            logger.debug(f"PR arguments saved to: {pr_args_file}")
+        parse_and_save_pr_arguments()
 
         logger.info("CI preparation completed successfully")
 
