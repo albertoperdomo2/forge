@@ -48,7 +48,11 @@ def _setup_signal_handlers():
 def init():
     env.init()
     run.init()
-    pr_args.apply_pr_directives()
+    result = pr_args.apply_pr_directives()
+    if result == "help":
+        logger.info("Help was requested - exiting with code 0")
+        exit(0)
+
     config.init(pathlib.Path(__file__).parent, apply_config_overrides=False)
     config.project.apply_config_overrides(ignore_not_found=True)
     config.project.filter_out_used_overrides()
