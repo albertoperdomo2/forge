@@ -10,6 +10,8 @@ ci_job:
 
 overrides: {} # don't touch this one directly, the config module will populate it
 extra_overrides: {}
+fournos_launcher:
+  parallel_jobs: {}
 
 fournos:
   namespace: psap-automation
