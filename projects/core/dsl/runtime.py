@@ -109,6 +109,10 @@ def execute_tasks(function_args: dict = None):
 
             # Execute tasks only from the calling file
             script_manager = get_script_manager()
+
+            # Start thread-local execution context for this execution
+            script_manager.start_execution_context(rel_filename)
+
             file_tasks = list(script_manager.get_tasks_from_file(rel_filename))
 
             if not file_tasks:
@@ -195,7 +199,10 @@ def execute_tasks(function_args: dict = None):
             shared_context.__dict__["artifact_dir"] = args.artifact_dir
 
             return shared_context
+
         finally:
+            # Clear thread-local execution context
+            script_manager.clear_execution_context()
             # Clean up the file handler to prevent leaks
             dsl_logger = logging.getLogger("DSL")
             dsl_logger.removeHandler(file_handler)
