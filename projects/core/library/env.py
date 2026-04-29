@@ -1,11 +1,42 @@
 import logging
 import os
 import pathlib
+import threading
 import time
 
 ARTIFACT_DIR = None
 BASE_ARTIFACT_DIR = None  # Immutable copy of the initial ARTIFACT_DIR
 FORGE_HOME = pathlib.Path(__file__).parents[3]
+
+# Thread-local storage for ARTIFACT_DIR (thread-safe)
+_tls_artifact_dir = threading.local()
+
+
+def __getattr__(name):
+    """Support thread-local ARTIFACT_DIR access."""
+    if name == "ARTIFACT_DIR":
+        # Try thread-local first, fallback to global
+        try:
+            return _tls_artifact_dir.val
+        except AttributeError:
+            # Thread-local not set, use global
+            return globals().get("ARTIFACT_DIR")
+
+    return globals()[name]
+
+
+def get_tls_artifact_dir():
+    """Get thread-local artifact directory."""
+    try:
+        return _tls_artifact_dir.val
+    except AttributeError:
+        # Thread-local not set, use global
+        return globals().get("ARTIFACT_DIR")
+
+
+def _set_tls_artifact_dir(value):
+    """Set thread-local artifact directory (thread-safe)."""
+    _tls_artifact_dir.val = value
 
 
 def _set_artifact_dir(value):
@@ -51,6 +82,8 @@ def init(daily_artifact_dir=False):
         os.environ["FORGE_BASE_ARTIFACT_DIR"] = str(BASE_ARTIFACT_DIR)
 
     _set_artifact_dir(artifact_dir)
+    # Also set in thread-local storage for main thread
+    _set_tls_artifact_dir(artifact_dir)
 
 
 def NextArtifactDir(name, *, lock=None, counter_p=None):
