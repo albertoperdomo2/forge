@@ -188,15 +188,25 @@ class Parallel:
         def _run_with_artifact_dir(func, artifact_dir, *args, **kwargs):
             """Wrapper to run function with specific ARTIFACT_DIR for this thread."""
             if artifact_dir:
-                # Use thread-local storage (thread-safe)
-                original_artifact_dir = env.ARTIFACT_DIR
+                # Ensure thread has its own copy of ARTIFACT_DIR, then set it to dedicated directory
+                try:
+                    original_artifact_dir = env.ensure_thread_artifact_dir()
+                except ValueError:
+                    # No global ARTIFACT_DIR to inherit from
+                    original_artifact_dir = None
+
                 try:
                     env._set_tls_artifact_dir(artifact_dir)
                     return func(*args, **kwargs)
                 finally:
-                    env._set_tls_artifact_dir(original_artifact_dir)
+                    if original_artifact_dir is not None:
+                        env._set_tls_artifact_dir(original_artifact_dir)
             else:
-                # No dedicated directory, run normally
+                # No dedicated directory, ensure thread has its own copy of main ARTIFACT_DIR
+                try:
+                    env.ensure_thread_artifact_dir()
+                except ValueError:
+                    pass  # Continue without thread-local copy
                 return func(*args, **kwargs)
 
         # Use ThreadPoolExecutor for better cancellation control
