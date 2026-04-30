@@ -11,5 +11,8 @@ side_testing:
 quick_test:
   skeleton.test.duration_seconds: 10  # Quick 10 second test
 
+medium_test:
+  skeleton.test.duration_seconds: 120  # Medium 2 minute test
+
 long_test:
-  skeleton.test.duration_seconds: 600  # Long 10 minute test
+  skeleton.test.duration_seconds: 300  # Long 5 minute test
