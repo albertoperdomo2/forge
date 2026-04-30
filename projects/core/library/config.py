@@ -149,9 +149,35 @@ class Config:
                 if ignore_not_found:
                     continue
 
-                raise ValueError(
-                    f"Config key '{key}' does not exist, and cannot create it at the moment :/"
-                )
+                # Try to create the key if parent exists and is a dict
+                key_parts = key.split(".")
+                if len(key_parts) <= 1:
+                    raise ValueError(
+                        f"Config key '{key}' does not exist, and cannot create it at the moment :/"
+                    )
+
+                parent_key = ".".join(key_parts[:-1])
+                try:
+                    parent_value = self.get_config(
+                        parent_key, print=False, warn=False, handled_secretly=True
+                    )
+                except Exception as e:
+                    raise ValueError(
+                        f"Config key '{key}' does not exist, and cannot create it at the moment :/"
+                    ) from e
+
+                if not isinstance(parent_value, dict):
+                    raise ValueError(
+                        f"Config key '{key}' does not exist, and cannot create it at the moment :/"
+                    )
+
+                # Parent exists and is a dict, create the new key
+                child_key = key_parts[-1]
+                parent_value[child_key] = value
+                self.save_config()
+                if log:
+                    logger.info(f"config override (new key): {key} --> {value}")
+                continue
 
             self.set_config(key, value, print=False)
             actual_value = self.get_config(
