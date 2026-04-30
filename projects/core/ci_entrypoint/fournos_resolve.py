@@ -30,11 +30,11 @@ def fetch_fournos_job() -> tuple[str, str, dict]:
         RuntimeError: If fetch or parsing fails
     """
     # Get environment variables
-    job_name = os.environ.get("FOURNOS_JOB_NAME")
+    job_name = os.environ.get("FJOB_NAME")
     namespace = os.environ.get("FOURNOS_NAMESPACE")
 
     if not job_name:
-        raise ValueError("FOURNOS_JOB_NAME environment variable is required")
+        raise ValueError("FJOB_NAME environment variable is required")
     if not namespace:
         raise ValueError("FOURNOS_NAMESPACE environment variable is required")
 
@@ -197,8 +197,8 @@ def create_fournos_resolve_command(
     @click.command("resolve-fournos-config")
     @click.option(
         "--fjob-name",
-        help="FournosJob name (sets FOURNOS_JOB_NAME if provided)",
-        envvar="FOURNOS_JOB_NAME",
+        help="FournosJob name (sets FJOB_NAME if provided)",
+        envvar="FJOB_NAME",
     )
     @click.option(
         "--namespace",
@@ -216,7 +216,7 @@ def create_fournos_resolve_command(
         """Resolve the FournosJob object configuration."""
 
         if fjob_name:
-            os.environ["FOURNOS_JOB_NAME"] = fjob_name
+            os.environ["FJOB_NAME"] = fjob_name
         if namespace:
             os.environ["FOURNOS_NAMESPACE"] = namespace
 
