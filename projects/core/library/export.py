@@ -21,6 +21,63 @@ from projects.core.library import config
 logger = logging.getLogger(__name__)
 
 
+def _update_fjob_export_status(status: dict):
+    """Update FournosJob status with export artifacts status."""
+    if os.environ.get("FOURNOS_CI") != "true":
+        return
+
+    # Unset KUBECONFIG to use the pod SA access
+    original_kubeconfig = os.environ.get("KUBECONFIG")
+    if "KUBECONFIG" in os.environ:
+        del os.environ["KUBECONFIG"]
+
+    try:
+        import json
+        import subprocess
+
+        fjob_name = os.environ["FJOB_NAME"]
+        namespace = os.environ["FOURNOS_NAMESPACE"]
+
+        # Get current fjob status
+        get_cmd = f"oc get fjob/{fjob_name} -n {namespace} -o json"
+        result = subprocess.run(get_cmd, shell=True, capture_output=True, text=True)
+
+        if result.returncode == 0:
+            fjob_data = json.loads(result.stdout)
+
+            # Initialize status.engine.status if it doesn't exist
+            if "status" not in fjob_data:
+                fjob_data["status"] = {}
+            if "engineStatus" not in fjob_data["status"]:
+                fjob_data["status"]["engineStatus"] = {}
+            if "status" not in fjob_data["status"]["engineStatus"]:
+                fjob_data["status"]["engineStatus"]["status"] = {}
+
+            # Update with export-artifacts status
+            fjob_data["status"]["engineStatus"]["export-artifacts"] = status
+
+            # Patch the fjob
+            patch_data = {"status": fjob_data["status"]}
+            patch_cmd = f"oc patch fjob/{fjob_name} -n {namespace} --type=merge --subresource=status -p '{json.dumps(patch_data)}'"
+
+            patch_result = subprocess.run(patch_cmd, shell=True, capture_output=True, text=True)
+            if patch_result.returncode == 0:
+                logger.info(f"Updated fjob/{fjob_name} status with export artifacts status")
+            else:
+                logger.warning(
+                    f"Failed to update fjob status: {patch_cmd} --> {patch_result.stderr}"
+                )
+        else:
+            logger.warning(f"Failed to get fjob/{fjob_name}: {result.stderr}")
+
+    except Exception as e:
+        logger.warning(f"Failed to update fjob status: {e}")
+    finally:
+        # Restore KUBECONFIG if it was set
+        if original_kubeconfig is not None:
+            os.environ["KUBECONFIG"] = original_kubeconfig
+
+
 def run_caliper_orchestration_export(*, artifact_directory: Path | None):
     """Set optional ``caliper.export.from`` and run orchestration export."""
 
@@ -59,4 +116,8 @@ def caliper_export_command(_ctx, artifact_directory: Path | None):
 
     status = run_caliper_orchestration_export(artifact_directory=artifact_directory)
     logger.info("Export status:\n" + yaml.dump(status, indent=4))
+
+    # Update fjob status with export results
+    _update_fjob_export_status(status)
+
     return 0
