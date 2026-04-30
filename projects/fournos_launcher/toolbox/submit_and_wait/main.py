@@ -40,6 +40,7 @@ def run(
     exclusive: bool = True,
     gpu_count: int = None,
     gpu_type: str = None,
+    artifact_dirname_suffix: str = None,
 ):
     """
     Submit a FOURNOS job and wait for completion
