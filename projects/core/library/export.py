@@ -30,7 +30,7 @@ def run_caliper_orchestration_export(*, artifact_directory: Path | None):
     return run_from_orchestration_config(caliper_cfg)
 
 
-@click.command("export")
+@click.command("export-artifacts")
 @click.option(
     "--artifact-directory",
     "artifact_directory",
