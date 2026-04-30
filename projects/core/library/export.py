@@ -23,8 +23,21 @@ logger = logging.getLogger(__name__)
 
 def run_caliper_orchestration_export(*, artifact_directory: Path | None):
     """Set optional ``caliper.export.from`` and run orchestration export."""
+
+    if artifact_directory is None and "ARTIFACT_BASE_DIR" in os.environ:
+        artifact_directory = os.environ["ARTIFACT_BASE_DIR"]
+
     if artifact_directory is not None:
         config.project.set_config("caliper.export.from", str(artifact_directory))
+
+    # Use FJOB_NAME as fallback for mlflow run_name if not configured
+    run_name = config.project.get_config(
+        "caliper.export.backend.mlflow.config.run_name", None, print=False, warn=False
+    )
+    if run_name is None and "FJOB_NAME" in os.environ:
+        config.project.set_config(
+            "caliper.export.backend.mlflow.config.run_name", os.environ["FJOB_NAME"], print=False
+        )
 
     caliper_cfg = config.project.get_config("caliper", print=False)
 
