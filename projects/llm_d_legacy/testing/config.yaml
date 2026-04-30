@@ -3,6 +3,17 @@ vaults:
 - psap-forge-mlflow-export
 
 project:
+    name: null
+    args: []
+ci_job:
+    name: null
+    fjob: null
+    cluster: null
+    exclusive: null
+    hardware: null
+    owner: null
+
+project:
   name: null
   args: []
 
