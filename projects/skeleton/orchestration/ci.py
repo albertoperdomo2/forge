@@ -7,28 +7,16 @@ within the FORGE test harness framework. Use this as a starting point for
 building your own projects.
 """
 
-import logging
 import types
 
 import click
 import prepare_skeleton
 import test_skeleton
 
-from projects.caliper.orchestration.export import run_from_orchestration_config
 from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
 from projects.core.library import ci as ci_lib
-from projects.core.library import config, env
+from projects.core.library import config
 from projects.core.library.export import caliper_export_command
-
-
-def _caliper_export_at_end() -> int:
-    """Set ``caliper.export.from`` to ``env.BASE_ARTIFACT_DIR`` and run orchestration export."""
-    root = env.BASE_ARTIFACT_DIR
-    config.project.set_config("caliper.export.from", str(root), print=False)
-    caliper = config.project.get_config("caliper", print=False)
-    status = run_from_orchestration_config(caliper)
-    logging.info("Caliper export: %s", status)
-    return 0
 
 
 @click.group()
@@ -57,10 +45,7 @@ def prepare(ctx):
 @ci_lib.safe_ci_command
 def test(ctx):
     """Test phase - Execute the main testing logic."""
-    try:
-        return test_skeleton.test()
-    finally:
-        _caliper_export_at_end()
+    return test_skeleton.test()
 
 
 @main.command()
@@ -72,6 +57,7 @@ def pre_cleanup(ctx):
 
 
 main.add_command(caliper_export_command)
+
 main.add_command(
     create_fournos_resolve_command(
         vault_list_func=lambda: config.project.get_config("vaults"),
