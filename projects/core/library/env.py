@@ -4,8 +4,9 @@ import pathlib
 import threading
 import time
 
-ARTIFACT_DIR = None
+# ARTIFACT_DIR is accessed via __getattr__ for thread-local support
 BASE_ARTIFACT_DIR = None  # Immutable copy of the initial ARTIFACT_DIR
+_GLOBAL_ARTIFACT_DIR = None  # Internal global fallback
 FORGE_HOME = pathlib.Path(__file__).parents[3]
 
 # Thread-local storage for ARTIFACT_DIR (thread-safe)
@@ -15,12 +16,19 @@ _tls_artifact_dir = threading.local()
 def __getattr__(name):
     """Support thread-local ARTIFACT_DIR access."""
     if name == "ARTIFACT_DIR":
-        # Try thread-local first, fallback to global
+        # Each thread (including main) gets its own copy
         try:
             return _tls_artifact_dir.val
         except AttributeError:
-            # Thread-local not set, use global
-            return globals().get("ARTIFACT_DIR")
+            # Thread-local not set - this should not happen after proper initialization
+            # Return global as emergency fallback but warn
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Thread {threading.current_thread().name} accessing ARTIFACT_DIR without thread-local copy"
+            )
+            return globals().get("_GLOBAL_ARTIFACT_DIR")
 
     return globals()[name]
 
@@ -30,8 +38,12 @@ def get_tls_artifact_dir():
     try:
         return _tls_artifact_dir.val
     except AttributeError:
-        # Thread-local not set, use global
-        return globals().get("ARTIFACT_DIR")
+        # Thread-local not set - this should not happen after proper initialization
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Thread {threading.current_thread().name} has no thread-local ARTIFACT_DIR")
+        return None
 
 
 def _set_tls_artifact_dir(value):
@@ -39,16 +51,31 @@ def _set_tls_artifact_dir(value):
     _tls_artifact_dir.val = value
 
 
+def ensure_thread_artifact_dir():
+    """Ensure current thread has its own copy of ARTIFACT_DIR."""
+    try:
+        # Thread already has its own copy
+        return _tls_artifact_dir.val
+    except AttributeError:
+        # Thread doesn't have a copy, inherit from global
+        global_artifact_dir = globals().get("_GLOBAL_ARTIFACT_DIR")
+        if global_artifact_dir is not None:
+            _set_tls_artifact_dir(global_artifact_dir)
+            return global_artifact_dir
+        else:
+            raise ValueError("No ARTIFACT_DIR available to copy to thread") from None
+
+
 def _set_artifact_dir(value):
-    global ARTIFACT_DIR
-    ARTIFACT_DIR = value
+    global _GLOBAL_ARTIFACT_DIR
+    _GLOBAL_ARTIFACT_DIR = value
 
 
 def reset_artifact_dir():
     """Reset ARTIFACT_DIR to its original BASE_ARTIFACT_DIR value."""
-    global ARTIFACT_DIR
+    global _GLOBAL_ARTIFACT_DIR
     if BASE_ARTIFACT_DIR is not None:
-        ARTIFACT_DIR = BASE_ARTIFACT_DIR
+        _GLOBAL_ARTIFACT_DIR = BASE_ARTIFACT_DIR
         os.environ["ARTIFACT_DIR"] = str(BASE_ARTIFACT_DIR)
 
 
@@ -94,7 +121,18 @@ def NextArtifactDir(name, *, lock=None, counter_p=None):
     else:
         next_count = next_artifact_index()
 
-    dirname = ARTIFACT_DIR / f"{next_count:03d}__{name}"
+    # Use thread-local ARTIFACT_DIR for directory creation
+    current_artifact_dir = None
+    try:
+        current_artifact_dir = _tls_artifact_dir.val
+    except AttributeError:
+        # Fallback to global if thread-local not set
+        current_artifact_dir = globals().get("_GLOBAL_ARTIFACT_DIR")
+
+    if current_artifact_dir is None:
+        raise ValueError("ARTIFACT_DIR not set in either thread-local or global scope")
+
+    dirname = current_artifact_dir / f"{next_count:03d}__{name}"
 
     return TempArtifactDir(dirname)
 
@@ -105,20 +143,44 @@ class TempArtifactDir:
         self.previous_dirname = None
 
     def __enter__(self):
-        self.previous_dirname = ARTIFACT_DIR
+        # Store current thread-local ARTIFACT_DIR
+        try:
+            self.previous_dirname = _tls_artifact_dir.val
+        except AttributeError:
+            # Fallback to global if thread-local not set
+            self.previous_dirname = globals().get("_GLOBAL_ARTIFACT_DIR")
+
+        # Update environment variable
         os.environ["ARTIFACT_DIR"] = str(self.dirname)
         self.dirname.mkdir(exist_ok=True)
 
+        # Set both global and thread-local (for compatibility)
         _set_artifact_dir(self.dirname)
+        _set_tls_artifact_dir(self.dirname)
 
         return True
 
     def __exit__(self, ex_type, ex_value, exc_traceback):
+        # Restore environment variable
         os.environ["ARTIFACT_DIR"] = str(self.previous_dirname)
+
+        # Restore both global and thread-local
         _set_artifact_dir(self.previous_dirname)
+        _set_tls_artifact_dir(self.previous_dirname)
 
         return False  # If we returned True here, any exception would be suppressed!
 
 
 def next_artifact_index():
-    return len(list(ARTIFACT_DIR.glob("*__*")))
+    # Use thread-local ARTIFACT_DIR for counting
+    current_artifact_dir = None
+    try:
+        current_artifact_dir = _tls_artifact_dir.val
+    except AttributeError:
+        # Fallback to global if thread-local not set
+        current_artifact_dir = globals().get("_GLOBAL_ARTIFACT_DIR")
+
+    if current_artifact_dir is None:
+        return 0
+
+    return len(list(current_artifact_dir.glob("*__*")))
