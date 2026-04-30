@@ -76,6 +76,18 @@ def execute_tasks(function_args: dict = None):
     filename = caller_frame.f_code.co_filename
     command_name = _get_toolbox_function_name(filename)
 
+    # Prepend prefix to command name if provided
+    if prefix := function_args.get("artifact_dirname_prefix"):
+        command_name = f"{prefix}_{command_name}"
+        # Remove DSL framework parameter from function args
+        del function_args["artifact_dirname_prefix"]
+
+    # Append suffix to command name if provided
+    if suffix := function_args.get("artifact_dirname_suffix"):
+        command_name = f"{command_name}_{suffix}"
+        # Remove DSL framework parameter from function args
+        del function_args["artifact_dirname_suffix"]
+
     # Get relative filename to match task registration
     try:
         rel_filename = str(Path(filename).relative_to(env.FORGE_HOME))
