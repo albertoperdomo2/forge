@@ -19,6 +19,7 @@ from projects.core.dsl import (
     toolbox,
 )
 from projects.core.dsl.utils.k8s import sanitize_k8s_name
+from projects.core.library import env as env_mod
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ def run(
     if env is None:
         env = {}
     if status_dest is None:
-        status_dest = env.ARTIFACT_DIR / "artifacts"
+        status_dest = env_mod.ARTIFACT_DIR / "artifacts"
     else:
         status_dest = Path(status_dest)
         if not status_dest.exists():
@@ -352,32 +353,6 @@ def capture_pod_specs(args, ctx):
         return f"No pods for label {label!r} (or list failed): {yaml_list.stderr or ''}".strip()
 
     return f"Wrote the pod spec file under {artifact_dir} (label {label})"
-
-
-@always
-@task
-def cleanup_job(args, ctx):
-    """Clean up the job object"""
-
-    # Guard: Check if job name was generated (might not exist if early validation failed)
-    if not hasattr(ctx, "final_job_name"):
-        return "No job name available - skipping job cleanup"
-
-    # Check if shutdown has been requested - if so, preserve the job to let it export its artifacts
-    shutdown_result = shell.run(
-        f'oc get fournosjob {ctx.final_job_name} -n {args.namespace} -o jsonpath="{{.spec.shutdown}}"',
-        check=False,
-    )
-
-    if shutdown_result.success and shutdown_result.stdout.strip():
-        shutdown_value = shutdown_result.stdout.strip()
-        return f"Job has spec.shutdown={shutdown_value} - preserving it to let it export its artifacts, skipping deletion"
-
-    shell.run(
-        f"oc delete fournosjob {ctx.final_job_name} -n {args.namespace} --ignore-not-found",
-    )
-
-    return "Job cleanup completed"
 
 
 # Create the main function using the toolbox library
