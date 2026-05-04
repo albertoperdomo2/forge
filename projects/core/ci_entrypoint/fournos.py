@@ -14,6 +14,8 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+FJOB_FORGE_ENGINE_NAME = "forge"
+
 
 def process_fjob_environment(fjob_spec):
     """
@@ -52,14 +54,14 @@ def transform_fournos_config_to_variable_overrides(fjob: dict) -> dict:
 
     Returns:
         Dictionary in variable_overrides format:
-        - spec.forge.project -> project.name
-        - spec.forge.args -> project.args
-        - spec.forge.configOverrides entries are flattened directly
+        - metadata.name -> ci_job.fjob
+        - spec.executionEngine.forge.project -> project.name
+        - spec.executionEngine.forge.args -> project.args
+        - spec.executionEngine.forge.configOverrides entries are flattened directly
         - spec.exclusive -> ci_job.exclusive
         - spec.hardware -> ci_job.hardware
         - spec.cluster -> ci_job.cluster
         - spec.owner -> ci_job.owner
-        - metadata.name -> ci_job.fjob
         - spec.displayName -> ci_job.name
     """
     variable_overrides = {}
@@ -68,9 +70,10 @@ def transform_fournos_config_to_variable_overrides(fjob: dict) -> dict:
     metadata = fjob.get("metadata", {})
     fjob_spec = fjob.get("spec", {})
 
-    # Process forge configuration
-    forge_config = fjob_spec.get("forge", {})
+    fjob_engine = fjob_spec.get("executionEngine")
+    forge_config = fjob_engine.get(FJOB_FORGE_ENGINE_NAME)
     if forge_config:
+        # Process forge configuration
         # Transform project -> project.name
         if "project" in forge_config:
             variable_overrides["project.name"] = forge_config["project"]
@@ -82,6 +85,11 @@ def transform_fournos_config_to_variable_overrides(fjob: dict) -> dict:
         # Add all configOverrides entries directly (flatten them)
         config_overrides = forge_config.get("configOverrides", {})
         variable_overrides.update(config_overrides)
+
+    else:
+        raise ValueError(
+            f"Forge received an invalid fjob: spec.executionEngine.{FJOB_FORGE_ENGINE_NAME} not defined. Got {', '.join(fjob_engine.keys())}."
+        )
 
     # Add ci_job mappings from spec
     if "exclusive" in fjob_spec:
