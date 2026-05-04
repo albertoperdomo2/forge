@@ -18,11 +18,12 @@ spec:
     gpuCount: {{ args.gpu_count }}
     gpuType: {{ args.gpu_type }}
   {%- endif %}
-  forge:
-    project: {{ args.project }}
-    args:
-{{ args.args | toyaml | indent(6, true)}}
-    configOverrides:
-{{ args.variables_overrides | toyaml | indent(6, true)}}
+  executionEngine:
+    forge:
+      project: {{ args.project }}
+      args:
+{{ args.args | toyaml | indent(8, true)}}
+      configOverrides:
+{{ args.variables_overrides | toyaml | indent(8, true)}}
   env:
 {{ args.env | toyaml | indent(4, true) }}
