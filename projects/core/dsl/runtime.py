@@ -5,6 +5,7 @@ Runtime execution engine for the DSL framework
 import inspect
 import logging
 import os
+import threading
 import types
 from datetime import datetime
 from pathlib import Path
@@ -234,10 +235,11 @@ def execute_tasks(function_args: dict = None):
         finally:
             # Clear thread-local execution context
             script_manager.clear_execution_context()
-            # Clean up the file handler to prevent leaks
-            dsl_logger = logging.getLogger("DSL")
-            dsl_logger.removeHandler(file_handler)
-            file_handler.close()
+            # Clean up the thread-local file handler to prevent leaks
+            if hasattr(_thread_local_handlers, "file_handler"):
+                _thread_local_handlers.file_handler.close()
+                # Remove the reference to prevent memory leaks
+                del _thread_local_handlers.file_handler
 
 
 def _execute_single_task(task_info, args, shared_context):
@@ -386,20 +388,50 @@ def _generate_env_file(meta_dir):
     logger.debug(f"Generated environment file: {env_file}")
 
 
+# Thread-local storage for DSL logger handlers
+_thread_local_handlers = threading.local()
+
+
+class ThreadLocalHandler(logging.Handler):
+    """A logging handler that routes messages to thread-specific files"""
+
+    def __init__(self):
+        super().__init__()
+
+    def emit(self, record):
+        # Only emit if we have a thread-local file handler for this thread
+        if hasattr(_thread_local_handlers, "file_handler"):
+            try:
+                _thread_local_handlers.file_handler.emit(record)
+            except Exception:
+                # Ignore errors in logging to avoid breaking execution
+                pass
+
+
 def _setup_execution_logging(artifact_dir):
-    """Setup file logging to capture all stdout/stderr during execution"""
+    """Setup thread-safe file logging to capture all stdout/stderr during execution"""
     log_file = artifact_dir / "task.log"
 
-    # Create file handler for the DSL logger
+    # Create file handler for this specific execution
     file_handler = logging.FileHandler(log_file, mode="w")
     file_handler.setLevel(logging.INFO)
 
     # Use same format as console output
     file_handler.setFormatter(logging.Formatter("%(message)s"))
 
-    # Add handler to the DSL logger so all DSL modules inherit it
-    dsl_logger = logging.getLogger("DSL")
-    dsl_logger.addHandler(file_handler)
+    # Store the file handler in thread-local storage
+    _thread_local_handlers.file_handler = file_handler
+
+    # Add thread-local handler to main DSL logger only once (globally)
+    main_dsl_logger = logging.getLogger("DSL")
+
+    # Check if our thread-local handler is already added
+    has_thread_handler = any(isinstance(h, ThreadLocalHandler) for h in main_dsl_logger.handlers)
+
+    if not has_thread_handler:
+        thread_handler = ThreadLocalHandler()
+        thread_handler.setLevel(logging.INFO)
+        main_dsl_logger.addHandler(thread_handler)
 
     return log_file, file_handler
 
