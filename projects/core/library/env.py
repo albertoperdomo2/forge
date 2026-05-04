@@ -150,22 +150,26 @@ class TempArtifactDir:
             # Fallback to global if thread-local not set
             self.previous_dirname = globals().get("_GLOBAL_ARTIFACT_DIR")
 
-        # Update environment variable
-        os.environ["ARTIFACT_DIR"] = str(self.dirname)
-        self.dirname.mkdir(exist_ok=True)
+        # Only update environment variable in main thread to avoid parallel conflicts
+        if threading.current_thread() == threading.main_thread():
+            os.environ["ARTIFACT_DIR"] = str(self.dirname)
+            # Set global for main thread compatibility
+            _set_artifact_dir(self.dirname)
 
-        # Set both global and thread-local (for compatibility)
-        _set_artifact_dir(self.dirname)
+        self.dirname.mkdir(exist_ok=True)
+        # Always set thread-local (each thread gets its own)
         _set_tls_artifact_dir(self.dirname)
 
         return True
 
     def __exit__(self, ex_type, ex_value, exc_traceback):
-        # Restore environment variable
-        os.environ["ARTIFACT_DIR"] = str(self.previous_dirname)
+        # Only restore environment variable in main thread to avoid parallel conflicts
+        if threading.current_thread() == threading.main_thread():
+            os.environ["ARTIFACT_DIR"] = str(self.previous_dirname)
+            # Restore global for main thread compatibility
+            _set_artifact_dir(self.previous_dirname)
 
-        # Restore both global and thread-local
-        _set_artifact_dir(self.previous_dirname)
+        # Always restore thread-local (each thread manages its own)
         _set_tls_artifact_dir(self.previous_dirname)
 
         return False  # If we returned True here, any exception would be suppressed!
