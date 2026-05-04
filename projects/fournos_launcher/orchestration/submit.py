@@ -2,6 +2,7 @@ import logging
 import os
 import pathlib
 import signal
+import sys
 import threading
 import traceback
 from datetime import datetime
@@ -24,7 +25,7 @@ def _signal_handler_sigint(sig, frame):
     print("\n🚫 FOURNOS launcher received SIGINT - shutting down jobs...")
     env.reset_artifact_dir()
     job_management.shutdown_fjobs_on_interrupt()
-    # Don't call sys.exit here - let the original handler handle it
+    sys.exit(137)
 
 
 def _signal_handler_sigterm(sig, frame):
@@ -32,7 +33,7 @@ def _signal_handler_sigterm(sig, frame):
     print("\n🛑 FOURNOS launcher received SIGTERM - shutting down jobs...")
     env.reset_artifact_dir()
     job_management.shutdown_fjobs_on_interrupt()
-    # Don't call sys.exit here - let the original handler handle it
+    sys.exit(143)
 
 
 def _setup_signal_handlers():

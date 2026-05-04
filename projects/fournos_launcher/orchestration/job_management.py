@@ -69,6 +69,7 @@ def shutdown_running_fjobs():
 
     except Exception as e:
         logger.error(f"Exception while shutting down FournosJobs: {e}")
+        raise
 
 
 def shutdown_fjobs_on_interrupt():
@@ -81,3 +82,4 @@ def shutdown_fjobs_on_interrupt():
         shutdown_running_fjobs()
     except Exception as e:
         logger.error(f"Failed to shutdown FournosJobs: {e}")
+        raise
