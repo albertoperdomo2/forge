@@ -12,6 +12,9 @@ FORGE_HOME = pathlib.Path(__file__).parents[3]
 # Thread-local storage for ARTIFACT_DIR (thread-safe)
 _tls_artifact_dir = threading.local()
 
+# Global lock for artifact directory numbering to ensure sequential numbering in parallel execution
+_artifact_dir_lock = threading.Lock()
+
 
 def __getattr__(name):
     """Support thread-local ARTIFACT_DIR access."""
@@ -114,33 +117,38 @@ def init(daily_artifact_dir=False):
 
 
 def NextArtifactDir(name, *, lock=None, counter_p=None):
-    if lock:
-        with lock:
-            next_count = counter_p[0]
-            counter_p[0] += 1
-    else:
-        next_count = next_artifact_index()
+    # Use global lock to ensure sequential numbering in parallel execution
+    with _artifact_dir_lock:
+        if lock:
+            with lock:
+                next_count = counter_p[0]
+                counter_p[0] += 1
+        else:
+            next_count = next_artifact_index()
 
-    # Use thread-local ARTIFACT_DIR for directory creation
-    current_artifact_dir = None
-    try:
-        current_artifact_dir = _tls_artifact_dir.val
-    except AttributeError:
-        # Fallback to global if thread-local not set
-        current_artifact_dir = globals().get("_GLOBAL_ARTIFACT_DIR")
+        # Use thread-local ARTIFACT_DIR for directory creation
+        current_artifact_dir = None
+        try:
+            current_artifact_dir = _tls_artifact_dir.val
+        except AttributeError:
+            # Fallback to global if thread-local not set
+            current_artifact_dir = globals().get("_GLOBAL_ARTIFACT_DIR")
 
-    if current_artifact_dir is None:
-        raise ValueError("ARTIFACT_DIR not set in either thread-local or global scope")
+        if current_artifact_dir is None:
+            raise ValueError("ARTIFACT_DIR not set in either thread-local or global scope")
 
-    dirname = current_artifact_dir / f"{next_count:03d}__{name}"
+        dirname = current_artifact_dir / f"{next_count:03d}__{name}"
 
-    return TempArtifactDir(dirname)
+        # Create the TempArtifactDir which will mkdir in __init__
+        return TempArtifactDir(dirname)
 
 
 class TempArtifactDir:
     def __init__(self, dirname):
         self.dirname = pathlib.Path(dirname)
         self.previous_dirname = None
+        # Create directory immediately to ensure proper numbering sequence
+        self.dirname.mkdir(exist_ok=True)
 
     def __enter__(self):
         # Store current thread-local ARTIFACT_DIR
@@ -156,8 +164,8 @@ class TempArtifactDir:
             # Set global for main thread compatibility
             _set_artifact_dir(self.dirname)
 
-        self.dirname.mkdir(exist_ok=True)
         # Always set thread-local (each thread gets its own)
+        # Note: directory is already created in __init__
         _set_tls_artifact_dir(self.dirname)
 
         return True
