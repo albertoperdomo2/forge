@@ -49,6 +49,11 @@ def get_supported_fournos_directives() -> dict[str, str]:
                   Example: /gpu h100 4
                            /gpu a100 8
                   Effect: Sets fournos.job.hardware.gpu_type and fournos.job.hardware.gpu_count.""",
+        "/parallel": """Set parallel job presets for specific indices.
+                        Format: /parallel idx preset1 preset2 preset3...
+                        Example: /parallel 1 gpu-basic cpu-intensive
+                                 /parallel 2 memory-heavy network-test
+                        Effect: Sets fournos_launcher.parallel_jobs[idx] = [preset1, preset2, ...]""",
         "/help": """Show all supported FOURNOS directives.
                    Format: /help
                    Effect: Logs available directive information.""",
@@ -196,6 +201,59 @@ def handle_help_directive(line: str) -> dict[str, str]:
     return result
 
 
+def handle_parallel_directive(line: str) -> dict[str, str]:
+    """
+    Handle /parallel directive for setting parallel job presets by index.
+
+    Format: /parallel idx preset1 preset2 preset3...
+
+    Args:
+        line: The directive line
+
+    Returns:
+        Dictionary with parallel_jobs configuration
+
+    Raises:
+        ValueError: If format is invalid or values are missing
+    """
+    parallel_content = line.removeprefix("/parallel ").strip()
+
+    if not parallel_content:
+        raise ValueError(f"Invalid /parallel directive: parameters cannot be empty in '{line}'")
+
+    parts = parallel_content.split()
+    if len(parts) < 2:
+        raise ValueError(
+            f"Invalid /parallel directive: format must be '/parallel idx preset1 [preset2...]' in '{line}'"
+        )
+
+    idx_str = parts[0].strip()
+    presets = [p.strip() for p in parts[1:] if p.strip()]
+
+    if not idx_str:
+        raise ValueError(f"Invalid /parallel directive: index cannot be empty in '{line}'")
+
+    if not presets:
+        raise ValueError(
+            f"Invalid /parallel directive: at least one preset must be specified in '{line}'"
+        )
+
+    try:
+        idx = int(idx_str)
+        if idx < 0:
+            raise ValueError(
+                f"Invalid /parallel directive: index must be non-negative, got {idx} in '{line}'"
+            )
+    except ValueError as e:
+        if "non-negative" in str(e):
+            raise
+        raise ValueError(
+            f"Invalid /parallel directive: index must be a number, got '{idx_str}' in '{line}'"
+        ) from None
+
+    return {f"fournos_launcher.parallel_jobs.{idx}": presets}
+
+
 def get_fournos_directive_handlers() -> dict[str, callable]:
     """
     Get a mapping of FOURNOS directive prefixes to their handler functions.
@@ -208,6 +266,7 @@ def get_fournos_directive_handlers() -> dict[str, callable]:
         "/exclusive": handle_exclusive_directive,
         "/pipeline": handle_pipeline_directive,
         "/gpu": handle_gpu_directive,
+        "/parallel": handle_parallel_directive,
         "/help": handle_help_directive,
     }
 

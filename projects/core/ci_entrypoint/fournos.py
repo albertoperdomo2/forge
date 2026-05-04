@@ -12,8 +12,6 @@ from pathlib import Path
 
 import yaml
 
-from projects.core.library import run
-
 logger = logging.getLogger(__name__)
 
 
@@ -129,8 +127,8 @@ def parse_and_save_pr_arguments_fournos():
     # Create CI metadata directory
     metadata_dir.mkdir(parents=True, exist_ok=True)
 
-    # Fetch and save FournosJob YAML
-    fjob, fjob_spec = fetch_and_save_fjob_yaml(metadata_dir / "fjob.yaml")
+    # Load FournosJob YAML
+    fjob, fjob_spec = load_fjob_yaml(metadata_dir.parent / "fournos_fjob.yaml")
 
     if not fjob_spec:
         raise ValueError("FournosJob YAML not found, cannot parse FOURNOS PR arguments")
@@ -247,40 +245,38 @@ def process_forge_config(fjob_spec, metadata_dir, fjob):
     return variable_overrides
 
 
-def fetch_and_save_fjob_yaml(fjob_yaml_dest):
+def load_fjob_yaml(fjob_yaml_path):
     """
-    Fetch FournosJob YAML and save to artifact directory.
+    Load FournosJob YAML from file.
 
     Args:
-        fjob_yaml_dest: Path where to save the FournosJob YAML
+        fjob_yaml_path: Path to the FournosJob YAML file
 
     Returns:
         Tuple of (full_fjob, fjob_spec), or (None, None) if not found
     """
-
-    namespace = "psap-automation-wip"
-
-    result = run.run(
-        f"oc get fjobs -n {namespace} -oyaml",
-        capture_stdout=True,
-    )
-
-    fjobs_data = yaml.safe_load(result.stdout)
-    if not (fjobs_data and "items" in fjobs_data and fjobs_data["items"]):
-        logger.warning("No FournosJobs found")
+    if not fjob_yaml_path.exists():
+        logger.warning(f"FournosJob YAML file not found: {fjob_yaml_path}")
         return None, None
 
-    # Take the last fjob from the list
-    fjob = fjobs_data["items"][-1]
-
     try:
-        del fjob["status"]
-    except KeyError:
-        pass  # ignore
+        with open(fjob_yaml_path) as f:
+            fjob = yaml.safe_load(f)
 
-    with open(fjob_yaml_dest, "w") as f:
-        yaml.dump(fjob, f, default_flow_style=False, sort_keys=False)
+        if not fjob:
+            logger.warning(f"Empty or invalid FournosJob YAML: {fjob_yaml_path}")
+            return None, None
 
-    logger.info(f"Saved FournosJob YAML to {fjob_yaml_dest}")
+        # Remove status if present
+        try:
+            del fjob["status"]
+        except KeyError:
+            pass  # ignore
 
-    return fjob, fjob["spec"]
+        logger.info(f"Loaded FournosJob YAML from {fjob_yaml_path}")
+
+        return fjob, fjob["spec"]
+
+    except Exception as e:
+        logger.error(f"Failed to load FournosJob YAML from {fjob_yaml_path}: {e}")
+        return None, None

@@ -186,9 +186,21 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 {f.read().strip()}
 ```
 """
+    elif (
+        var_over := pathlib.Path(os.environ.get("ARTIFACT_DIR", ""))
+        / "000__ci_metadata"
+        / "variable_overrides.yaml"
+    ).exists():
+        with open(var_over) as f:
+            message += f"""
+{get_bold("Test configuration")}:
+```
+{f.read().strip()}
+```
+"""
     else:
         message += """
-• No test configuration (`variable_overrides.yaml`) available.
+• No test configuration (`variable_overrides.yaml/pr_config.txt`) available.
 """
 
     if (failures := pathlib.Path(os.environ.get("ARTIFACT_DIR", "")) / "FAILURES").exists():

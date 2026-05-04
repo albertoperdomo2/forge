@@ -230,7 +230,8 @@ def task(func):
             result = func(*args, **kwargs)
             # Store result for conditional execution
             script_manager = get_script_manager()
-            task_result = script_manager.get_task_result(task_name)
+            task_id = wrapper._task_info["id"]
+            task_result = script_manager.get_task_result(task_id)
             if task_result:
                 task_result._set_result(result)
             return result
@@ -249,6 +250,7 @@ def task(func):
 
     # Register the task with the script manager
     task_info = {
+        "id": f"{rel_definition_filename}:{definition_line_no}",
         "name": func.__name__,
         "func": wrapper,
         "condition": getattr(func, "_when_condition", None),
@@ -263,7 +265,7 @@ def task(func):
     wrapper._task_info = task_info
 
     # Make the result accessible as an attribute of the function
-    wrapper.status = script_manager.get_task_result(func.__name__)
+    wrapper.status = script_manager.get_task_result(task_info["id"])
 
     return wrapper
 
@@ -340,3 +342,78 @@ def retry(attempts=3, delay=1, backoff=1.0, retry_on_exceptions=False):
         return func
 
     return decorator
+
+
+def entrypoint(func):
+    """
+    Mark a function as a DSL entrypoint, automatically adding artifact directory parameters
+    and creating a main() function for CLI execution.
+
+    Automatically injects artifact_dirname_suffix and artifact_dirname_prefix parameters
+    to the function signature and creates a main() function accessible as func.main().
+
+    Usage:
+        @entrypoint
+        def run(project: str, cluster_name: str):
+            # Function will automatically accept artifact_dirname_suffix and artifact_dirname_prefix
+            pass
+
+        if __name__ == "__main__":
+            run.main()
+    """
+    # Get the original function signature
+    sig = inspect.signature(func)
+
+    # Add the artifact directory parameters to the signature
+    new_params = list(sig.parameters.values())
+
+    # Add suffix parameter
+    suffix_param = inspect.Parameter(
+        "artifact_dirname_suffix", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=str
+    )
+    new_params.append(suffix_param)
+
+    # Add prefix parameter
+    prefix_param = inspect.Parameter(
+        "artifact_dirname_prefix", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=str
+    )
+    new_params.append(prefix_param)
+
+    # Create new signature
+    new_sig = sig.replace(parameters=new_params)
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # Get the original function's parameter names
+        orig_sig = inspect.signature(func)
+        orig_param_names = set(orig_sig.parameters.keys())
+
+        # Split kwargs into original function params and DSL runtime params
+        func_kwargs = {}
+        dsl_kwargs = {}
+
+        for key, value in kwargs.items():
+            if key in orig_param_names:
+                func_kwargs[key] = value
+            else:
+                dsl_kwargs[key] = value
+
+        # Store DSL parameters for runtime access
+        wrapper._dsl_runtime_params = dsl_kwargs
+
+        return func(*args, **func_kwargs)
+
+    # Set the new signature on the wrapper
+    wrapper.__signature__ = new_sig
+
+    # Create main function for CLI execution
+    def main():
+        """CLI entrypoint with dynamic argument discovery"""
+        from . import toolbox
+
+        toolbox.run_toolbox_command(wrapper)
+
+    # Attach main function to the wrapper
+    wrapper.main = main
+
+    return wrapper
