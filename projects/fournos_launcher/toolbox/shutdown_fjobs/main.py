@@ -10,15 +10,16 @@ import logging
 import shlex
 
 from projects.core.dsl import (
+    entrypoint,
     execute_tasks,
     shell,
     task,
-    toolbox,
 )
 
 logger = logging.getLogger(__name__)
 
 
+@entrypoint
 def run(
     namespace: str = "psap-automation",
     ci_label: str = None,
@@ -231,9 +232,5 @@ def capture_final_status(args, ctx):
     return f"Captured status for {len(ctx.job_names)} jobs in artifacts/ directory"
 
 
-# Create the main function using the toolbox library
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

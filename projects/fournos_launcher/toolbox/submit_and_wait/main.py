@@ -11,12 +11,12 @@ from pathlib import Path
 
 from projects.core.dsl import (
     always,
+    entrypoint,
     execute_tasks,
     retry,
     shell,
     task,
     template,
-    toolbox,
 )
 from projects.core.dsl.utils.k8s import sanitize_k8s_name
 from projects.core.library import env as env_mod
@@ -24,6 +24,7 @@ from projects.core.library import env as env_mod
 logger = logging.getLogger(__name__)
 
 
+@entrypoint
 def run(
     cluster_name: str,
     project: str,
@@ -41,7 +42,6 @@ def run(
     exclusive: bool = True,
     gpu_count: int = None,
     gpu_type: str = None,
-    artifact_dirname_suffix: str = None,
 ):
     """
     Submit a FOURNOS job and wait for completion
@@ -355,9 +355,5 @@ def capture_pod_specs(args, ctx):
     return f"Wrote the pod spec file under {artifact_dir} (label {label})"
 
 
-# Create the main function using the toolbox library
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

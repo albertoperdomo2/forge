@@ -8,13 +8,14 @@ This shows the current possibilities available in the FORGE framework.
 """
 
 from projects.core.dsl import (
+    entrypoint,
     execute_tasks,
     shell,
     task,
-    toolbox,
 )
 
 
+@entrypoint
 def run(*, output_format: str = "text"):
     """
     Gather basic cluster and environment information
@@ -73,9 +74,5 @@ def get_cluster_nodes(args, ctx):
     )
 
 
-# Create the main function using the toolbox library
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

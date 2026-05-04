@@ -12,12 +12,12 @@ import logging
 
 from projects.core.dsl import (
     always,
+    entrypoint,
     execute_tasks,
     retry,
     shell,
     task,
     template,
-    toolbox,
 )
 
 logger = logging.getLogger("TOOLBOX")
@@ -92,6 +92,7 @@ def _capture_all_container_logs(buildrun_name: str, namespace: str, artifact_dir
         logger.debug(f"Captured init container logs for '{container_name}' to {log_file}")
 
 
+@entrypoint
 def run(
     repo_name: str,
     commit: str,
@@ -327,9 +328,5 @@ def generate_build_summary(args, ctx):
     logger.info(f"Target Image: {getattr(ctx, 'image_tag', 'unknown')}")
 
 
-# Create the main function using the toolbox library
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

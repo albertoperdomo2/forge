@@ -76,17 +76,36 @@ def execute_tasks(function_args: dict = None):
     filename = caller_frame.f_code.co_filename
     command_name = _get_toolbox_function_name(filename)
 
+    # Get DSL runtime parameters from function args or wrapper attributes
+    prefix = function_args.pop("artifact_dirname_prefix", None)
+    suffix = function_args.pop("artifact_dirname_suffix", None)
+
+    # Also check if they're stored in the calling function (from @entrypoint decorator)
+    try:
+        # Get the calling function from the frame
+        calling_func = caller_frame.f_globals.get(caller_frame.f_code.co_name)
+        if calling_func and hasattr(calling_func, "_dsl_runtime_params"):
+            runtime_params = calling_func._dsl_runtime_params
+            prefix = prefix or runtime_params.get("artifact_dirname_prefix")
+            suffix = suffix or runtime_params.get("artifact_dirname_suffix")
+    except (AttributeError, KeyError):
+        # If we can't get the calling function, that's fine - just continue
+        pass
+
+    # Debug logging to see if parameters are found
+    if suffix or prefix:
+        logger.info(f"DSL runtime: found prefix='{prefix}', suffix='{suffix}'")
+
     # Prepend prefix to command name if provided
-    if prefix := function_args.get("artifact_dirname_prefix"):
+    if prefix:
         command_name = f"{prefix}_{command_name}"
-        # Remove DSL framework parameter from function args
-        del function_args["artifact_dirname_prefix"]
 
     # Append suffix to command name if provided
-    if suffix := function_args.get("artifact_dirname_suffix"):
+    if suffix:
         command_name = f"{command_name}_{suffix}"
-        # Remove DSL framework parameter from function args
-        del function_args["artifact_dirname_suffix"]
+
+    # Log the final command name for debugging
+    logger.info(f"DSL runtime: using command_name='{command_name}'")
 
     # Get relative filename to match task registration
     try:

@@ -8,15 +8,16 @@ Cleans up a specific FOURNOS job
 import logging
 
 from projects.core.dsl import (
+    entrypoint,
     execute_tasks,
     shell,
     task,
-    toolbox,
 )
 
 logger = logging.getLogger(__name__)
 
 
+@entrypoint
 def run(
     job_name: str,
     namespace: str = "fournos-jobs",
@@ -124,9 +125,5 @@ def cleanup_fjob(args, ctx):
     return f"Successfully cleaned up job: {args.job_name}"
 
 
-# Create the main function using the toolbox library
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()
