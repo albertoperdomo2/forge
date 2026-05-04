@@ -13,8 +13,8 @@ logger = logging.getLogger("DSL")
 class TaskResult:
     """Container for task results that can be referenced in conditions"""
 
-    def __init__(self, task_name: str):
-        self.task_name = task_name
+    def __init__(self, task_id: str):
+        self.task_id = task_id
         self._result = None
         self._executed = False
 
@@ -61,17 +61,17 @@ class ScriptManager:
             self._task_registry[source_file].append(task_info)
 
             # Create result container for this task
-            task_name = task_info["name"]
-            self._task_results[task_name] = TaskResult(task_name)
+            task_id = task_info["id"]
+            self._task_results[task_id] = TaskResult(task_id)
 
-            logger.debug(f"Registered task '{task_name}' from {source_file}")
+            logger.debug(f"Registered task '{task_id}' from {source_file}")
 
-    def get_task_result(self, task_name: str) -> TaskResult | None:
+    def get_task_result(self, task_id: str) -> TaskResult | None:
         """Get the result container for a specific task"""
         # Check thread-local results (for current execution)
         thread_results = getattr(self._thread_local, "task_results", None)
-        if thread_results and task_name in thread_results:
-            return thread_results[task_name]
+        if thread_results and task_id in thread_results:
+            return thread_results[task_id]
 
         return None
 
@@ -107,9 +107,9 @@ class ScriptManager:
 
                 # Clear task results for tasks from this file
                 for task_info in tasks_to_remove:
-                    task_name = task_info["name"]
-                    if task_name in self._task_results:
-                        del self._task_results[task_name]
+                    task_id = task_info["id"]
+                    if task_id in self._task_results:
+                        del self._task_results[task_id]
 
                 # Remove tasks from this file
                 del self._task_registry[source_file]
@@ -152,9 +152,9 @@ class ScriptManager:
         # Create thread-local task results for tasks in this file
         file_tasks = self.get_tasks_from_file(source_file)
         for task_info in file_tasks:
-            task_name = task_info["name"]
-            if task_name not in self._thread_local.task_results:
-                self._thread_local.task_results[task_name] = TaskResult(task_name)
+            task_id = task_info["id"]
+            if task_id not in self._thread_local.task_results:
+                self._thread_local.task_results[task_id] = TaskResult(task_id)
 
         logger.debug(
             f"Started execution context for {source_file} in thread {threading.current_thread().name}"

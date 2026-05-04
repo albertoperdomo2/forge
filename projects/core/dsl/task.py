@@ -230,7 +230,8 @@ def task(func):
             result = func(*args, **kwargs)
             # Store result for conditional execution
             script_manager = get_script_manager()
-            task_result = script_manager.get_task_result(task_name)
+            task_id = wrapper._task_info["id"]
+            task_result = script_manager.get_task_result(task_id)
             if task_result:
                 task_result._set_result(result)
             return result
@@ -249,6 +250,7 @@ def task(func):
 
     # Register the task with the script manager
     task_info = {
+        "id": f"{rel_definition_filename}:{definition_line_no}",
         "name": func.__name__,
         "func": wrapper,
         "condition": getattr(func, "_when_condition", None),
@@ -263,7 +265,7 @@ def task(func):
     wrapper._task_info = task_info
 
     # Make the result accessible as an attribute of the function
-    wrapper.status = script_manager.get_task_result(func.__name__)
+    wrapper.status = script_manager.get_task_result(task_info["id"])
 
     return wrapper
 
