@@ -24,6 +24,21 @@ from projects.caliper.engine.parse import run_parse
 from projects.caliper.engine.plugin_config import resolve_plugin_module_string
 from projects.caliper.engine.visualize import run_visualize
 
+_ARTIFACTS_DIR_HELP = (
+    "Root directory of the test artifact tree (directories containing "
+    "__test_labels__.yaml). Optional manifest files (e.g. caliper.yaml) are searched here "
+    "unless --postprocess-config is set."
+)
+_PLUGIN_MODULE_HELP = (
+    "Python import path of the Caliper plugin module (must expose get_plugin()). "
+    "Names the plugin implementation; overrides plugin_module in the manifest when both "
+    "are set."
+)
+_POSTPROCESS_CONFIG_HELP = (
+    "Path to the post-processing manifest (YAML). If omitted, conventional filenames "
+    "are searched under the artifact tree (--artifacts-dir)."
+)
+
 
 def _root_obj(ctx: click.Context) -> dict[str, Any]:
     while ctx.parent is not None:
@@ -38,20 +53,73 @@ def _exit_with_help(ctx: click.Context, message: str, code: int = 1) -> NoReturn
     ctx.exit(code)
 
 
-def _require_base_dir(ctx: click.Context) -> Path:
+def _require_artifacts_dir(ctx: click.Context) -> Path:
     obj = _root_obj(ctx)
     bd = obj.get("base_dir")
     if bd is None:
         _exit_with_help(
             ctx,
-            "This command requires --base-dir (root of the artifact tree to parse).",
+            "This command requires the test artifact tree root: "
+            "`--artifacts-dir DIR` or `--base-dir DIR` "
+            "(before or after the subcommand).",
             code=1,
         )
     return bd  # type: ignore[return-value]
 
 
+def _apply_workspace_cli_overrides(
+    ctx: click.Context,
+    *,
+    artifacts_dir: Path | None,
+    postprocess_config: Path | None,
+    plugin_module_override: str | None,
+) -> None:
+    """Merge subcommand-level workspace flags into the root context (group options win if unset)."""
+    obj = _root_obj(ctx)
+    if artifacts_dir is not None:
+        obj["base_dir"] = artifacts_dir
+    if postprocess_config is not None:
+        obj["postprocess_config"] = postprocess_config
+    if plugin_module_override is not None:
+        obj["plugin_cli"] = plugin_module_override
+
+
+def _workspace_cli_options(cmd: Any) -> Any:
+    """Repeat global workspace options so they may appear after the subcommand."""
+    opts = (
+        click.option(
+            "--artifacts-dir",
+            "--base-dir",
+            "artifacts_dir",
+            type=click.Path(path_type=Path, exists=True),
+            default=None,
+            help=(
+                "Test artifact tree root (same meaning as before COMMAND). "
+                "Repeat here if you prefer flags after the subcommand."
+            ),
+        ),
+        click.option(
+            "--postprocess-config",
+            type=click.Path(path_type=Path, dir_okay=False, exists=True),
+            default=None,
+            help=_POSTPROCESS_CONFIG_HELP + " Overrides the global option when set here.",
+        ),
+        click.option(
+            "--plugin-module",
+            "--plugin",
+            "plugin_module_override",
+            metavar="MODULE",
+            default=None,
+            help="Plugin import path; same as global --plugin-module / --plugin.",
+        ),
+    )
+    for opt in reversed(opts):
+        cmd = opt(cmd)
+    return cmd
+
+
 def _plugin_tuple(ctx: click.Context) -> tuple[str, Any]:
-    base_dir = _require_base_dir(ctx)
+    base_dir = _require_artifacts_dir(ctx)
     obj = _root_obj(ctx)
     pc: Path | None = obj["postprocess_config"]
     cli_p: str | None = obj["plugin_cli"]
@@ -72,38 +140,43 @@ def _plugin_tuple(ctx: click.Context) -> tuple[str, Any]:
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
+    "--artifacts-dir",
     "--base-dir",
+    "artifacts_dir",
     type=click.Path(path_type=Path, exists=True),
     default=None,
-    help="Root directory containing artifact hierarchy. Required for parse, visualize, kpi generate, ai-eval-export—not for kpi import/export/analyze or artifacts.",
+    help=_ARTIFACTS_DIR_HELP,
 )
 @click.option(
     "--postprocess-config",
     type=click.Path(path_type=Path, dir_okay=False, exists=True),
     default=None,
-    help="Path to caliper.yaml / manifest (optional).",
+    help=_POSTPROCESS_CONFIG_HELP,
 )
 @click.option(
+    "--plugin-module",
     "--plugin",
     "plugin_module",
+    metavar="MODULE",
     default=None,
-    help="Override plugin module path (overrides manifest).",
+    help=_PLUGIN_MODULE_HELP,
 )
 @click.pass_context
 def main(
     ctx: click.Context,
-    base_dir: Path,
+    artifacts_dir: Path | None,
     postprocess_config: Path | None,
     plugin_module: str | None,
 ) -> None:
     """Caliper — artifact post-processing."""
     ctx.ensure_object(dict)
-    ctx.obj["base_dir"] = base_dir  # optional for some commands
+    ctx.obj["base_dir"] = artifacts_dir
     ctx.obj["postprocess_config"] = postprocess_config
     ctx.obj["plugin_cli"] = plugin_module
 
 
 @main.command("parse")
+@_workspace_cli_options
 @click.option("--no-cache", is_flag=True, help="Force full parse.")
 @click.option(
     "--cache-dir",
@@ -112,12 +185,25 @@ def main(
     help="Override cache file path.",
 )
 @click.pass_context
-def parse_cmd(ctx: click.Context, no_cache: bool, cache_dir: Path | None) -> None:
+def parse_cmd(
+    ctx: click.Context,
+    no_cache: bool,
+    cache_dir: Path | None,
+    artifacts_dir: Path | None,
+    postprocess_config: Path | None,
+    plugin_module_override: str | None,
+) -> None:
+    _apply_workspace_cli_overrides(
+        ctx,
+        artifacts_dir=artifacts_dir,
+        postprocess_config=postprocess_config,
+        plugin_module_override=plugin_module_override,
+    )
     mod, plugin = _plugin_tuple(ctx)
-    base_dir: Path = _root_obj(ctx)["base_dir"]  # set in _plugin_tuple via _require_base_dir
+    artifact_root: Path = _root_obj(ctx)["base_dir"]
     try:
         model = run_parse(
-            base_dir=base_dir,
+            base_dir=artifact_root,
             plugin_module=mod,
             plugin=plugin,
             use_cache=not no_cache,
@@ -132,6 +218,7 @@ def parse_cmd(ctx: click.Context, no_cache: bool, cache_dir: Path | None) -> Non
 
 
 @main.command("visualize")
+@_workspace_cli_options
 @click.option("--reports", default=None, help="Comma-separated report ids.")
 @click.option("--report-group", default=None)
 @click.option("--visualize-config", type=click.Path(path_type=Path), default=None)
@@ -151,12 +238,21 @@ def visualize_cmd(
     include_label: tuple[str, ...],
     exclude_label: tuple[str, ...],
     output_dir: Path,
+    artifacts_dir: Path | None,
+    postprocess_config: Path | None,
+    plugin_module_override: str | None,
 ) -> None:
+    _apply_workspace_cli_overrides(
+        ctx,
+        artifacts_dir=artifacts_dir,
+        postprocess_config=postprocess_config,
+        plugin_module_override=plugin_module_override,
+    )
     mod, plugin = _plugin_tuple(ctx)
-    base_dir: Path = _root_obj(ctx)["base_dir"]
+    artifact_root: Path = _root_obj(ctx)["base_dir"]
     try:
         paths = run_visualize(
-            base_dir=base_dir,
+            base_dir=artifact_root,
             plugin_module=mod,
             plugin=plugin,
             output_dir=output_dir,
@@ -181,14 +277,27 @@ def kpi_group(ctx: click.Context) -> None:
 
 
 @kpi_group.command("generate")
+@_workspace_cli_options
 @click.option("--output", type=click.Path(path_type=Path), required=True)
 @click.pass_context
-def kpi_generate(ctx: click.Context, output: Path) -> None:
+def kpi_generate(
+    ctx: click.Context,
+    output: Path,
+    artifacts_dir: Path | None,
+    postprocess_config: Path | None,
+    plugin_module_override: str | None,
+) -> None:
+    _apply_workspace_cli_overrides(
+        ctx,
+        artifacts_dir=artifacts_dir,
+        postprocess_config=postprocess_config,
+        plugin_module_override=plugin_module_override,
+    )
     mod, plugin = _plugin_tuple(ctx)
-    base_dir: Path = _root_obj(ctx)["base_dir"]
+    artifact_root: Path = _root_obj(ctx)["base_dir"]
     try:
         run_kpi_generate(
-            base_dir=base_dir,
+            base_dir=artifact_root,
             plugin_module=mod,
             plugin=plugin,
             output=output,
@@ -388,14 +497,27 @@ def artifacts_export(
 
 
 @main.command("ai-eval-export")
+@_workspace_cli_options
 @click.option("--output", type=click.Path(path_type=Path), required=True)
 @click.pass_context
-def ai_eval_export(ctx: click.Context, output: Path) -> None:
+def ai_eval_export(
+    ctx: click.Context,
+    output: Path,
+    artifacts_dir: Path | None,
+    postprocess_config: Path | None,
+    plugin_module_override: str | None,
+) -> None:
+    _apply_workspace_cli_overrides(
+        ctx,
+        artifacts_dir=artifacts_dir,
+        postprocess_config=postprocess_config,
+        plugin_module_override=plugin_module_override,
+    )
     mod, plugin = _plugin_tuple(ctx)
-    base_dir: Path = _root_obj(ctx)["base_dir"]
+    artifact_root: Path = _root_obj(ctx)["base_dir"]
     try:
         run_ai_eval_export(
-            base_dir=base_dir,
+            base_dir=artifact_root,
             plugin_module=mod,
             plugin=plugin,
             output=output,

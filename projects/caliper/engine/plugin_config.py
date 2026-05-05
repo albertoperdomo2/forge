@@ -9,6 +9,10 @@ import yaml
 
 MANIFEST_FILENAMES = ("caliper.yaml", "forge-postprocess.yaml", "postprocess.yaml")
 
+# Keep in sync with CLI flags in projects/caliper/cli/main.py
+_CLI_ARTIFACT_TREE = "`--artifacts-dir` / `--base-dir`"
+_CLI_PLUGIN_MODULE = "`--plugin-module` / `--plugin`"
+
 
 def load_manifest_file(path: Path) -> dict[str, Any]:
     """Load YAML manifest; raise ValueError on invalid content."""
@@ -51,7 +55,7 @@ def resolve_plugin_module_string(
     cli_plugin: str | None,
 ) -> tuple[str, Path | None]:
     """
-    FR-002 resolution: CLI --plugin overrides manifest plugin_module.
+    FR-002 resolution: CLI plugin module flag overrides manifest ``plugin_module``.
     Returns (module_string, manifest_path_or_none).
     """
     manifest_path, data = resolve_manifest_path(base_dir, postprocess_config)
@@ -60,13 +64,14 @@ def resolve_plugin_module_string(
     if data is None:
         raise ValueError(
             "No plugin module: set plugin_module in "
-            f"{'/'.join(MANIFEST_FILENAMES)} under --base-dir, or pass --plugin, "
-            "or use --postprocess-config PATH."
+            f"{'/'.join(MANIFEST_FILENAMES)} under {_CLI_ARTIFACT_TREE}, "
+            f"or pass {_CLI_PLUGIN_MODULE}, "
+            "or use --postprocess-config PATH with a manifest that declares plugin_module."
         )
     mod = data.get("plugin_module")
     if not mod or not isinstance(mod, str):
         raise ValueError(
             f"Manifest {manifest_path} must declare a non-empty string 'plugin_module', "
-            "or pass --plugin."
+            f"or pass {_CLI_PLUGIN_MODULE}."
         )
     return mod.strip(), manifest_path
