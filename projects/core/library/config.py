@@ -114,6 +114,33 @@ class Config:
 
         self.config["overrides"] = variable_overrides
 
+    def _create_first_parent_config_key(self, key: str, value) -> None:
+        """Create a new config key if its parent exists and is a dict."""
+        key_parts = key.split(".")
+        if len(key_parts) <= 1:
+            raise ValueError(
+                f"Config key '{key}' does not exist, and cannot create it at the moment :/"
+            )
+
+        parent_key = ".".join(key_parts[:-1])
+        try:
+            parent_value = self.get_config(
+                parent_key, print=False, warn=False, handled_secretly=True
+            )
+        except Exception as e:
+            raise ValueError(
+                f"Config key '{key}' does not exist, and cannot create it at the moment :/"
+            ) from e
+
+        if not isinstance(parent_value, dict):
+            raise ValueError(
+                f"Config key '{key}' does not exist, and cannot create it at the moment :/"
+            )
+
+        # Parent exists and is a dict, create the new key
+        child_key = key_parts[-1]
+        parent_value[child_key] = value
+
     def apply_config_overrides(
         self, *, ignore_not_found=False, variable_overrides_path=None, log=True
     ):
@@ -146,12 +173,22 @@ class Config:
                 handled_secretly=handled_secretly,
             )
             if current_value == MAGIC_DEFAULT_VALUE:
-                if ignore_not_found:
+                try:
+                    # Try to create the key if parent exists and is a dict
+                    self._create_first_parent_config_key(key, value)
+                    self.save_config()
+                except ValueError:
+                    if not ignore_not_found:
+                        raise
+
+                    if log:
+                        logger.info(f"config override IGNORED: {key} --> {value}")
                     continue
 
-                raise ValueError(
-                    f"Config key '{key}' does not exist, and cannot create it at the moment :/"
-                )
+                self.save_config()
+                if log:
+                    logger.info(f"config override (new key): {key} --> {value}")
+                continue
 
             self.set_config(key, value, print=False)
             actual_value = self.get_config(
@@ -437,7 +474,7 @@ def init(orchestration_dir, *, apply_config_overrides=True):
 
     if not apply_config_overrides:
         logger.info(
-            "config.init: running with 'apply_config_overrides', "
+            "config.init: running with 'apply_config_overrides=False', "
             "skipping the overrides. Saving it as 'overrides' "
             "field in the project configuration."
         )

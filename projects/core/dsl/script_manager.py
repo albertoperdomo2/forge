@@ -5,6 +5,7 @@ Provides clean separation between task definitions and execution state.
 """
 
 import logging
+import threading
 
 logger = logging.getLogger("DSL")
 
@@ -12,8 +13,8 @@ logger = logging.getLogger("DSL")
 class TaskResult:
     """Container for task results that can be referenced in conditions"""
 
-    def __init__(self, task_name: str):
-        self.task_name = task_name
+    def __init__(self, task_id: str):
+        self.task_id = task_id
         self._result = None
         self._executed = False
 
@@ -40,6 +41,10 @@ class ScriptManager:
         self._task_registry: dict[str, list[dict]] = {}
         # Task results organized by task name
         self._task_results: dict[str, TaskResult] = {}
+        # Thread-local storage for execution-specific task results
+        self._thread_local = threading.local()
+        # Lock for thread-safe registration
+        self._lock = threading.Lock()
 
     def register_task(self, task_info: dict, source_file: str) -> None:
         """
@@ -49,20 +54,26 @@ class ScriptManager:
             task_info: Dictionary containing task metadata
             source_file: Relative path to the source file defining the task
         """
-        if source_file not in self._task_registry:
-            self._task_registry[source_file] = []
+        with self._lock:
+            if source_file not in self._task_registry:
+                self._task_registry[source_file] = []
 
-        self._task_registry[source_file].append(task_info)
+            self._task_registry[source_file].append(task_info)
 
-        # Create result container for this task
-        task_name = task_info["name"]
-        self._task_results[task_name] = TaskResult(task_name)
+            # Create result container for this task
+            task_id = task_info["id"]
+            self._task_results[task_id] = TaskResult(task_id)
 
-        logger.debug(f"Registered task '{task_name}' from {source_file}")
+            logger.debug(f"Registered task '{task_id}' from {source_file}")
 
-    def get_task_result(self, task_name: str) -> TaskResult | None:
+    def get_task_result(self, task_id: str) -> TaskResult | None:
         """Get the result container for a specific task"""
-        return self._task_results.get(task_name)
+        # Check thread-local results (for current execution)
+        thread_results = getattr(self._thread_local, "task_results", None)
+        if thread_results and task_id in thread_results:
+            return thread_results[task_id]
+
+        return None
 
     def get_tasks_from_file(self, source_file: str) -> list[dict]:
         """
@@ -96,9 +107,9 @@ class ScriptManager:
 
                 # Clear task results for tasks from this file
                 for task_info in tasks_to_remove:
-                    task_name = task_info["name"]
-                    if task_name in self._task_results:
-                        del self._task_results[task_name]
+                    task_id = task_info["id"]
+                    if task_id in self._task_results:
+                        del self._task_results[task_id]
 
                 # Remove tasks from this file
                 del self._task_registry[source_file]
@@ -124,6 +135,40 @@ class ScriptManager:
     def get_total_task_count(self) -> int:
         """Get the total number of registered tasks across all files"""
         return sum(len(tasks) for tasks in self._task_registry.values())
+
+    def start_execution_context(self, source_file: str) -> None:
+        """
+        Start a new execution context for the current thread.
+
+        Creates thread-local task results for tasks from the specified file.
+        This allows parallel executions to have isolated task results.
+
+        Args:
+            source_file: Source file being executed
+        """
+        if not self.has_execution_context():
+            self._thread_local.task_results = {}
+
+        # Create thread-local task results for tasks in this file
+        file_tasks = self.get_tasks_from_file(source_file)
+        for task_info in file_tasks:
+            task_id = task_info["id"]
+            if task_id not in self._thread_local.task_results:
+                self._thread_local.task_results[task_id] = TaskResult(task_id)
+
+        logger.debug(
+            f"Started execution context for {source_file} in thread {threading.current_thread().name}"
+        )
+
+    def clear_execution_context(self) -> None:
+        """Clear the thread-local execution context."""
+        if self.has_execution_context():
+            del self._thread_local.task_results
+        logger.debug(f"Cleared execution context in thread {threading.current_thread().name}")
+
+    def has_execution_context(self) -> bool:
+        """Check if the current thread has an active execution context."""
+        return hasattr(self._thread_local, "task_results")
 
 
 # Global script manager instance

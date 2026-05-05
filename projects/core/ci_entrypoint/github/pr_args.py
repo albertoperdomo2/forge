@@ -2,7 +2,7 @@
 """
 GitHub PR Arguments Parser
 
-Fetches GitHub PR comments, finds the last comment from the PR author or CONTRIBUTOR,
+Fetches GitHub PR comments, finds the last comment from the PR author or COLLABORATOR,
 and extracts test configuration from special directives.
 
 Converts the bash script pr_args.sh to Python with enhanced error handling and structure.
@@ -25,7 +25,7 @@ CI_METADATA_DIRNAME = "000__ci_metadata"
 
 logger = logging.getLogger(__name__)
 
-REQUIRED_AUTHOR_ASSOCIATION = "CONTRIBUTOR"
+REQUIRED_AUTHOR_ASSOCIATION = "COLLABORATOR"
 
 DEFAULT_REPO_OWNER = "openshift-psap"
 DEFAULT_REPO_NAME = "forge"
