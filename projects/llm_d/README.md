@@ -10,7 +10,7 @@ The current implementation is intentionally narrow:
 
 Configuration layout:
 
-- base config: [`orchestration/config.yaml`](./orchestration/config.yaml)
+- project config chunk: [`orchestration/config.d/project.yaml`](./orchestration/config.d/project.yaml)
 - config chunks: [`orchestration/config.d`](./orchestration/config.d)
 - presets: [`orchestration/presets.d`](./orchestration/presets.d)
 - manifests: [`orchestration/manifests`](./orchestration/manifests)
@@ -19,7 +19,7 @@ Main entrypoints:
 
 - CI phase wrapper: [`orchestration/ci.py`](./orchestration/ci.py)
 - CLI wrapper: [`orchestration/cli.py`](./orchestration/cli.py)
-- Shared runtime/config loader: [`orchestration/llmd_runtime.py`](./orchestration/llmd_runtime.py)
+- Shared runtime/config loader: [`runtime/llmd_runtime.py`](./runtime/llmd_runtime.py)
 - Toolbox prepare command: [`toolbox/prepare/main.py`](./toolbox/prepare/main.py)
 - Toolbox test command: [`toolbox/test/main.py`](./toolbox/test/main.py)
 - Toolbox cleanup command: [`toolbox/cleanup/main.py`](./toolbox/cleanup/main.py)
