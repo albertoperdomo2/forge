@@ -62,15 +62,21 @@ def test_load_run_configuration_consolidates_config_d(
     assert "runtime" in consolidated
     assert "scheduler_profiles" in consolidated
     assert "workloads" in consolidated
+    assert consolidated["project"]["name"] == "llm_d"
     assert consolidated["runtime"]["default_preset"] == "smoke"
+    assert consolidated["platform"]["cluster"]["namespace"]["name"] == "forge-llm-d"
+    assert isinstance(consolidated["platform"]["operators"], dict)
 
 
 def test_namespace_override_is_not_managed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", '{"namespace":"custom-ns"}')
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config = llmd_runtime.load_run_configuration(
+        cwd=tmp_path,
+        artifact_dir=artifact_dir,
+        raw_overrides='{"namespace":"custom-ns"}',
+    )
 
     assert config.namespace == "custom-ns"
     assert config.namespace_is_managed is False
@@ -91,6 +97,24 @@ def test_default_namespace_comes_from_project_config(
 
     assert config.namespace == "forge-llm-d"
     assert config.namespace_is_managed is False
+    assert config.platform["cluster"]["namespace"]["prefix"] == "llm-d"
+    assert "rhods-operator" in config.platform["operators"]
+
+
+def test_load_run_configuration_ignores_runtime_env_vars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", '{"namespace":"ignored-ns"}')
+    monkeypatch.setenv("FORGE_PRESET", "benchmark-short")
+    monkeypatch.setenv("FORGE_JOB_NAME", "ignored-job")
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+
+    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+
+    assert config.preset_name == "smoke"
+    assert config.namespace == "forge-llm-d"
+    assert config.job_name == "local-smoke"
 
 
 def test_write_prepare_inputs_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
