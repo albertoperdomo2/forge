@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from projects.core.dsl import execute_tasks, shell, task, toolbox
-from projects.llm_d.orchestration import llmd_runtime, phase_inputs
+from projects.llm_d.runtime import llmd_runtime, phase_inputs
 
 
 def run(*, inputs_file: str) -> int:

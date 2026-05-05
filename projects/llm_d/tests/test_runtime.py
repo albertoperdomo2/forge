@@ -7,7 +7,7 @@ import pytest
 
 from projects.llm_d.orchestration import ci as llmd_ci
 from projects.llm_d.orchestration import cli as llmd_cli
-from projects.llm_d.orchestration import llmd_runtime, phase_inputs
+from projects.llm_d.runtime import llmd_runtime, phase_inputs
 from projects.llm_d.toolbox.cleanup import main as cleanup_toolbox
 from projects.llm_d.toolbox.prepare import main as prepare_toolbox
 from projects.llm_d.toolbox.prepare_model_cache import main as prepare_model_cache_toolbox

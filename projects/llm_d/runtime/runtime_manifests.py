@@ -4,7 +4,7 @@ import copy
 import json
 from typing import Any
 
-from projects.llm_d.orchestration.runtime_config import (
+from projects.llm_d.runtime.runtime_config import (
     ModelCacheSpec,
     ResolvedConfig,
     load_yaml,

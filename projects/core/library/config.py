@@ -450,3 +450,20 @@ def init(orchestration_dir, *, apply_config_overrides=True):
     project.apply_config_overrides()
     project.apply_presets_from_project_args()
     project.apply_config_overrides()  # reapply so that the value overrides are applied last
+
+
+def reload(orchestration_dir, *, apply_config_overrides=True):
+    global project
+
+    project = None
+
+    artifact_config = env.ARTIFACT_DIR / "config.yaml"
+    if artifact_config.exists():
+        artifact_config.unlink()
+
+    presets_applied = env.ARTIFACT_DIR / "presets_applied"
+    if presets_applied.exists():
+        presets_applied.unlink()
+
+    init(orchestration_dir, apply_config_overrides=apply_config_overrides)
+    return project

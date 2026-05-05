@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 
 from projects.core.dsl import execute_tasks, shell, task, toolbox
-from projects.llm_d.orchestration import llmd_runtime, phase_inputs
+from projects.llm_d.runtime import llmd_runtime, phase_inputs
 from projects.llm_d.toolbox.prepare_model_cache import main as prepare_model_cache
 
 LOGGER = logging.getLogger(__name__)

@@ -15,8 +15,10 @@ import yaml
 
 from projects.core.library import config, env, run
 
-LOGGER = logging.getLogger(__name__)
-ORCHESTRATION_DIR = env.FORGE_HOME / "projects" / "llm_d" / "orchestration"
+logger = logging.getLogger(__name__)
+RUNTIME_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = RUNTIME_DIR.parent
+ORCHESTRATION_DIR = PROJECT_DIR / "orchestration"
 CONFIG_DIR = ORCHESTRATION_DIR
 
 
@@ -88,25 +90,30 @@ def ensure_artifact_directories(artifact_dir: Path) -> None:
 
 
 def load_run_configuration(
-    *, cwd: Path | None = None, artifact_dir: Path | None = None
+    *,
+    cwd: Path | None = None,
+    artifact_dir: Path | None = None,
+    requested_preset: str | None = None,
+    raw_overrides: str | None = None,
+    job_name: str | None = None,
 ) -> ResolvedConfig:
     cwd = cwd or Path.cwd()
     if artifact_dir is not None:
         os.environ["ARTIFACT_DIR"] = str(artifact_dir)
     artifact_dir = init()
-    _reinitialize_project_config()
+    config.reload(ORCHESTRATION_DIR)
 
-    platform_data = copy.deepcopy(config.project.get_config("platform"))
+    platform_data = normalize_platform_config(copy.deepcopy(config.project.get_config("platform")))
     model_cache = copy.deepcopy(config.project.get_config("model_cache"))
     fournos_config = load_fournos_config(cwd)
     overrides = parse_overrides(
-        os.environ.get("FORGE_CONFIG_OVERRIDES", ""),
+        raw_overrides or "",
         allowed_keys=config.project.get_config("runtime.allowed_override_keys", []),
     )
 
     requested_preset = (
-        fournos_config.get("preset")
-        or os.environ.get("FORGE_PRESET")
+        requested_preset
+        or fournos_config.get("preset")
         or config.project.get_config("runtime.default_preset")
     )
     apply_requested_preset(requested_preset)
@@ -136,19 +143,20 @@ def load_run_configuration(
             config.project.get_config(f"workloads.benchmarks.{benchmark_name}")
         )
 
-    job_name = fournos_config.get("job-name") or os.environ.get("FORGE_JOB_NAME")
+    job_name = job_name or fournos_config.get("job-name")
     if not job_name:
         job_name = f"local-{preset_name}"
 
     namespace_override = overrides.get("namespace") or fournos_config.get("namespace")
-    default_namespace = platform_data["cluster"].get("namespace_name")
+    namespace_config = platform_data["cluster"]["namespace"]
+    default_namespace = namespace_config.get("name")
     namespace = (
         namespace_override
         or default_namespace
         or derive_namespace(
             job_name,
-            platform_data["cluster"]["namespace_prefix"],
-            platform_data["cluster"]["namespace_max_length"],
+            namespace_config["prefix"],
+            namespace_config["max_length"],
         )
     )
 
@@ -177,17 +185,25 @@ def load_run_configuration(
     )
 
 
-def _reinitialize_project_config() -> None:
-    config.project = None
-    artifact_config = env.ARTIFACT_DIR / "config.yaml"
-    if artifact_config.exists():
-        artifact_config.unlink()
+def normalize_platform_config(platform_data: dict[str, Any]) -> dict[str, Any]:
+    cluster = platform_data["cluster"]
+    if "namespace" not in cluster:
+        cluster["namespace"] = {
+            "name": cluster.pop("namespace_name", None),
+            "prefix": cluster.pop("namespace_prefix"),
+            "max_length": cluster.pop("namespace_max_length"),
+        }
 
-    presets_applied = env.ARTIFACT_DIR / "presets_applied"
-    if presets_applied.exists():
-        presets_applied.unlink()
+    operators = platform_data["operators"]
+    if isinstance(operators, list):
+        platform_data["operators"] = {
+            operator_spec["package"]: {
+                key: value for key, value in operator_spec.items() if key != "package"
+            }
+            for operator_spec in operators
+        }
 
-    config.init(ORCHESTRATION_DIR)
+    return platform_data
 
 
 def apply_requested_preset(requested_preset: str) -> None:
@@ -239,7 +255,7 @@ def normalize_gpu_count(value: Any) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):
-        LOGGER.warning("Ignoring invalid gpu-count value: %s", value)
+        logger.warning("Ignoring invalid gpu-count value: %s", value)
         return None
 
 
