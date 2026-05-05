@@ -27,7 +27,6 @@ def test_parse_overrides_rejects_unknown_keys() -> None:
 def test_load_run_configuration_resolves_alias(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
 
@@ -49,7 +48,6 @@ def test_load_run_configuration_resolves_alias(
 def test_load_run_configuration_consolidates_config_d(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
 
@@ -85,7 +83,6 @@ def test_namespace_override_is_not_managed(tmp_path: Path, monkeypatch: pytest.M
 def test_default_namespace_comes_from_project_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
     (tmp_path / "fournos_config.yaml").write_text(
@@ -184,13 +181,16 @@ def test_write_test_inputs_round_trip(tmp_path: Path, monkeypatch: pytest.Monkey
 def test_orchestration_prepare_writes_inputs_and_invokes_toolbox(
     orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
     config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
     captured: dict[str, str] = {}
 
-    monkeypatch.setattr(orchestration.llmd_runtime, "load_run_configuration", lambda: config)
+    monkeypatch.setattr(
+        orchestration.llmd_runtime,
+        "load_run_configuration",
+        lambda **_kwargs: config,
+    )
     monkeypatch.setattr(
         orchestration,
         "prepare_toolbox_run",
@@ -208,13 +208,16 @@ def test_orchestration_prepare_writes_inputs_and_invokes_toolbox(
 def test_orchestration_test_writes_inputs_and_invokes_toolbox(
     orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
     config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
     captured: dict[str, str] = {}
 
-    monkeypatch.setattr(orchestration.llmd_runtime, "load_run_configuration", lambda: config)
+    monkeypatch.setattr(
+        orchestration.llmd_runtime,
+        "load_run_configuration",
+        lambda **_kwargs: config,
+    )
     monkeypatch.setattr(
         orchestration,
         "test_toolbox_run",
@@ -233,13 +236,16 @@ def test_orchestration_test_writes_inputs_and_invokes_toolbox(
 def test_orchestration_cleanup_writes_inputs_and_invokes_toolbox(
     orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
     config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
     captured: dict[str, str] = {}
 
-    monkeypatch.setattr(orchestration.llmd_runtime, "load_run_configuration", lambda: config)
+    monkeypatch.setattr(
+        orchestration.llmd_runtime,
+        "load_run_configuration",
+        lambda **_kwargs: config,
+    )
     monkeypatch.setattr(
         orchestration,
         "cleanup_toolbox_run",
@@ -252,6 +258,34 @@ def test_orchestration_cleanup_writes_inputs_and_invokes_toolbox(
     assert result == captured["inputs_file"]
     assert loaded.namespace == config.namespace
     assert loaded.platform == config.platform
+
+
+@pytest.mark.parametrize("orchestration", [llmd_ci, llmd_cli])
+def test_orchestration_load_runtime_configuration_reads_env(
+    orchestration, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FORGE_PRESET", "smoke-precise")
+    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", '{"namespace":"custom-ns"}')
+    monkeypatch.setenv("FORGE_JOB_NAME", "job-from-env")
+    captured: dict[str, str | None] = {}
+    sentinel = object()
+
+    def fake_load_run_configuration(**kwargs):
+        captured.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr(
+        orchestration.llmd_runtime, "load_run_configuration", fake_load_run_configuration
+    )
+
+    result = orchestration.load_runtime_configuration()
+
+    assert result is sentinel
+    assert captured == {
+        "requested_preset": "smoke-precise",
+        "raw_overrides": '{"namespace":"custom-ns"}',
+        "job_name": "job-from-env",
+    }
 
 
 def test_render_inference_service_injects_model_and_scheduler_profile(
