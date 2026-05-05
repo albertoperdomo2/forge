@@ -1,8 +1,9 @@
 cluster:
   minimum_openshift_version: "4.19.9"
-  namespace_name: forge-llm-d
-  namespace_prefix: llm-d
-  namespace_max_length: 63
+  namespace:
+    name: forge-llm-d
+    prefix: llm-d
+    max_length: 63
   cleanup_timeout_seconds: 900
   gpu_node_label_selector: nvidia.com/gpu.present=true
   nfd_gpu_detection_labels:
@@ -11,36 +12,36 @@ cluster:
     - feature.node.kubernetes.io/pci-0300_10de.present
 
 operators:
-  - display_name: OpenShift Cert Manager
-    package: openshift-cert-manager-operator
+  openshift-cert-manager-operator:
+    display_name: OpenShift Cert Manager
     namespace: openshift-cert-manager-operator
     channel: stable-v1.18
     source: redhat-operators
     wait_timeout_seconds: 900
-  - display_name: Leader Worker Set
-    package: leader-worker-set
+  leader-worker-set:
+    display_name: Leader Worker Set
     namespace: openshift-lws
     channel: stable
     source: redhat-operators
     wait_timeout_seconds: 900
-  - display_name: Node Feature Discovery
-    package: nfd
+  nfd:
+    display_name: Node Feature Discovery
     namespace: openshift-nfd
     channel: stable
     source: redhat-operators
     wait_timeout_seconds: 900
     bootstrap_crd: nodefeaturediscoveries.nfd.openshift.io
     bootstrap_manifest: manifests/nfd-nodefeaturediscovery.yaml
-  - display_name: NVIDIA GPU Operator
-    package: gpu-operator-certified
+  gpu-operator-certified:
+    display_name: NVIDIA GPU Operator
     namespace: nvidia-gpu-operator
     channel: stable
     source: certified-operators
     wait_timeout_seconds: 1800
     bootstrap_crd: clusterpolicies.nvidia.com
     bootstrap_manifest: manifests/gpu-clusterpolicy.yaml
-  - display_name: Red Hat OpenShift AI
-    package: rhods-operator
+  rhods-operator:
+    display_name: Red Hat OpenShift AI
     namespace: redhat-ods-operator
     channel: stable-3.x
     source: redhat-operators
