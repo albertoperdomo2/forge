@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 import logging
+import os
 import types
 
 import click
 
 from projects.core.library.cli import safe_cli_command
-from projects.llm_d.orchestration import llmd_runtime, phase_inputs
+from projects.llm_d.runtime import llmd_runtime, phase_inputs
 from projects.llm_d.toolbox.cleanup.main import run as cleanup_toolbox_run
 from projects.llm_d.toolbox.prepare.main import run as prepare_toolbox_run
 from projects.llm_d.toolbox.test.main import run as test_toolbox_run
@@ -18,20 +19,28 @@ def init_runtime() -> None:
     llmd_runtime.init()
 
 
+def load_runtime_configuration():
+    return llmd_runtime.load_run_configuration(
+        requested_preset=os.environ.get("FORGE_PRESET"),
+        raw_overrides=os.environ.get("FORGE_CONFIG_OVERRIDES"),
+        job_name=os.environ.get("FORGE_JOB_NAME"),
+    )
+
+
 def run_prepare_phase() -> int:
-    config = llmd_runtime.load_run_configuration()
+    config = load_runtime_configuration()
     inputs_file = phase_inputs.write_prepare_inputs(config)
     return prepare_toolbox_run(inputs_file=str(inputs_file))
 
 
 def run_test_phase() -> int:
-    config = llmd_runtime.load_run_configuration()
+    config = load_runtime_configuration()
     inputs_file = phase_inputs.write_test_inputs(config)
     return test_toolbox_run(inputs_file=str(inputs_file))
 
 
 def run_cleanup_phase() -> int:
-    config = llmd_runtime.load_run_configuration()
+    config = load_runtime_configuration()
     inputs_file = phase_inputs.write_cleanup_inputs(config)
     return cleanup_toolbox_run(inputs_file=str(inputs_file))
 

@@ -7,11 +7,12 @@ import shlex
 import subprocess
 import time
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any
 
 import yaml
 
-from projects.llm_d.orchestration.runtime_config import (
+from projects.llm_d.runtime.runtime_config import (
     CONFIG_DIR,
     ORCHESTRATION_DIR,
     ModelCacheSpec,
@@ -33,7 +34,7 @@ from projects.llm_d.orchestration.runtime_config import (
     write_text,
     write_yaml,
 )
-from projects.llm_d.orchestration.runtime_manifests import (
+from projects.llm_d.runtime.runtime_manifests import (
     load_manifest_template,
     render_datasciencecluster,
     render_gateway,
@@ -45,7 +46,7 @@ from projects.llm_d.orchestration.runtime_manifests import (
     render_smoke_request_job,
 )
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "CONFIG_DIR",
@@ -118,7 +119,7 @@ def run_command(
     timeout_seconds: float | None = 300,
 ) -> subprocess.CompletedProcess[str]:
     cmd = [str(arg) for arg in args]
-    LOGGER.info("run: %s", " ".join(shlex.quote(arg) for arg in cmd))
+    logger.info("run: %s", " ".join(shlex.quote(arg) for arg in cmd))
     try:
         result = subprocess.run(
             cmd,
@@ -129,7 +130,7 @@ def run_command(
             timeout=timeout_seconds,
         )
     except subprocess.TimeoutExpired:
-        LOGGER.error(
+        logger.error(
             "Command timed out after %ss: %s",
             timeout_seconds,
             " ".join(shlex.quote(arg) for arg in cmd),
@@ -138,9 +139,9 @@ def run_command(
 
     if capture_output:
         if result.stdout:
-            LOGGER.info("stdout:\n%s", result.stdout.rstrip())
+            logger.info("stdout:\n%s", result.stdout.rstrip())
         if result.stderr:
-            LOGGER.info("stderr:\n%s", result.stderr.rstrip())
+            logger.info("stderr:\n%s", result.stderr.rstrip())
 
     if check and result.returncode != 0:
         raise CommandError(
@@ -247,7 +248,7 @@ def wait_until(
             if isinstance(exc, RuntimeError):
                 raise
             last_error = exc
-            LOGGER.info("waiting for %s: %s", description, exc)
+            logger.info("waiting for %s: %s", description, exc)
         time.sleep(interval_seconds)
 
     if last_error:
@@ -339,7 +340,7 @@ def ensure_subscription(operator_spec: dict[str, Any]) -> None:
         ignore_not_found=True,
     )
     if current and not subscription_spec_matches(current.get("spec", {}), subscription["spec"]):
-        LOGGER.info("Reconciling subscription drift for %s in %s", package, namespace)
+        logger.info("Reconciling subscription drift for %s in %s", package, namespace)
 
     oc("apply", "-f", "-", input_text=yaml.safe_dump(subscription, sort_keys=False))
 
@@ -384,7 +385,13 @@ def subscription_spec_matches(actual: dict[str, Any], expected: dict[str, Any]) 
 
 
 def operator_spec_by_package(platform: dict[str, Any], package: str) -> dict[str, Any]:
-    for operator_spec in platform["operators"]:
+    operators = platform["operators"]
+    if isinstance(operators, dict):
+        if package in operators:
+            return {"package": package, **operators[package]}
+        raise KeyError(f"Unknown operator package in llm_d platform config: {package}")
+
+    for operator_spec in operators:
         if operator_spec["package"] == package:
             return operator_spec
     raise KeyError(f"Unknown operator package in llm_d platform config: {package}")
@@ -482,6 +489,11 @@ def resolve_default_serviceaccount_image_pull_secret(namespace: str) -> str | No
     return None
 
 
+def load_runtime_script(name: str) -> str:
+    script_path = Path(__file__).resolve().parent / "scripts" / name
+    return script_path.read_text(encoding="utf-8")
+
+
 def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict[str, Any]:
     common_env = [
         {"name": "MODEL_SOURCE", "value": spec.source_uri},
@@ -494,32 +506,7 @@ def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict
     ]
 
     if spec.source_scheme == "hf":
-        command = """
-set -euo pipefail
-mkdir -p "${MODEL_TARGET_DIR}"
-rm -rf "${MODEL_TARGET_DIR}"/*
-python -m pip install --quiet --no-cache-dir 'huggingface_hub[hf_xet]'
-python - <<'PY'
-import os
-from huggingface_hub import snapshot_download
-
-token = None
-token_file = os.environ.get("HF_TOKEN_FILE")
-if token_file and os.path.exists(token_file):
-    with open(token_file, encoding="utf-8") as handle:
-        token = handle.read().strip() or None
-
-snapshot_download(
-    repo_id=os.environ["MODEL_SOURCE"][5:],
-    local_dir=os.environ["MODEL_TARGET_DIR"],
-    local_dir_use_symlinks=False,
-    token=token,
-)
-PY
-cat > "${MARKER_FILE}" <<EOF
-{"source_uri":"${MODEL_SOURCE}","cache_key":"${CACHE_KEY}","scheme":"hf"}
-EOF
-"""
+        command = load_runtime_script("download_hf_model.sh")
         volume_mounts = [{"name": "cache", "mountPath": "/cache"}]
         if spec.hf_token_secret_name:
             volumes.append(
@@ -552,22 +539,7 @@ EOF
             spec.oci_registry_auth_secret_name
             or resolve_default_serviceaccount_image_pull_secret(spec.namespace)
         )
-        command = """
-set -euo pipefail
-mkdir -p "${MODEL_TARGET_DIR}"
-rm -rf "${MODEL_TARGET_DIR}"/*
-auth_args=()
-if [[ -n "${REGISTRY_AUTH_FILE:-}" && -f "${REGISTRY_AUTH_FILE}" ]]; then
-  auth_args+=(--registry-config="${REGISTRY_AUTH_FILE}")
-fi
-oc image extract "${MODEL_SOURCE#oci://}" \
-  --path "${OCI_IMAGE_PATH}:${MODEL_TARGET_DIR}" \
-  --confirm \
-  "${auth_args[@]}"
-cat > "${MARKER_FILE}" <<EOF
-{"source_uri":"${MODEL_SOURCE}","cache_key":"${CACHE_KEY}","scheme":"oci","image_path":"${OCI_IMAGE_PATH}"}
-EOF
-"""
+        command = load_runtime_script("extract_oci_model.sh")
         volume_mounts = [{"name": "cache", "mountPath": "/cache"}]
         common_env.append({"name": "OCI_IMAGE_PATH", "value": spec.oci_image_path or "/"})
         if registry_auth_secret_name:

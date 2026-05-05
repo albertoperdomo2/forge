@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from projects.llm_d.orchestration.runtime_config import ResolvedConfig, load_yaml, write_yaml
+from projects.llm_d.runtime.runtime_config import ResolvedConfig, load_yaml, write_yaml
 
 
 @dataclass(frozen=True)
