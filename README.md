@@ -70,7 +70,7 @@ FORGE provides a containerized development environment using the forge_launcher:
 ./projects/skeleton/orchestration/ci.py test
 ```
 
-```
+```bash
 ./projects/skeleton/orchestration/cli.py --help
 ./projects/skeleton/orchestration/cli.py precleanup
 ./projects/skeleton/orchestration/cli.py prepare
@@ -123,13 +123,11 @@ forge/
 
 **Optional Backends:**
 - **OpenSearch**: For KPI indexing and search (`opensearch-py`)
-- **S3**: For artifact storage (`boto3`)
 - **MLflow**: For experiment tracking (`mlflow`)
 
 **Visualization:**
 - **Plotly/Dash**: Interactive dashboards
 - **Pandas**: Data processing
-- **Kaleido**: Static image generation
 
 ## 🧪 Testing
 
@@ -161,7 +159,7 @@ ruff check projects/
 ```
 
 ### Code Style
-- **MyPy**: Static type checking
+- **Ruff**: An extremely fast Python linter and code formatter
 - **Target**: Python 3.12+ compatibility
 
 ## 📖 Documentation
@@ -169,7 +167,7 @@ ruff check projects/
 - **Specifications**: `/specs/` - Detailed technical specifications
 - **Quickstart Guides**: `/specs/*/quickstart.md` - Getting started guides
 - **API Documentation**: Auto-generated from docstrings
-- **Examples**: `/docs/` - Usage examples and tutorials
+- **Documentation**: `/docs/` - Usage examples and tutorials
 
 ## 🔗 Related Projects
 
