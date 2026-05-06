@@ -113,10 +113,9 @@ def run_caliper_postprocess_after_test(
             workspace,
             test_outcome.phase if test_outcome else "SUCCESS",
         )
-        status = run_caliper_orchestration_postprocess(
+        status = run_orchestration_postprocess(
             artifact_directory=artifact_root_path,
-            visualize_output_directory=workspace,
-            postprocessing_workspace=workspace,
+            visualize_output_dir=workspace,
             test_outcome=test_outcome,
         )
         logger.info(
@@ -137,86 +136,73 @@ def run_caliper_postprocess_after_test(
 
 def resolve_caliper_postprocess_artifacts_dir(
     *,
-    artifact_directory: Path | None,
+    artifact_dir: Path | None,
     caliper_cfg: dict[str, Any] | None,
 ) -> Path:
     """
-    Resolve the Caliper **artifact tree** root (``__test_labels__.yaml``, manifest).
+    Resolve the Caliper **artifact tree** root.
 
-    Precedence: explicit ``artifact_directory``, ``caliper.postprocess.artifacts_dir``,
-    ``ARTIFACT_BASE_DIR``.
+    Precedence: explicit ``artifact_dir``, ``caliper.postprocess.artifacts_dir``
     """
-    if artifact_directory is not None:
-        return artifact_directory.expanduser().resolve()
+    if artifact_dir is not None:
+        return artifact_dir.expanduser().resolve()
 
-    root = caliper_cfg or {}
-    post = root.get("postprocess") or {}
-    raw = post.get("artifacts_dir")
-    if isinstance(raw, str) and raw.strip():
-        return Path(raw).expanduser().resolve()
-
-    if "ARTIFACT_BASE_DIR" in os.environ:
-        return Path(os.environ["ARTIFACT_BASE_DIR"]).expanduser().resolve()
+    cfg_root = caliper_cfg or {}
+    cfg_post = cfg_root.get("postprocess") or {}
+    raw_artifacts_dir = cfg_post.get("artifacts_dir")
+    if isinstance(raw_artifacts_dir, str) and raw_artifacts_dir.strip():
+        return Path(raw_artifacts_dir).expanduser().resolve()
 
     raise ValueError(
-        "Caliper postprocess requires the artifact tree root: use --artifact-directory, "
+        "Caliper postprocess requires the artifact tree root: use --artifact-dir, "
         "set caliper.postprocess.artifacts_dir in project config, or set ARTIFACT_BASE_DIR."
     )
 
 
-def orchestration_artifact_dir() -> Path | None:
-    """FORGE CI artifact directory ($ARTIFACT_DIR), when initialized."""
-    try:
-        ad = env.ARTIFACT_DIR
-    except Exception:
-        return None
-    return Path(ad) if ad is not None else None
-
-
-def run_caliper_orchestration_postprocess(
+def run_orchestration_postprocess(
     *,
-    artifact_directory: Path | None,
-    visualize_output_directory: Path | None = None,
-    postprocessing_workspace: Path | None = None,
+    artifact_dir: Path | None,
+    visualize_output_dir: Path | None = None,
     test_outcome: TestPhaseOutcome | None = None,
 ) -> dict[str, Any]:
     """Load ``caliper`` from project config and run enabled post-processing steps."""
+
     caliper_cfg = config.project.get_config("caliper", print=False)
+
     artifacts_dir = resolve_caliper_postprocess_artifacts_dir(
-        artifact_directory=artifact_directory,
+        artifact_dir=artifact_dir,
         caliper_cfg=caliper_cfg,
     )
+
     result = run_postprocess_from_orchestration_config(
         caliper_cfg,
         artifacts_dir=artifacts_dir,
-        orchestration_artifact_dir=orchestration_artifact_dir(),
-        visualize_output_directory=visualize_output_directory,
-        postprocessing_workspace=postprocessing_workspace,
+        visualize_output_dir=visualize_output_dir,
         test_outcome=test_outcome,
     )
 
-    status_base = (
-        postprocessing_workspace or visualize_output_directory or orchestration_artifact_dir()
-    )
-    if status_base is not None:
-        status_path = Path(status_base) / "caliper_postprocess_status.yaml"
-        try:
-            status_path.parent.mkdir(parents=True, exist_ok=True)
-            status_path.write_text(
-                yaml.dump(result, indent=2, default_flow_style=False, sort_keys=False),
-                encoding="utf-8",
-            )
-            logger.info("Wrote postprocess status YAML to %s", status_path)
-        except OSError as e:
-            logger.warning("Could not write %s: %s", status_path, e)
+    status_base = visualize_output_dir
+    if status_base is None:
+        return result
+
+    status_path = Path(status_base) / "caliper_postprocess_status.yaml"
+    try:
+        status_path.parent.mkdir(parents=True, exist_ok=True)
+        status_path.write_text(
+            yaml.dump(result, indent=2, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+        )
+        logger.info("Wrote postprocess status YAML to %s", status_path)
+    except OSError as e:
+        logger.warning("Could not write %s: %s", status_path, e)
 
     return result
 
 
 @click.command("postprocess")
 @click.option(
-    "--artifact-directory",
-    "artifact_directory",
+    "--artifact-dir",
+    "artifact_dir",
     type=click.Path(path_type=Path, exists=True, file_okay=False, dir_okay=True),
     default=None,
     help=(
@@ -225,8 +211,8 @@ def run_caliper_orchestration_postprocess(
     ),
 )
 @click.option(
-    "--output-directory",
-    "output_directory",
+    "--output-dir",
+    "output_dir",
     type=click.Path(path_type=Path, exists=True, file_okay=False, dir_okay=True),
     default=None,
     help=(
@@ -236,13 +222,15 @@ def run_caliper_orchestration_postprocess(
 )
 @click.pass_context
 @ci_lib.safe_ci_command
-def caliper_postprocess_command(_ctx, artifact_directory: Path | None, output_directory: Path | None):
-    """Run Caliper parse / visualize / KPI pipeline from ``caliper.postprocess``."""
+def postprocess_command(
+    _ctx, artifact_dir: Path | None, output_dir: Path | None
+):
+    """Run the post-processing pipeline."""
 
-    status = run_caliper_orchestration_postprocess(
-        artifact_directory=artifact_directory,
+    status = run_orchestration_postprocess(
+        artifact_dir=artifact_dir,
         test_outcome=TestPhaseOutcome("SUCCESS"),
-        visualize_output_directory=output_directory,
+        visualize_output_dir=output_dir,
     )
     logger.info("Caliper postprocess status:\n" + yaml.dump(status, indent=2))
 
