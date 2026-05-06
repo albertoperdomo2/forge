@@ -27,7 +27,7 @@ FinalPostprocessStatus = Literal[
 class TestPhaseOutcome:
     """Result of the orchestration test phase (before Caliper post-processing)."""
 
-    phase: Literal["SUCCESS", "FAILED"]
+    phase: Literal["SUCCESS", "FAILED", "NOT_AVAILABLE"]
     message: str | None = None
 
 

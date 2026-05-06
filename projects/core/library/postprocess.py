@@ -38,7 +38,8 @@ def run_and_postprocess(test_func, *args, **kwargs):
     1. Executes the provided test function with given arguments
     2. Captures test outcomes (success, failure, exception details)
     3. Runs Caliper postprocessing with the test outcome
-    4. Properly chains exceptions if both test and postprocess fail
+    4. Returns 1 if postprocessing fails when test succeeds
+    5. Properly chains exceptions if both test and postprocess fail
 
     Args:
         test_func: Callable test function to execute
@@ -46,11 +47,11 @@ def run_and_postprocess(test_func, *args, **kwargs):
         **kwargs: Keyword arguments to pass to test_func
 
     Returns:
-        The return value from the test function
+        The return value from the test function, or 1 if postprocessing fails
 
     Raises:
-        The original exception from test_func, or postprocess exception if test succeeds
-        but postprocessing fails. If both fail, exceptions are properly chained.
+        The original exception from test_func. If both test and postprocess fail,
+        exceptions are properly chained. If only postprocessing fails, returns 1.
     """
     artifact_base_dir = Path(env.ARTIFACT_DIR).resolve()
 
@@ -76,15 +77,38 @@ def run_and_postprocess(test_func, *args, **kwargs):
         else:
             outcome = TestPhaseOutcome("FAILED", f"exit_code={ret}")
 
-        # Run postprocessing and handle potential failures
+        # Run postprocessing and check status for failures
         try:
-            run_postprocess_after_test(artifact_base_dir, test_outcome=outcome)
+            status = run_postprocess_after_test(artifact_base_dir, test_outcome=outcome)
+
+            # Check if postprocessing failed
+            final_status = status.get("final_status")
+            if final_status and "failed" in final_status:
+                if original_exc is not None:
+                    # Both test and postprocess failed: log both issues
+                    logger.error(
+                        "Both test and postprocessing failed (final_status: %s)", final_status
+                    )
+                    raise  # Re-raise the original test exception
+                else:
+                    # Only postprocess failed: return failure code
+                    logger.error(
+                        "Test succeeded but postprocessing failed (final_status: %s) - returning exit code 1",
+                        final_status,
+                    )
+                    return 1
+
         except Exception as postprocess_exc:
-            logger.exception("Caliper postprocess after test failed")
+            logger.exception("Caliper postprocess after test failed with exception")
             if original_exc is not None:
                 # Both test and postprocess failed: chain so both are visible in the traceback
                 raise postprocess_exc from original_exc
-            raise  # Only postprocess failed — propagate normally
+            else:
+                # Only postprocess failed: return failure code instead of raising
+                logger.error(
+                    "Test succeeded but postprocessing failed with exception - returning exit code 1"
+                )
+                return 1
 
 
 def run_postprocess_after_test(
@@ -228,7 +252,7 @@ def run_orchestration_postprocess(
 @click.option(
     "--output-dir",
     "output_dir",
-    type=click.Path(path_type=Path, exists=True, file_okay=False, dir_okay=True),
+    type=click.Path(path_type=Path, exists=False, file_okay=False, dir_okay=True),
     default=None,
     help=(
         "Output directory, where the post processing results will be stored. "
@@ -242,7 +266,7 @@ def postprocess_command(_ctx, artifact_dir: Path | None, output_dir: Path | None
 
     status = run_orchestration_postprocess(
         artifact_dir=artifact_dir,
-        test_outcome=TestPhaseOutcome("SUCCESS"),
+        test_outcome=TestPhaseOutcome("NOT_AVAILABLE"),
         visualize_output_dir=output_dir,
     )
     logger.info("Caliper postprocess status:\n" + yaml.dump(status, indent=2))

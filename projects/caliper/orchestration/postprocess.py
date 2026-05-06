@@ -127,8 +127,7 @@ def run_postprocess_from_orchestration_config(
 
     Parse/visualize use ``artifacts_dir`` and ``visualize_output_dir``.
     """
-
-    outcome = test_outcome or TestPhaseOutcome("SUCCESS")
+    outcome = test_outcome or TestPhaseOutcome("NOT_AVAILABLE")
     steps: dict[str, Any] = {}
     parse_failed = False
     visualize_failed = False
