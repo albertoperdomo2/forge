@@ -114,7 +114,7 @@ def _stub_analyze(postprocess_config: CaliperOrchestrationPostprocessConfig) -> 
 
 
 def run_postprocess_from_orchestration_config(
-    caliper_cfg: dict[str, Any] | None,
+    postprocess_config_raw: dict[str, Any] | None,
     *,
     artifacts_dir: Path,
     visualize_output_dir: Path | None = None,
@@ -134,9 +134,8 @@ def run_postprocess_from_orchestration_config(
     visualize_failed = False
 
     try:
-        root = caliper_cfg or {}
         postprocess_config = CaliperOrchestrationPostprocessConfig.model_validate(
-            root.get("postprocess") or {}
+            postprocess_config_raw or {}
         )
     except ValidationError as e:
         logger.error("Invalid caliper postprocess config: %s", e)
@@ -179,7 +178,6 @@ def run_postprocess_from_orchestration_config(
                 plugin_module=mod_str,
                 plugin=plugin,
                 use_cache=not postprocess_config.parse.no_cache,
-                cache_path=cache_path,
             )
             return {
                 "status": "ok",

@@ -207,7 +207,6 @@ def parse_cmd(
             plugin_module=mod,
             plugin=plugin,
             use_cache=not no_cache,
-            cache_path=cache_dir,
         )
     except Exception as e:  # noqa: BLE001
         click.echo(f"parse failed: {e}", err=True)

@@ -15,15 +15,25 @@ def resolve_visualize_config(
     base_dir: Path,
     explicit_path: Path | None,
 ) -> dict[str, Any] | None:
+
+    def _load(p: Path) -> dict[str, Any] | None:
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        if data is None:
+            return None
+        if not isinstance(data, dict):
+            raise ValueError(f"Visualize config must be a mapping at top level: {p}")
+        return data
+
     if explicit_path is not None:
         p = explicit_path.resolve()
         if not p.is_file():
             raise FileNotFoundError(f"Visualize config not found: {p}")
-        return yaml.safe_load(p.read_text(encoding="utf-8"))
+        return _load(p)
+
     for name in ("visualize-groups.yaml", "visualize-groups.yml"):
         cand = base_dir / name
         if cand.is_file():
-            return yaml.safe_load(cand.read_text(encoding="utf-8"))
+            return _load(cand)
     return None
 
 
@@ -66,7 +76,6 @@ def run_visualize(
         plugin_module=plugin_module,
         plugin=plugin,
         use_cache=use_cache,
-        cache_path=cache_path,
     )
     inc = parse_filter_kv(include_pairs)
     exc = parse_filter_kv(exclude_pairs)

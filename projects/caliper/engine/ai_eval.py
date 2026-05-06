@@ -15,14 +15,12 @@ def run_ai_eval_export(
     plugin: object,
     output: Path,
     use_cache: bool,
-    cache_path: Path | None,
 ) -> dict[str, object]:
     model = run_parse(
         base_dir=base_dir,
         plugin_module=plugin_module,
         plugin=plugin,
         use_cache=use_cache,
-        cache_path=cache_path,
     )
     build = plugin.build_ai_eval_payload
     payload = build(model)
@@ -30,5 +28,6 @@ def run_ai_eval_export(
     validate_instance(payload, schema, "AI eval payload")
     import json  # noqa: PLC0415
 
+    output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return payload

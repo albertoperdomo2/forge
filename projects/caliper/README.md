@@ -12,7 +12,7 @@ Artifact post-processing: parse labeled test trees, visualize, KPIs, export to O
 ```bash
 caliper --artifacts-dir /path/to/artifacts parse
 caliper --plugin-module my_package.caliper_plugin --artifacts-dir /path visualize \
-  --output-dir ./out --reports default
+  --output-dir ./out --report-group default
 ```
 
 Install optional backends: `pip install -e '.[caliper]'`

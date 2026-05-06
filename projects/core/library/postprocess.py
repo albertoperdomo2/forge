@@ -14,9 +14,13 @@ from typing import Any
 
 import click
 import yaml
+from pydantic import ValidationError
 
 from projects.caliper.orchestration.postprocess import (
     run_postprocess_from_orchestration_config,
+)
+from projects.caliper.orchestration.postprocess_config import (
+    CaliperOrchestrationPostprocessConfig,
 )
 from projects.caliper.orchestration.postprocess_outcome import TestPhaseOutcome
 from projects.core.library import ci as ci_lib
@@ -74,7 +78,7 @@ def run_and_postprocess(test_func, *args, **kwargs):
 
         # Run postprocessing and handle potential failures
         try:
-            run_caliper_postprocess_after_test(artifact_base_dir, test_outcome=outcome)
+            run_postprocess_after_test(artifact_base_dir, test_outcome=outcome)
         except Exception as postprocess_exc:
             logger.exception("Caliper postprocess after test failed")
             if original_exc is not None:
@@ -83,7 +87,7 @@ def run_and_postprocess(test_func, *args, **kwargs):
             raise  # Only postprocess failed — propagate normally
 
 
-def run_caliper_postprocess_after_test(
+def run_postprocess_after_test(
     artifact_root: Path | os.PathLike[str] | str | None,
     *,
     test_outcome: TestPhaseOutcome | None = None,
@@ -97,9 +101,16 @@ def run_caliper_postprocess_after_test(
 
     ``test_outcome`` feeds ``final_status`` computation together with parse/visualize/KPI outcomes.
     """
-    full_cal = config.project.get_config("caliper", print=False)
-    post = (full_cal or {}).get("postprocess") or {}
-    if not post.get("enabled", True):
+    try:
+        postprocess_config_raw = config.project.get_config("caliper.postprocess", print=False) or {}
+        postprocess_config = CaliperOrchestrationPostprocessConfig.model_validate(
+            postprocess_config_raw
+        )
+    except ValidationError as e:
+        logger.error("Invalid caliper.postprocess config: %s", e)
+        raise
+
+    if not postprocess_config.enabled:
         logger.info("Caliper post-processing disabled (caliper.postprocess.enabled: false).")
         return
 
@@ -114,7 +125,7 @@ def run_caliper_postprocess_after_test(
             test_outcome.phase if test_outcome else "SUCCESS",
         )
         status = run_orchestration_postprocess(
-            artifact_directory=artifact_root_path,
+            artifact_dir=artifact_root_path,
             visualize_output_dir=workspace,
             test_outcome=test_outcome,
         )
@@ -137,7 +148,7 @@ def run_caliper_postprocess_after_test(
 def resolve_caliper_postprocess_artifacts_dir(
     *,
     artifact_dir: Path | None,
-    caliper_cfg: dict[str, Any] | None,
+    postprocess_config: CaliperOrchestrationPostprocessConfig,
 ) -> Path:
     """
     Resolve the Caliper **artifact tree** root.
@@ -147,11 +158,8 @@ def resolve_caliper_postprocess_artifacts_dir(
     if artifact_dir is not None:
         return artifact_dir.expanduser().resolve()
 
-    cfg_root = caliper_cfg or {}
-    cfg_post = cfg_root.get("postprocess") or {}
-    raw_artifacts_dir = cfg_post.get("artifacts_dir")
-    if isinstance(raw_artifacts_dir, str) and raw_artifacts_dir.strip():
-        return Path(raw_artifacts_dir).expanduser().resolve()
+    if postprocess_config.artifacts_dir and postprocess_config.artifacts_dir.strip():
+        return Path(postprocess_config.artifacts_dir).expanduser().resolve()
 
     raise ValueError(
         "Caliper postprocess requires the artifact tree root: use --artifact-dir, "
@@ -165,17 +173,24 @@ def run_orchestration_postprocess(
     visualize_output_dir: Path | None = None,
     test_outcome: TestPhaseOutcome | None = None,
 ) -> dict[str, Any]:
-    """Load ``caliper`` from project config and run enabled post-processing steps."""
+    """Load ``caliper.postprocess`` from project config and run enabled post-processing steps."""
 
-    caliper_cfg = config.project.get_config("caliper", print=False)
+    try:
+        postprocess_config_raw = config.project.get_config("caliper.postprocess", print=False) or {}
+        postprocess_config = CaliperOrchestrationPostprocessConfig.model_validate(
+            postprocess_config_raw
+        )
+    except ValidationError as e:
+        logger.error("Invalid caliper.postprocess config: %s", e)
+        raise
 
     artifacts_dir = resolve_caliper_postprocess_artifacts_dir(
         artifact_dir=artifact_dir,
-        caliper_cfg=caliper_cfg,
+        postprocess_config=postprocess_config,
     )
 
     result = run_postprocess_from_orchestration_config(
-        caliper_cfg,
+        postprocess_config_raw,
         artifacts_dir=artifacts_dir,
         visualize_output_dir=visualize_output_dir,
         test_outcome=test_outcome,
@@ -222,9 +237,7 @@ def run_orchestration_postprocess(
 )
 @click.pass_context
 @ci_lib.safe_ci_command
-def postprocess_command(
-    _ctx, artifact_dir: Path | None, output_dir: Path | None
-):
+def postprocess_command(_ctx, artifact_dir: Path | None, output_dir: Path | None):
     """Run the post-processing pipeline."""
 
     status = run_orchestration_postprocess(

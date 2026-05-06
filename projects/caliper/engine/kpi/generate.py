@@ -24,7 +24,6 @@ def run_kpi_generate(
         plugin_module=plugin_module,
         plugin=plugin,
         use_cache=use_cache,
-        cache_path=cache_path,
     )
     compute = plugin.compute_kpis
     rows: list[dict[str, Any]] = compute(model)

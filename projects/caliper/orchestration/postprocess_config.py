@@ -26,10 +26,7 @@ class CaliperOrchestrationVisualizeSection(BaseModel):
     enabled: bool = False
     output_dir: str | None = Field(
         default=None,
-        description=(
-            "Directory for HTML/plots. If relative, resolved against the orchestration "
-            "artifact dir ($ARTIFACT_DIR when unset)."
-        ),
+        description=("Directory for HTML/plots. Must be an absolute path."),
     )
     reports: str | None = Field(
         default=None,
