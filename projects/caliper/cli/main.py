@@ -60,7 +60,7 @@ def _require_artifacts_dir(ctx: click.Context) -> Path:
         _exit_with_help(
             ctx,
             "This command requires the test artifact tree root: "
-            "`--artifacts-dir DIR` or `--base-dir DIR` "
+            "`--artifacts-dir DIR` "
             "(before or after the subcommand).",
             code=1,
         )
@@ -89,7 +89,6 @@ def _workspace_cli_options(cmd: Any) -> Any:
     opts = (
         click.option(
             "--artifacts-dir",
-            "--base-dir",
             "artifacts_dir",
             type=click.Path(path_type=Path, exists=True),
             default=None,
@@ -105,12 +104,11 @@ def _workspace_cli_options(cmd: Any) -> Any:
             help=_POSTPROCESS_CONFIG_HELP + " Overrides the global option when set here.",
         ),
         click.option(
-            "--plugin-module",
             "--plugin",
             "plugin_module_override",
             metavar="MODULE",
             default=None,
-            help="Plugin import path; same as global --plugin-module / --plugin.",
+            help="Plugin import path; same as global --plugin.",
         ),
     )
     for opt in reversed(opts):
@@ -141,7 +139,6 @@ def _plugin_tuple(ctx: click.Context) -> tuple[str, Any]:
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--artifacts-dir",
-    "--base-dir",
     "artifacts_dir",
     type=click.Path(path_type=Path, exists=True),
     default=None,
@@ -154,7 +151,6 @@ def _plugin_tuple(ctx: click.Context) -> tuple[str, Any]:
     help=_POSTPROCESS_CONFIG_HELP,
 )
 @click.option(
-    "--plugin-module",
     "--plugin",
     "plugin_module",
     metavar="MODULE",
@@ -521,7 +517,6 @@ def ai_eval_export(
             plugin=plugin,
             output=output,
             use_cache=True,
-            cache_path=None,
         )
     except Exception as e:  # noqa: BLE001
         click.echo(f"ai-eval-export failed: {e}", err=True)
