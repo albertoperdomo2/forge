@@ -356,7 +356,7 @@ def kpi_analyze(
 @main.group("artifacts")
 @click.pass_context
 def artifacts_group(ctx: click.Context) -> None:
-    """File artifact export."""
+    """File artifact export and import."""
 
 
 @artifacts_group.command("export")
@@ -522,6 +522,80 @@ def ai_eval_export(
         click.echo(f"ai-eval-export failed: {e}", err=True)
         sys.exit(2)
     click.echo(f"Wrote {output}")
+
+
+@artifacts_group.command("import")
+@click.option("--from-mlflow", "mlflow_run_id", help="MLflow run ID to download artifacts from.")
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Local directory to download artifacts to.",
+)
+@click.option(
+    "--mlflow-tracking-uri",
+    envvar="MLFLOW_TRACKING_URI",
+    help="MLflow tracking server URI (can be set via MLFLOW_TRACKING_URI).",
+)
+@click.option(
+    "--artifact-path",
+    default="",
+    help="Specific artifact path to download (default: download all artifacts).",
+)
+@click.pass_context
+def import_command(
+    ctx: click.Context,
+    mlflow_run_id: str | None,
+    output_dir: Path,
+    mlflow_tracking_uri: str | None,
+    artifact_path: str,
+) -> None:
+    """Download artifact files from MLflow."""
+    if mlflow_run_id:
+        if not mlflow_tracking_uri:
+            click.echo(
+                "Error: MLflow tracking URI required. Set --mlflow-tracking-uri or MLFLOW_TRACKING_URI.",
+                err=True,
+            )
+            sys.exit(1)
+
+        try:
+            import mlflow
+            from mlflow.tracking import MlflowClient
+
+            # Set tracking URI
+            mlflow.set_tracking_uri(mlflow_tracking_uri)
+            client = MlflowClient()
+
+            # Download artifacts
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Download artifacts to the output directory
+            downloaded_path = client.download_artifacts(
+                run_id=mlflow_run_id, path=artifact_path, dst_path=str(output_dir)
+            )
+
+            # Count downloaded files
+            if Path(downloaded_path).is_file():
+                downloaded_files = [Path(downloaded_path)]
+            else:
+                downloaded_files = list(Path(downloaded_path).rglob("*"))
+                downloaded_files = [f for f in downloaded_files if f.is_file()]
+
+            click.echo(f"Downloaded {len(downloaded_files)} files to {output_dir}")
+            if downloaded_files:
+                click.echo("Downloaded files:")
+                for file in downloaded_files[:10]:  # Show first 10
+                    click.echo(f"  {file.relative_to(output_dir)}")
+                if len(downloaded_files) > 10:
+                    click.echo(f"  ... and {len(downloaded_files) - 10} more")
+
+        except Exception as e:  # noqa: BLE001
+            click.echo(f"artifacts import failed: {e}", err=True)
+            sys.exit(2)
+    else:
+        click.echo("Error: Specify source backend: --from-mlflow RUN_ID", err=True)
+        sys.exit(1)
 
 
 def run_cli() -> None:
