@@ -16,6 +16,7 @@ from projects.core.library import env
 from projects.core.library import config as forge_config
 from projects.core.library import ci as ci_lib
 from projects.core.library.export import caliper_export_command
+from projects.core.library.replot import caliper_replot_command
 from projects.legacy.library import config
 from projects.legacy.library import env as legacy_env
 from projects.caliper.orchestration.export import run_from_orchestration_config
@@ -87,6 +88,7 @@ def test(ctx):
 
 
 main.add_command(caliper_export_command)
+main.add_command(caliper_replot_command)
 
 def resolve_hardware_request(hardware_spec: dict):
     """
