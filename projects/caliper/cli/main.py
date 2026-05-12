@@ -606,14 +606,13 @@ def run_cli() -> None:
         rv = main.main(standalone_mode=False, prog_name="caliper")
         if isinstance(rv, int) and rv != 0:
             sys.exit(rv)
-    except click.MissingParameter as exc:
-        msg = exc.format_message()
-        sub = getattr(exc, "ctx", None)
-        click.echo(f"Error: {msg}\n", err=True)
-        if sub is not None:
-            click.echo(sub.get_help(), err=True)
-        ec = getattr(exc, "exit_code", 2)
-        sys.exit(2 if ec is None else int(ec))
+    except click.ClickException as exc:
+        # Handle click exceptions including NoArgsIsHelpError and MissingParameter
+        if hasattr(exc, "ctx") and exc.ctx:
+            click.echo(exc.ctx.get_help(), err=True)
+        else:
+            exc.show(sys.stderr)
+        sys.exit(2)
     except SystemExit:
         raise
 
