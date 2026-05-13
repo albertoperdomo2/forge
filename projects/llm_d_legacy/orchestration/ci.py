@@ -51,6 +51,7 @@ def log(message: str, level: str = "info"):
 def main(ctx):
     """Jump CI Project CI Operations for TOPSAIL-NG."""
     ctx.ensure_object(dict)
+    init()
 
 inited = False
 def init():
@@ -81,7 +82,6 @@ def test(ctx):
     """Test phase - Trigger the project's test method."""
     log("Starting test phase...")
 
-    init()
     failed = test_llmd.test()
 
     sys.exit(1 if failed else 0)
