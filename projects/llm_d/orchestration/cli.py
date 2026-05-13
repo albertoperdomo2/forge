@@ -7,6 +7,7 @@ import types
 import click
 
 from projects.core.library.cli import safe_cli_command
+from projects.llm_d.orchestration import configuration as llmd_configuration
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
 from projects.llm_d.toolbox.cleanup.main import run as cleanup_toolbox_run
 from projects.llm_d.toolbox.prepare.main import run as prepare_toolbox_run
@@ -19,12 +20,17 @@ def init_runtime() -> None:
     llmd_runtime.init()
 
 
-def load_runtime_configuration():
-    return llmd_runtime.load_run_configuration(
-        requested_preset=os.environ.get("FORGE_PRESET"),
-        raw_overrides=os.environ.get("FORGE_CONFIG_OVERRIDES"),
-        job_name=os.environ.get("FORGE_JOB_NAME"),
-    )
+def load_runtime_configuration(*, cwd=None, artifact_dir=None):
+    kwargs = {
+        "requested_preset": os.environ.get("FORGE_PRESET"),
+        "job_name": os.environ.get("FORGE_JOB_NAME"),
+    }
+    if cwd is not None:
+        kwargs["cwd"] = cwd
+    if artifact_dir is not None:
+        kwargs["artifact_dir"] = artifact_dir
+
+    return llmd_configuration.load_runtime_configuration(**kwargs)
 
 
 def run_prepare_phase() -> int:

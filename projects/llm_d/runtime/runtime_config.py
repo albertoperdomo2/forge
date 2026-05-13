@@ -4,9 +4,7 @@ import copy
 import hashlib
 import json
 import logging
-import os
 import re
-from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -42,7 +40,6 @@ class ResolvedConfig:
     smoke_request: dict[str, Any]
     benchmark: dict[str, Any] | None
     fournos_config: dict[str, Any]
-    overrides: dict[str, Any]
 
     @property
     def manifests_dir(self) -> Path:
@@ -89,37 +86,23 @@ def ensure_artifact_directories(artifact_dir: Path) -> None:
         (artifact_dir / relative).mkdir(parents=True, exist_ok=True)
 
 
-def load_run_configuration(
-    *,
-    cwd: Path | None = None,
-    artifact_dir: Path | None = None,
-    requested_preset: str | None = None,
-    raw_overrides: str | None = None,
-    job_name: str | None = None,
-) -> ResolvedConfig:
-    cwd = cwd or Path.cwd()
-    if artifact_dir is not None:
-        os.environ["ARTIFACT_DIR"] = str(artifact_dir)
+def load_run_configuration() -> ResolvedConfig:
     artifact_dir = init()
-    config.reload(ORCHESTRATION_DIR)
+    if config.project is None:
+        raise RuntimeError(
+            "llm_d runtime configuration has not been prepared. "
+            "Call projects.llm_d.orchestration.configuration.prepare_runtime_configuration() "
+            "before resolving it."
+        )
 
     platform_data = normalize_platform_config(copy.deepcopy(config.project.get_config("platform")))
     model_cache = copy.deepcopy(config.project.get_config("model_cache"))
-    fournos_config = load_fournos_config(cwd)
-    overrides = parse_overrides(
-        raw_overrides or "",
-        allowed_keys=config.project.get_config("runtime.allowed_override_keys", []),
-    )
-
-    requested_preset = (
-        requested_preset
-        or fournos_config.get("preset")
-        or config.project.get_config("runtime.default_preset")
-    )
-    apply_requested_preset(requested_preset)
-
+    fournos_config = copy.deepcopy(config.project.get_config("runtime.fournos_config", {}))
+    requested_preset = config.project.get_config("runtime.requested_preset", None)
     preset_name = config.project.get_config("runtime.selected_preset")
-    preset_alias = requested_preset if requested_preset != preset_name else None
+    preset_alias = (
+        requested_preset if requested_preset and requested_preset != preset_name else None
+    )
 
     model_name = config.project.get_config("runtime.model_key")
     model = copy.deepcopy(config.project.get_config(f"models.{model_name}"))
@@ -143,11 +126,11 @@ def load_run_configuration(
             config.project.get_config(f"workloads.benchmarks.{benchmark_name}")
         )
 
-    job_name = job_name or fournos_config.get("job-name")
+    job_name = config.project.get_config("runtime.job_name", None)
     if not job_name:
         job_name = f"local-{preset_name}"
 
-    namespace_override = overrides.get("namespace") or fournos_config.get("namespace")
+    namespace_override = config.project.get_config("runtime.namespace_override", None)
     namespace_config = platform_data["cluster"]["namespace"]
     default_namespace = namespace_config.get("name")
     namespace = (
@@ -160,7 +143,7 @@ def load_run_configuration(
         )
     )
 
-    gpu_count = normalize_gpu_count(fournos_config.get("gpu-count"))
+    gpu_count = normalize_gpu_count(config.project.get_config("runtime.gpu_count", None))
 
     return ResolvedConfig(
         artifact_dir=Path(artifact_dir),
@@ -181,7 +164,6 @@ def load_run_configuration(
         smoke_request=smoke_request,
         benchmark=benchmark,
         fournos_config=fournos_config,
-        overrides=overrides,
     )
 
 
@@ -204,49 +186,6 @@ def normalize_platform_config(platform_data: dict[str, Any]) -> dict[str, Any]:
         }
 
     return platform_data
-
-
-def apply_requested_preset(requested_preset: str) -> None:
-    if not config.project.get_preset(requested_preset):
-        raise ValueError(f"Unknown llm_d preset: {requested_preset}")
-
-    config.project.apply_preset(requested_preset)
-
-
-def load_fournos_config(cwd: Path) -> dict[str, Any]:
-    config_path = cwd / "fournos_config.yaml"
-    if not config_path.exists():
-        return {}
-
-    data = load_yaml(config_path)
-    if data is None:
-        return {}
-    if not isinstance(data, dict):
-        raise ValueError(f"Unexpected FOURNOS config type in {config_path}: {type(data)}")
-    return data
-
-
-def parse_overrides(raw: str, *, allowed_keys: Iterable[str]) -> dict[str, Any]:
-    if not raw or raw.strip() in {"", "null", "{}"}:
-        return {}
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"FORGE_CONFIG_OVERRIDES is not valid JSON: {exc}") from exc
-
-    if not isinstance(data, dict):
-        raise ValueError("FORGE_CONFIG_OVERRIDES must decode to a JSON object")
-
-    allowed_keys = frozenset(allowed_keys)
-    unsupported = sorted(set(data) - allowed_keys)
-    if unsupported:
-        raise ValueError(
-            "Unsupported llm_d override keys: "
-            f"{', '.join(unsupported)}. Allowed keys: {', '.join(sorted(allowed_keys))}"
-        )
-
-    return data
 
 
 def normalize_gpu_count(value: Any) -> int | None:

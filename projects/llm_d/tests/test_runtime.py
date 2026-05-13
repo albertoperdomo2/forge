@@ -5,8 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from projects.core.library import config as forge_config
 from projects.llm_d.orchestration import ci as llmd_ci
 from projects.llm_d.orchestration import cli as llmd_cli
+from projects.llm_d.orchestration import configuration as llmd_configuration
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
 from projects.llm_d.toolbox.cleanup import main as cleanup_toolbox
 from projects.llm_d.toolbox.prepare import main as prepare_toolbox
@@ -14,29 +16,51 @@ from projects.llm_d.toolbox.prepare_model_cache import main as prepare_model_cac
 from projects.llm_d.toolbox.test import main as test_toolbox
 
 
+def _load_runtime_configuration(
+    tmp_path: Path,
+    *,
+    requested_preset: str | None = None,
+    config_overrides: dict[str, object] | None = None,
+    job_name: str | None = None,
+):
+    artifact_dir = tmp_path / "artifacts"
+    artifact_dir.mkdir()
+    if config_overrides:
+        llmd_runtime.write_yaml(
+            artifact_dir / forge_config.VARIABLE_OVERRIDES_FILENAME,
+            config_overrides,
+        )
+    return (
+        llmd_configuration.load_runtime_configuration(
+            cwd=tmp_path,
+            artifact_dir=artifact_dir,
+            requested_preset=requested_preset,
+            job_name=job_name,
+        ),
+        artifact_dir,
+    )
+
+
 def test_derive_namespace_uses_prefix_once() -> None:
     namespace = llmd_runtime.derive_namespace("llm-d-nightly-smoke", "llm-d", 63)
     assert namespace == "llm-d-nightly-smoke"
 
 
-def test_parse_overrides_rejects_unknown_keys() -> None:
-    with pytest.raises(ValueError, match="Unsupported llm_d override keys"):
-        llmd_runtime.parse_overrides('{"model":"other"}', allowed_keys=("namespace",))
+def test_load_runtime_configuration_rejects_unknown_variable_override_key(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="Config key 'model' does not exist"):
+        _load_runtime_configuration(tmp_path, config_overrides={"model": "other"})
 
 
 def test_load_run_configuration_resolves_alias(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-
     fournos_config = tmp_path / "fournos_config.yaml"
     fournos_config.write_text(
         "preset: cks\njob-name: llm-d-e2e\n",
         encoding="utf-8",
     )
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
 
     assert config.preset_name == "smoke"
     assert config.preset_alias == "cks"
@@ -48,10 +72,7 @@ def test_load_run_configuration_resolves_alias(
 def test_load_run_configuration_consolidates_config_d(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-
-    llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    _config, artifact_dir = _load_runtime_configuration(tmp_path)
     consolidated = llmd_runtime.load_yaml(artifact_dir / "config.yaml")
 
     assert "platform" in consolidated
@@ -67,13 +88,9 @@ def test_load_run_configuration_consolidates_config_d(
 
 
 def test_namespace_override_is_not_managed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-
-    config = llmd_runtime.load_run_configuration(
-        cwd=tmp_path,
-        artifact_dir=artifact_dir,
-        raw_overrides='{"namespace":"custom-ns"}',
+    config, _artifact_dir = _load_runtime_configuration(
+        tmp_path,
+        config_overrides={"platform.cluster.namespace.name": "custom-ns"},
     )
 
     assert config.namespace == "custom-ns"
@@ -83,14 +100,12 @@ def test_namespace_override_is_not_managed(tmp_path: Path, monkeypatch: pytest.M
 def test_default_namespace_comes_from_project_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
     (tmp_path / "fournos_config.yaml").write_text(
         "job-name: llm-d-nightly\n",
         encoding="utf-8",
     )
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
 
     assert config.namespace == "forge-llm-d"
     assert config.namespace_is_managed is False
@@ -101,13 +116,13 @@ def test_default_namespace_comes_from_project_config(
 def test_load_run_configuration_ignores_runtime_env_vars(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", '{"namespace":"ignored-ns"}')
     monkeypatch.setenv("FORGE_PRESET", "benchmark-short")
     monkeypatch.setenv("FORGE_JOB_NAME", "ignored-job")
     artifact_dir = tmp_path / "artifacts"
     artifact_dir.mkdir()
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    llmd_configuration.prepare_runtime_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config = llmd_runtime.load_run_configuration()
 
     assert config.preset_name == "smoke"
     assert config.namespace == "forge-llm-d"
@@ -115,11 +130,7 @@ def test_load_run_configuration_ignores_runtime_env_vars(
 
 
 def test_write_prepare_inputs_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
 
     path = phase_inputs.write_prepare_inputs(config)
     payload = llmd_runtime.load_yaml(path)
@@ -147,11 +158,7 @@ def test_write_prepare_inputs_round_trip(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_write_test_inputs_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
 
     path = phase_inputs.write_test_inputs(config)
     payload = llmd_runtime.load_yaml(path)
@@ -181,14 +188,12 @@ def test_write_test_inputs_round_trip(tmp_path: Path, monkeypatch: pytest.Monkey
 def test_orchestration_prepare_writes_inputs_and_invokes_toolbox(
     orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     captured: dict[str, str] = {}
 
     monkeypatch.setattr(
-        orchestration.llmd_runtime,
-        "load_run_configuration",
+        orchestration,
+        "load_runtime_configuration",
         lambda **_kwargs: config,
     )
     monkeypatch.setattr(
@@ -208,14 +213,12 @@ def test_orchestration_prepare_writes_inputs_and_invokes_toolbox(
 def test_orchestration_test_writes_inputs_and_invokes_toolbox(
     orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     captured: dict[str, str] = {}
 
     monkeypatch.setattr(
-        orchestration.llmd_runtime,
-        "load_run_configuration",
+        orchestration,
+        "load_runtime_configuration",
         lambda **_kwargs: config,
     )
     monkeypatch.setattr(
@@ -236,14 +239,12 @@ def test_orchestration_test_writes_inputs_and_invokes_toolbox(
 def test_orchestration_cleanup_writes_inputs_and_invokes_toolbox(
     orchestration, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     captured: dict[str, str] = {}
 
     monkeypatch.setattr(
-        orchestration.llmd_runtime,
-        "load_run_configuration",
+        orchestration,
+        "load_runtime_configuration",
         lambda **_kwargs: config,
     )
     monkeypatch.setattr(
@@ -265,7 +266,6 @@ def test_orchestration_load_runtime_configuration_reads_env(
     orchestration, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("FORGE_PRESET", "smoke-precise")
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", '{"namespace":"custom-ns"}')
     monkeypatch.setenv("FORGE_JOB_NAME", "job-from-env")
     captured: dict[str, str | None] = {}
     sentinel = object()
@@ -275,7 +275,7 @@ def test_orchestration_load_runtime_configuration_reads_env(
         return sentinel
 
     monkeypatch.setattr(
-        orchestration.llmd_runtime, "load_run_configuration", fake_load_run_configuration
+        orchestration.llmd_configuration, "load_runtime_configuration", fake_load_run_configuration
     )
 
     result = orchestration.load_runtime_configuration()
@@ -283,7 +283,6 @@ def test_orchestration_load_runtime_configuration_reads_env(
     assert result is sentinel
     assert captured == {
         "requested_preset": "smoke-precise",
-        "raw_overrides": '{"namespace":"custom-ns"}',
         "job_name": "job-from-env",
     }
 
@@ -291,11 +290,7 @@ def test_orchestration_load_runtime_configuration_reads_env(
 def test_render_inference_service_injects_model_and_scheduler_profile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     manifest = llmd_runtime.render_inference_service(config)
     cache_spec = llmd_runtime.resolve_model_cache(config)
 
@@ -314,15 +309,12 @@ def test_render_inference_service_injects_model_and_scheduler_profile(
 def test_render_inference_service_supports_precise_scheduler_profile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
     (tmp_path / "fournos_config.yaml").write_text(
         "preset: smoke-precise\njob-name: llm-d-precise\n",
         encoding="utf-8",
     )
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     manifest = llmd_runtime.render_inference_service(config)
 
     assert config.scheduler_profile_key == "precise"
@@ -335,15 +327,12 @@ def test_render_inference_service_supports_precise_scheduler_profile(
 def test_render_inference_service_supports_default_scheduler(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
     (tmp_path / "fournos_config.yaml").write_text(
         "preset: smoke-default-scheduler\njob-name: llm-d-default\n",
         encoding="utf-8",
     )
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     manifest = llmd_runtime.render_inference_service(config)
 
     assert config.scheduler_profile_key == "default"
@@ -352,11 +341,7 @@ def test_render_inference_service_supports_default_scheduler(
 
 
 def test_resolve_model_cache_for_hf_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     cache_spec = llmd_runtime.resolve_model_cache(config)
 
     assert cache_spec is not None
@@ -370,11 +355,7 @@ def test_resolve_model_cache_for_hf_model(tmp_path: Path, monkeypatch: pytest.Mo
 def test_render_model_cache_job_for_hf_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     cache_spec = llmd_runtime.resolve_model_cache(config)
     manifest = llmd_runtime.render_model_cache_job(config, cache_spec)
 
@@ -391,15 +372,12 @@ def test_render_model_cache_job_for_hf_model(
 def test_render_model_cache_job_for_oci_model_uses_registry_auth_secret(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
     (tmp_path / "fournos_config.yaml").write_text(
         "preset: benchmark-short\njob-name: llm-d-benchmark\n",
         encoding="utf-8",
     )
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     monkeypatch.setattr(
         llmd_runtime,
         "resolve_default_serviceaccount_image_pull_secret",
@@ -422,15 +400,12 @@ def test_render_model_cache_job_for_oci_model_uses_registry_auth_secret(
 def test_render_guidellm_job_uses_target_and_rate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
     (tmp_path / "fournos_config.yaml").write_text(
         "preset: benchmark-short\njob-name: llm-d-benchmark\n",
         encoding="utf-8",
     )
 
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     manifest = llmd_runtime.render_guidellm_job(config, "https://example.test")
 
     container = manifest["spec"]["template"]["spec"]["containers"][0]
@@ -442,11 +417,7 @@ def test_render_guidellm_job_uses_target_and_rate(
 def test_render_smoke_request_job_uses_curl_helper(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     payload = {"model": "Qwen/Qwen3-0.6B", "prompt": "test"}
     manifest = llmd_runtime.render_smoke_request_job(config, "https://example.test", payload)
 
@@ -464,11 +435,7 @@ def test_render_smoke_request_job_uses_curl_helper(
 def test_prepare_model_cache_skips_ready_pvc(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     calls: list[str] = []
 
     monkeypatch.setattr(
@@ -496,11 +463,7 @@ def test_prepare_model_cache_skips_ready_pvc(
 def test_cleanup_deletes_leftovers_but_not_namespace_or_preserved_pvcs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
     shell_calls: list[str] = []
 
     def fake_resource_exists(kind: str, name: str, namespace: str | None = None) -> bool:
@@ -530,10 +493,7 @@ def test_cleanup_deletes_leftovers_but_not_namespace_or_preserved_pvcs(
 def test_prepare_gpu_operator_skips_existing_clusterpolicy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
 
     calls: list[str] = []
 
@@ -580,10 +540,7 @@ def test_prepare_gpu_operator_skips_existing_clusterpolicy(
 def test_prepare_gpu_operator_bootstraps_missing_clusterpolicy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, artifact_dir = _load_runtime_configuration(tmp_path)
 
     applied: list[Path] = []
     manifest = {
@@ -616,10 +573,7 @@ def test_prepare_gpu_operator_bootstraps_missing_clusterpolicy(
 def test_prepare_nfd_skips_existing_nodefeaturediscovery(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
 
     calls: list[str] = []
     manifest = {
@@ -689,10 +643,7 @@ def test_gpu_clusterpolicy_manifest_has_required_default_sections() -> None:
 def test_resolve_endpoint_url_requires_gateway_address(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
 
     def fake_oc_get_json(kind: str, **_: object) -> dict[str, object]:
         assert kind == "llminferenceservice"
@@ -705,10 +656,7 @@ def test_resolve_endpoint_url_requires_gateway_address(
 
 
 def test_run_smoke_request_uses_helper_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FORGE_CONFIG_OVERRIDES", "{}")
-    artifact_dir = tmp_path / "artifacts"
-    artifact_dir.mkdir()
-    config = llmd_runtime.load_run_configuration(cwd=tmp_path, artifact_dir=artifact_dir)
+    config, artifact_dir = _load_runtime_configuration(tmp_path)
     oc_calls: list[tuple[str, ...]] = []
     applied: list[Path] = []
 
