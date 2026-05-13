@@ -32,7 +32,7 @@ spec:
         - name: kubeconfig-secret
           value: "$(params.kubeconfig-secret)"
         - name: job-step
-          value: caliper_replot
+          value: replot
         - name: job-step-name
           value: 000__replot
 
