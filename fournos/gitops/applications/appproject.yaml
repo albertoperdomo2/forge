@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: forge-on-fournos
+  namespace: openshift-gitops
+spec:
+  description: Forge deployment for Fournos
+  sourceRepos:
+    - "https://github.com/openshift-psap/forge.git"
+  destinations:
+    - namespace: psap-automation
+      server: https://kubernetes.default.svc
+    - namespace: psap-automation-staging
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: batch
+      kind: Job
+    - group: tekton.dev
+      kind: Pipeline
+    - group: tekton.dev
+      kind: Task
+    - group: image.openshift.io
+      kind: ImageStream
