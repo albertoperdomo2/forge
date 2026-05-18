@@ -11,7 +11,7 @@ import click
 
 from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
 from projects.core.library import ci as ci_lib
-from projects.core.library import config
+from projects.core.library import config, vault
 from projects.core.library.export import caliper_export_command
 from projects.llm_d.orchestration import configuration as llmd_configuration
 from projects.llm_d.orchestration.prepare_sequence import run_prepare_sequence
@@ -64,6 +64,8 @@ def main(ctx):
     """LLM-D Project CI Operations for FORGE."""
     ctx.ensure_object(types.SimpleNamespace)
     init_runtime()
+    if ctx.invoked_subcommand != "resolve-fournos-config":
+        vault.init(list_vaults())
 
 
 @main.command()
