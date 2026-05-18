@@ -1,0 +1,3 @@
+vaults:
+  - psap-forge-notifications
+  - psap-forge-mlflow-export

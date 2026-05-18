@@ -93,9 +93,11 @@ def test_load_run_configuration_consolidates_config_d(
     assert "models" in consolidated
     assert "runtime" in consolidated
     assert "scheduler_profiles" in consolidated
+    assert "vaults" in consolidated
     assert "workloads" in consolidated
     assert consolidated["project"]["name"] == "llm_d"
     assert consolidated["runtime"]["default_preset"] == "smoke"
+    assert consolidated["vaults"] == ["psap-forge-notifications", "psap-forge-mlflow-export"]
     assert consolidated["platform"]["cluster"]["namespace"]["name"] == "forge-llm-d"
     assert isinstance(consolidated["platform"]["operators"], dict)
 
