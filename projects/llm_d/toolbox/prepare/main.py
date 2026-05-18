@@ -132,9 +132,10 @@ def prepare_gpu_operator_task(args, ctx):
 
 @task
 def prepare_rhoai_operator_task(args, ctx):
-    """Ensure the RHOAI operator is installed"""
+    """Ensure the RHOAI operator and its platform dependencies are installed"""
 
     config = ctx.config
+    prepare_rhcl_operator(config)
     deploy_rhoai_custom_catalog(config)
     operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "rhods-operator")
     operator_spec = rhoai_operator_spec(config, operator_spec)
@@ -335,6 +336,55 @@ def rhoai_operator_spec(
     return updated_spec
 
 
+def prepare_rhcl_operator(config: phase_inputs.PrepareInputs) -> None:
+    operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "rhcl-operator")
+    ensure_global_operator_subscription(operator_spec)
+
+
+def ensure_global_operator_subscription(operator_spec: dict[str, str]) -> None:
+    namespace = operator_spec["namespace"]
+    package = operator_spec["package"]
+
+    llmd_runtime.ensure_namespace(namespace)
+    operator_groups = llmd_runtime.oc_get_json(
+        "operatorgroup",
+        namespace=namespace,
+        ignore_not_found=True,
+    )
+    if not any(
+        not item.get("spec", {}).get("targetNamespaces")
+        for item in (operator_groups or {}).get("items", [])
+    ):
+        raise RuntimeError(
+            f"Operator {package} requires a global OperatorGroup in {namespace}, but none exists"
+        )
+
+    subscription = llmd_runtime.desired_subscription(operator_spec)
+    llmd_runtime.oc("apply", "-f", "-", input_text=json.dumps(subscription))
+
+    def _subscription_reconciled() -> dict[str, object] | None:
+        payload = llmd_runtime.oc_get_json(
+            "subscription.operators.coreos.com",
+            name=package,
+            namespace=namespace,
+        )
+        if llmd_runtime.subscription_spec_matches(payload.get("spec", {}), subscription["spec"]):
+            return payload
+        return None
+
+    llmd_runtime.wait_until(
+        f"subscription/{package} reconciliation in {namespace}",
+        timeout_seconds=60,
+        interval_seconds=5,
+        predicate=_subscription_reconciled,
+    )
+    llmd_runtime.wait_for_operator_csv(
+        package,
+        namespace,
+        timeout_seconds=operator_spec["wait_timeout_seconds"],
+    )
+
+
 def prepare_cert_manager(config: phase_inputs.PrepareInputs) -> None:
     operator_spec = llmd_runtime.operator_spec_by_package(
         config.platform, "openshift-cert-manager-operator"
@@ -373,6 +423,7 @@ def prepare_gpu_operator(config: phase_inputs.PrepareInputs) -> None:
 
 
 def prepare_rhoai_operator(config: phase_inputs.PrepareInputs) -> None:
+    prepare_rhcl_operator(config)
     deploy_rhoai_custom_catalog(config)
     operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "rhods-operator")
     operator_spec = rhoai_operator_spec(config, operator_spec)

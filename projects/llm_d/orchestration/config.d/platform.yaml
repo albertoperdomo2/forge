@@ -40,6 +40,12 @@ operators:
     wait_timeout_seconds: 1800
     bootstrap_crd: clusterpolicies.nvidia.com
     bootstrap_manifest: manifests/gpu-clusterpolicy.yaml
+  rhcl-operator:
+    display_name: Red Hat Connectivity Link
+    namespace: openshift-operators
+    channel: stable
+    source: redhat-operators
+    wait_timeout_seconds: 1800
   rhods-operator:
     display_name: Red Hat OpenShift AI
     namespace: redhat-ods-operator

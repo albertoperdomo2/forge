@@ -77,6 +77,9 @@ def init() -> Path:
 
     env.init()
     run.init()
+    if config.project is None:
+        # Load llm_d project config when runtime is used without orchestration preparation.
+        config.init(CONFIG_DIR)
     ensure_artifact_directories(env.ARTIFACT_DIR)
     return env.ARTIFACT_DIR
 

@@ -114,21 +114,11 @@ def ensure_model_cache_pvc(
                 f"PVC {cache_spec.pvc_name} exists with storageClassName={actual_storage_class}, expected {cache_spec.storage_class_name}"
             )
 
-        llmd_runtime.wait_for_pvc_bound(
-            cache_spec.pvc_name,
-            cache_spec.namespace,
-            timeout_seconds=config.model_cache["download"]["wait_timeout_seconds"],
-        )
         return
 
     llmd_runtime.apply_manifest(
         config.artifact_dir / "src" / "model-cache-pvc.yaml",
         llmd_runtime.render_model_cache_pvc(cache_spec),
-    )
-    llmd_runtime.wait_for_pvc_bound(
-        cache_spec.pvc_name,
-        cache_spec.namespace,
-        timeout_seconds=config.model_cache["download"]["wait_timeout_seconds"],
     )
 
 

@@ -368,7 +368,7 @@ def desired_subscription(operator_spec: dict[str, Any]) -> dict[str, Any]:
             "installPlanApproval": "Automatic",
             "name": package,
             "source": operator_spec["source"],
-            "sourceNamespace": "openshift-marketplace",
+            "sourceNamespace": operator_spec.get("source_namespace", "openshift-marketplace"),
         },
     }
 

@@ -129,7 +129,34 @@ def apply_namespace(args, ctx):
 
 @task
 def render_operator_group_manifest(args, ctx):
-    """Render the OperatorGroup manifest"""
+    """Render the OperatorGroup manifest, unless a suitable one already exists"""
+
+    result = shell.run(
+        f"oc get operatorgroup -n {args.target_namespace} -o json",
+        check=False,
+        log_stdout=False,
+    )
+    if result.success:
+        operator_groups = json.loads(result.stdout).get("items", [])
+        for operator_group in operator_groups:
+            spec = operator_group.get("spec", {})
+            target_namespaces = spec.get("targetNamespaces", [])
+            if not target_namespaces or args.target_namespace in target_namespaces:
+                ctx.operator_group_manifest_file = None
+                ctx.operator_group_name = operator_group["metadata"]["name"]
+                return (
+                    f"Reusing existing OperatorGroup {ctx.operator_group_name} "
+                    f"in {args.target_namespace}"
+                )
+
+        if operator_groups:
+            names = ", ".join(
+                operator_group["metadata"]["name"] for operator_group in operator_groups
+            )
+            raise RuntimeError(
+                f"Namespace {args.target_namespace} already has OperatorGroups "
+                f"that do not target it: {names}"
+            )
 
     ctx.operator_group_manifest_file = (
         args.artifact_dir / "src" / f"{args.package_name}-operatorgroup.yaml"
@@ -141,6 +168,9 @@ def render_operator_group_manifest(args, ctx):
 @task
 def apply_operator_group(args, ctx):
     """Apply the OperatorGroup manifest"""
+
+    if ctx.operator_group_manifest_file is None:
+        return f"Using existing OperatorGroup {ctx.operator_group_name}"
 
     shell.run(f"oc apply -f {ctx.operator_group_manifest_file}")
     return f"Ensured OperatorGroup in {args.target_namespace}"

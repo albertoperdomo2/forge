@@ -13,7 +13,6 @@ from projects.llm_d.orchestration import ci as llmd_ci
 from projects.llm_d.orchestration import cli as llmd_cli
 from projects.llm_d.orchestration import configuration as llmd_configuration
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
-from projects.llm_d.runtime import test_flow as llmd_test_flow
 from projects.llm_d.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_toolbox
 from projects.llm_d.toolbox.bootstrap_gpu_clusterpolicy import main as bootstrap_gpu_clusterpolicy
 from projects.llm_d.toolbox.bootstrap_nfd_instance import main as bootstrap_nfd_instance
@@ -125,6 +124,7 @@ def test_default_namespace_comes_from_project_config(
     assert config.namespace_is_managed is False
     assert config.platform["cluster"]["namespace"]["prefix"] == "llm-d"
     assert "rhods-operator" in config.platform["operators"]
+    assert "rhcl-operator" in config.platform["operators"]
 
 
 def test_load_run_configuration_ignores_runtime_env_vars(
@@ -473,6 +473,56 @@ def test_prepare_model_cache_skips_ready_pvc(
     assert calls == ["ensure-pvc", "capture"]
 
 
+def test_ensure_model_cache_pvc_does_not_wait_for_new_pvc_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    cache_spec = llmd_runtime.resolve_model_cache(config)
+    calls: list[str] = []
+
+    monkeypatch.setattr(llmd_runtime, "oc_get_json", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        llmd_runtime,
+        "apply_manifest",
+        lambda *args, **kwargs: calls.append("apply"),
+    )
+    monkeypatch.setattr(
+        llmd_runtime,
+        "wait_for_pvc_bound",
+        lambda *args, **kwargs: pytest.fail("PVC binding should wait for a consumer"),
+    )
+
+    prepare_model_cache_toolbox.ensure_model_cache_pvc(config, cache_spec)
+
+    assert calls == ["apply"]
+
+
+def test_ensure_model_cache_pvc_accepts_existing_pending_pvc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    cache_spec = llmd_runtime.resolve_model_cache(config)
+
+    monkeypatch.setattr(
+        llmd_runtime,
+        "oc_get_json",
+        lambda *args, **kwargs: {
+            "spec": {
+                "accessModes": [cache_spec.access_mode],
+                "storageClassName": cache_spec.storage_class_name,
+            },
+            "status": {"phase": "Pending"},
+        },
+    )
+    monkeypatch.setattr(
+        llmd_runtime,
+        "wait_for_pvc_bound",
+        lambda *args, **kwargs: pytest.fail("PVC binding should wait for a consumer"),
+    )
+
+    prepare_model_cache_toolbox.ensure_model_cache_pvc(config, cache_spec)
+
+
 def test_prepare_model_cache_task_delegates_to_toolbox_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -696,6 +746,73 @@ def test_ensure_operator_subscription_delegates_to_cluster_toolbox(
     }
 
 
+def test_ensure_global_operator_subscription_uses_global_operatorgroup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "rhcl-operator")
+    subscription = llmd_runtime.desired_subscription(operator_spec)
+    captured: dict[str, object] = {"oc_calls": []}
+
+    monkeypatch.setattr(
+        llmd_runtime,
+        "ensure_namespace",
+        lambda namespace: captured.setdefault("namespace", namespace),
+    )
+
+    def fake_oc_get_json(kind: str, **kwargs):
+        captured.setdefault("get_calls", []).append((kind, kwargs))
+        if kind == "operatorgroup":
+            return {"items": [{"metadata": {"name": "global-operators"}, "spec": {}}]}
+        if kind == "subscription.operators.coreos.com":
+            return {"spec": subscription["spec"]}
+        raise AssertionError(f"unexpected kind: {kind}")
+
+    def fake_oc(*args, **kwargs):
+        captured["oc_calls"].append((args, kwargs))
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    def fake_wait_until(*_args, predicate, **_kwargs):
+        return predicate()
+
+    monkeypatch.setattr(llmd_runtime, "oc_get_json", fake_oc_get_json)
+    monkeypatch.setattr(llmd_runtime, "oc", fake_oc)
+    monkeypatch.setattr(llmd_runtime, "wait_until", fake_wait_until)
+    monkeypatch.setattr(
+        llmd_runtime,
+        "wait_for_operator_csv",
+        lambda package, namespace, timeout_seconds: captured.setdefault(
+            "csv",
+            (package, namespace, timeout_seconds),
+        ),
+    )
+
+    prepare_toolbox.ensure_global_operator_subscription(operator_spec)
+
+    assert captured["namespace"] == "openshift-operators"
+    assert captured["oc_calls"][0][0] == ("apply", "-f", "-")
+    assert captured["csv"] == ("rhcl-operator", "openshift-operators", 1800)
+
+
+def test_ensure_global_operator_subscription_requires_global_operatorgroup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+    operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "rhcl-operator")
+
+    monkeypatch.setattr(llmd_runtime, "ensure_namespace", lambda _namespace: None)
+    monkeypatch.setattr(
+        llmd_runtime,
+        "oc_get_json",
+        lambda *_args, **_kwargs: {
+            "items": [{"metadata": {"name": "single-ns"}, "spec": {"targetNamespaces": ["x"]}}]
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="requires a global OperatorGroup"):
+        prepare_toolbox.ensure_global_operator_subscription(operator_spec)
+
+
 def test_rhoai_custom_catalog_deploy_is_skipped_by_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -794,7 +911,7 @@ def test_resolve_endpoint_url_requires_gateway_address(
     monkeypatch.setattr(llmd_runtime, "oc_get_json", fake_oc_get_json)
 
     with pytest.raises(RuntimeError, match="Gateway address"):
-        llmd_test_flow.resolve_endpoint_url(config)
+        deploy_llmisvc_toolbox.resolve_endpoint_url(config)
 
 
 def test_run_smoke_request_uses_helper_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -822,13 +939,91 @@ def test_run_smoke_request_uses_helper_job(tmp_path: Path, monkeypatch: pytest.M
         "apply_manifest",
         lambda artifact_path, _manifest: applied.append(artifact_path),
     )
-    monkeypatch.setattr(llmd_test_flow, "capture_smoke_state", lambda _config: None)
+    monkeypatch.setattr(run_smoke_request_toolbox, "capture_smoke_state", lambda _config: None)
 
-    response = llmd_test_flow.run_smoke_request(config, "https://example.test")
+    response = run_smoke_request_toolbox.run_smoke_request(config, "https://example.test")
 
     assert response["choices"][0]["text"] == "ok"
     assert applied == [artifact_dir / "src" / "smoke-job.yaml"]
     assert not any(call and call[0] == "exec" for call in oc_calls)
+
+
+def test_guidellm_toolbox_runs_benchmark_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    resolved_config, artifact_dir = _load_runtime_configuration(
+        tmp_path,
+        requested_preset="benchmark-short",
+    )
+    config = phase_inputs.load_test_inputs(phase_inputs.write_test_inputs(resolved_config))
+    benchmark_name = config.benchmark["job_name"]
+    oc_calls: list[tuple[str, ...]] = []
+    applied: list[Path] = []
+
+    def fake_oc(*args, **kwargs):
+        oc_calls.append(tuple(args))
+        if args[:1] == ("exec",):
+            return subprocess.CompletedProcess(args, 0, stdout='{"score": 1}\n', stderr="")
+        return subprocess.CompletedProcess(args, 0, stdout="state\n", stderr="")
+
+    def fake_oc_get_json(kind: str, **_: object) -> dict[str, object]:
+        if kind == "job":
+            return {"status": {"succeeded": 1}}
+        if kind == "pods":
+            return {"items": [{"spec": {"nodeName": "worker-0"}}]}
+        if kind == "pod":
+            return {"status": {"conditions": [{"type": "Ready", "status": "True"}]}}
+        raise AssertionError(f"unexpected kind: {kind}")
+
+    def fake_wait_until(*_args, predicate, **_kwargs):
+        return predicate()
+
+    monkeypatch.setattr(llmd_runtime, "oc", fake_oc)
+    monkeypatch.setattr(llmd_runtime, "oc_get_json", fake_oc_get_json)
+    monkeypatch.setattr(llmd_runtime, "wait_until", fake_wait_until)
+    monkeypatch.setattr(
+        llmd_runtime,
+        "apply_manifest",
+        lambda artifact_path, _manifest: applied.append(artifact_path),
+    )
+
+    args = SimpleNamespace(endpoint_url="https://example.test")
+    ctx = SimpleNamespace(config=config)
+
+    run_guidellm_benchmark_toolbox.cleanup_previous_guidellm_resources_task(args, ctx)
+    run_guidellm_benchmark_toolbox.create_guidellm_resources_task(args, ctx)
+    run_guidellm_benchmark_toolbox.wait_guidellm_benchmark_task(args, ctx)
+    run_guidellm_benchmark_toolbox.capture_guidellm_state_task(args, ctx)
+    run_guidellm_benchmark_toolbox.copy_guidellm_results_task(args, ctx)
+
+    assert applied == [
+        artifact_dir / "src" / "guidellm-pvc.yaml",
+        artifact_dir / "src" / "guidellm-job.yaml",
+        artifact_dir / "src" / "guidellm-copy-pod.yaml",
+    ]
+    assert (
+        "delete",
+        "job,pvc",
+        benchmark_name,
+        "-n",
+        config.namespace,
+        "--ignore-not-found=true",
+    ) in oc_calls
+    assert (
+        "exec",
+        "-n",
+        config.namespace,
+        f"{benchmark_name}-copy",
+        "--",
+        "cat",
+        "/results/benchmarks.json",
+    ) in oc_calls
+    assert (artifact_dir / "artifacts" / "results" / "benchmarks.json").read_text(
+        encoding="utf-8"
+    ) == '{"score": 1}\n'
+    assert (artifact_dir / "artifacts" / "guidellm_benchmark_job.logs").read_text(
+        encoding="utf-8"
+    ) == "state\n"
 
 
 def test_test_phase_deploy_delegates_to_toolbox_command(
