@@ -9,7 +9,9 @@ import types
 
 import click
 
+from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
 from projects.core.library import ci as ci_lib
+from projects.core.library import config
 from projects.llm_d.orchestration import configuration as llmd_configuration
 from projects.llm_d.orchestration.prepare_sequence import run_prepare_sequence
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
@@ -51,6 +53,11 @@ def run_cleanup_phase() -> int:
     return cleanup_toolbox_run(inputs_file=str(inputs_file))
 
 
+def list_vaults() -> list[str]:
+    init_runtime()
+    return config.project.get_config("vaults")
+
+
 @click.group()
 @click.pass_context
 @ci_lib.safe_ci_function
@@ -82,6 +89,9 @@ def test(ctx) -> int:
 def pre_cleanup(ctx) -> int:
     """Cleanup phase - Clean up resources and finalize."""
     return run_cleanup_phase()
+
+
+main.add_command(create_fournos_resolve_command(vault_list_func=list_vaults))
 
 
 if __name__ == "__main__":
