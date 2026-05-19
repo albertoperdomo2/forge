@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import copy
 import json
+from pathlib import Path
 from typing import Any
 
 from projects.llm_d.runtime.runtime_config import (
     ModelCacheSpec,
     ResolvedConfig,
     load_yaml,
-    resolve_model_cache,
+    resolve_model_cache_spec,
 )
 
 
@@ -62,12 +63,35 @@ def render_model_cache_pvc(spec: ModelCacheSpec) -> dict[str, Any]:
 
 
 def render_inference_service(config: ResolvedConfig) -> dict[str, Any]:
-    template_path = config.config_dir / config.platform["inference_service"]["template"]
+    return render_inference_service_from_parts(
+        config_dir=str(config.config_dir),
+        namespace=config.namespace,
+        inference_service=config.platform["inference_service"],
+        model_key=config.model_key,
+        model=config.model,
+        scheduler_profile_key=config.scheduler_profile_key,
+        scheduler_profile=config.scheduler_profile,
+        model_cache=config.model_cache,
+    )
+
+
+def render_inference_service_from_parts(
+    *,
+    config_dir: str,
+    namespace: str,
+    inference_service: dict[str, Any],
+    model_key: str,
+    model: dict[str, Any],
+    scheduler_profile_key: str,
+    scheduler_profile: dict[str, Any] | None,
+    model_cache: dict[str, Any],
+) -> dict[str, Any]:
+    template_path = Path(config_dir) / inference_service["template"]
     manifest = load_yaml(template_path)
 
-    name = config.platform["inference_service"]["name"]
+    name = inference_service["name"]
     manifest["metadata"]["name"] = name
-    manifest["metadata"]["namespace"] = config.namespace
+    manifest["metadata"]["namespace"] = namespace
     manifest["metadata"].setdefault("labels", {})
     manifest["metadata"]["labels"].update(
         {
@@ -76,21 +100,24 @@ def render_inference_service(config: ResolvedConfig) -> dict[str, Any]:
         }
     )
 
-    cache_spec = resolve_model_cache(config)
-    manifest["spec"]["model"]["uri"] = cache_spec.model_uri if cache_spec else config.model["uri"]
-    manifest["spec"]["model"]["name"] = config.model["served_model_name"]
-    manifest["spec"]["template"]["containers"][0]["resources"] = copy.deepcopy(
-        config.model["resources"]
+    cache_spec = resolve_model_cache_spec(
+        namespace=namespace,
+        model_key=model_key,
+        model=model,
+        model_cache=model_cache,
     )
+    manifest["spec"]["model"]["uri"] = cache_spec.model_uri if cache_spec else model["uri"]
+    manifest["spec"]["model"]["name"] = model["served_model_name"]
+    manifest["spec"]["template"]["containers"][0]["resources"] = copy.deepcopy(model["resources"])
 
-    if config.scheduler_profile_key == "default":
+    if scheduler_profile_key == "default":
         manifest["spec"]["router"]["scheduler"] = {}
         return manifest
 
-    if config.scheduler_profile is None:
-        raise ValueError(f"Missing scheduler profile config for {config.scheduler_profile_key}")
+    if scheduler_profile is None:
+        raise ValueError(f"Missing scheduler profile config for {scheduler_profile_key}")
 
-    scheduler_profile_path = config.config_dir / config.scheduler_profile["config_path"]
+    scheduler_profile_path = Path(config_dir) / scheduler_profile["config_path"]
     scheduler_profile_config = scheduler_profile_path.read_text(encoding="utf-8")
     router_args = manifest["spec"]["router"]["scheduler"]["template"]["containers"][0]["args"]
     if not router_args or router_args[-1] != "--config-text":
@@ -103,7 +130,21 @@ def render_inference_service(config: ResolvedConfig) -> dict[str, Any]:
 def render_smoke_request_job(
     config: ResolvedConfig, endpoint_url: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
-    smoke = config.platform["smoke"]
+    return render_smoke_request_job_from_parts(
+        namespace=config.namespace,
+        smoke=config.platform["smoke"],
+        endpoint_url=endpoint_url,
+        payload=payload,
+    )
+
+
+def render_smoke_request_job_from_parts(
+    *,
+    namespace: str,
+    smoke: dict[str, Any],
+    endpoint_url: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
     command = """
 set -eu
 attempt=1
@@ -129,7 +170,7 @@ exit 1
         "kind": "Job",
         "metadata": {
             "name": smoke["job_name"],
-            "namespace": config.namespace,
+            "namespace": namespace,
             "labels": {
                 "app.kubernetes.io/managed-by": "forge",
                 "forge.openshift.io/project": "llm_d",
@@ -183,12 +224,16 @@ def render_guidellm_pvc(config: ResolvedConfig) -> dict[str, Any]:
     if not config.benchmark:
         raise ValueError("Benchmark configuration is not enabled for this preset")
 
+    return render_guidellm_pvc_from_parts(namespace=config.namespace, benchmark=config.benchmark)
+
+
+def render_guidellm_pvc_from_parts(*, namespace: str, benchmark: dict[str, Any]) -> dict[str, Any]:
     return {
         "apiVersion": "v1",
         "kind": "PersistentVolumeClaim",
         "metadata": {
-            "name": config.benchmark["job_name"],
-            "namespace": config.namespace,
+            "name": benchmark["job_name"],
+            "namespace": namespace,
             "labels": {
                 "app.kubernetes.io/managed-by": "forge",
                 "forge.openshift.io/project": "llm_d",
@@ -196,7 +241,7 @@ def render_guidellm_pvc(config: ResolvedConfig) -> dict[str, Any]:
         },
         "spec": {
             "accessModes": ["ReadWriteOnce"],
-            "resources": {"requests": {"storage": config.benchmark["pvc_size"]}},
+            "resources": {"requests": {"storage": benchmark["pvc_size"]}},
         },
     }
 
@@ -205,15 +250,31 @@ def render_guidellm_job(config: ResolvedConfig, endpoint_url: str) -> dict[str, 
     if not config.benchmark:
         raise ValueError("Benchmark configuration is not enabled for this preset")
 
+    return render_guidellm_job_from_parts(
+        namespace=config.namespace,
+        benchmark=config.benchmark,
+        endpoint_url=endpoint_url,
+    )
+
+
+def render_guidellm_job_from_parts(
+    *,
+    namespace: str,
+    benchmark: dict[str, Any],
+    endpoint_url: str,
+) -> dict[str, Any]:
     args = [
         "benchmark",
         "run",
         f"--target={endpoint_url}",
-        f"--rate={config.benchmark['rate']}",
     ]
-    for key, value in config.benchmark["args"].items():
+    if benchmark.get("rate") is not None:
+        args.append(f"--rate={benchmark['rate']}")
+    for key, value in benchmark["args"].items():
         if value is None:
             continue
+        if isinstance(value, list):
+            value = ",".join(str(item) for item in value)
         args.append(f"--{key.replace('_', '-')}={value}")
     args.append("--outputs=json")
 
@@ -221,8 +282,8 @@ def render_guidellm_job(config: ResolvedConfig, endpoint_url: str) -> dict[str, 
         "apiVersion": "batch/v1",
         "kind": "Job",
         "metadata": {
-            "name": config.benchmark["job_name"],
-            "namespace": config.namespace,
+            "name": benchmark["job_name"],
+            "namespace": namespace,
             "labels": {
                 "app.kubernetes.io/managed-by": "forge",
                 "forge.openshift.io/project": "llm_d",
@@ -243,7 +304,7 @@ def render_guidellm_job(config: ResolvedConfig, endpoint_url: str) -> dict[str, 
                     "containers": [
                         {
                             "name": "guidellm",
-                            "image": config.benchmark["image"],
+                            "image": benchmark["image"],
                             "command": ["/opt/app-root/bin/guidellm"],
                             "args": args,
                             "env": [{"name": "USER", "value": "guidellm"}],
@@ -257,7 +318,7 @@ def render_guidellm_job(config: ResolvedConfig, endpoint_url: str) -> dict[str, 
                         {"name": "home", "emptyDir": {}},
                         {
                             "name": "results",
-                            "persistentVolumeClaim": {"claimName": config.benchmark["job_name"]},
+                            "persistentVolumeClaim": {"claimName": benchmark["job_name"]},
                         },
                     ],
                 },
@@ -272,12 +333,25 @@ def render_guidellm_copy_pod(
     if not config.benchmark:
         raise ValueError("Benchmark configuration is not enabled for this preset")
 
+    return render_guidellm_copy_pod_from_parts(
+        namespace=config.namespace,
+        benchmark=config.benchmark,
+        node_name=node_name,
+    )
+
+
+def render_guidellm_copy_pod_from_parts(
+    *,
+    namespace: str,
+    benchmark: dict[str, Any],
+    node_name: str | None = None,
+) -> dict[str, Any]:
     pod = {
         "apiVersion": "v1",
         "kind": "Pod",
         "metadata": {
-            "name": f"{config.benchmark['job_name']}-copy",
-            "namespace": config.namespace,
+            "name": f"{benchmark['job_name']}-copy",
+            "namespace": namespace,
             "labels": {
                 "app.kubernetes.io/managed-by": "forge",
                 "forge.openshift.io/project": "llm_d",
@@ -288,7 +362,7 @@ def render_guidellm_copy_pod(
             "initContainers": [
                 {
                     "name": "permission-fixer",
-                    "image": config.benchmark["image"],
+                    "image": benchmark["image"],
                     "command": [
                         "/bin/sh",
                         "-c",
@@ -304,7 +378,7 @@ def render_guidellm_copy_pod(
             "containers": [
                 {
                     "name": "copy-helper",
-                    "image": config.benchmark["image"],
+                    "image": benchmark["image"],
                     "command": ["/bin/sleep", "300"],
                     "securityContext": {
                         "runAsUser": 1001,
@@ -317,7 +391,7 @@ def render_guidellm_copy_pod(
             "volumes": [
                 {
                     "name": "results",
-                    "persistentVolumeClaim": {"claimName": config.benchmark["job_name"]},
+                    "persistentVolumeClaim": {"claimName": benchmark["job_name"]},
                 }
             ],
         },

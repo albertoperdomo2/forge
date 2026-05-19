@@ -20,6 +20,7 @@ def run(
     namespace: str,
     inference_service: dict,
     gateway: dict,
+    model_key: str,
     model: dict,
     scheduler_profile_key: str,
     scheduler_profile: dict | None,
@@ -36,6 +37,7 @@ def run(
         namespace: Namespace used by llm_d
         inference_service: Inference-service configuration block
         gateway: Gateway configuration block
+        model_key: Selected model key
         model: Selected model configuration
         scheduler_profile_key: Scheduler profile key
         scheduler_profile: Scheduler profile configuration
@@ -73,6 +75,7 @@ def deploy_inference_service_task(args, ctx):
         namespace=args.namespace,
         inference_service=args.inference_service,
         gateway=args.gateway,
+        model_key=args.model_key,
         model=args.model,
         scheduler_profile_key=args.scheduler_profile_key,
         scheduler_profile=args.scheduler_profile,

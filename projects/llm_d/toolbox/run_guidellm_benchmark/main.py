@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from projects.core.dsl import execute_tasks, task, toolbox
-from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.runtime import llmd_runtime
 
 
 def run(
@@ -65,27 +65,20 @@ def create_guidellm_resources_task(args, ctx):
     if not args.benchmark:
         return "GuideLLM benchmark disabled"
 
-    config = phase_inputs.build_test_inputs(
-        artifact_dir=args.artifact_dir,
-        config_dir=".",
-        preset_name="run-guidellm-benchmark",
-        namespace=args.namespace,
-        platform={},
-        model_key="unused",
-        model={},
-        scheduler_profile_key="default",
-        scheduler_profile=None,
-        model_cache={},
-        smoke_request={},
-        benchmark=args.benchmark,
+    llmd_runtime.apply_manifest(
+        args.artifact_dir / "src" / "guidellm-pvc.yaml",
+        llmd_runtime.render_guidellm_pvc_from_parts(
+            namespace=args.namespace,
+            benchmark=args.benchmark,
+        ),
     )
     llmd_runtime.apply_manifest(
-        config.artifact_dir / "src" / "guidellm-pvc.yaml",
-        llmd_runtime.render_guidellm_pvc(config),
-    )
-    llmd_runtime.apply_manifest(
-        config.artifact_dir / "src" / "guidellm-job.yaml",
-        llmd_runtime.render_guidellm_job(config, args.endpoint_url),
+        args.artifact_dir / "src" / "guidellm-job.yaml",
+        llmd_runtime.render_guidellm_job_from_parts(
+            namespace=args.namespace,
+            benchmark=args.benchmark,
+            endpoint_url=args.endpoint_url,
+        ),
     )
     return f"GuideLLM benchmark {args.benchmark['job_name']} created"
 
@@ -125,21 +118,11 @@ def capture_guidellm_state_task(args, ctx):
     if not args.benchmark:
         return "GuideLLM benchmark disabled"
 
-    config = phase_inputs.build_test_inputs(
+    capture_guidellm_state(
         artifact_dir=args.artifact_dir,
-        config_dir=".",
-        preset_name="run-guidellm-benchmark",
         namespace=args.namespace,
-        platform={},
-        model_key="unused",
-        model={},
-        scheduler_profile_key="default",
-        scheduler_profile=None,
-        model_cache={},
-        smoke_request={},
         benchmark=args.benchmark,
     )
-    capture_guidellm_state(config)
     return f"GuideLLM benchmark {args.benchmark['job_name']} state captured"
 
 
@@ -150,30 +133,19 @@ def copy_guidellm_results_task(args, ctx):
     if not args.benchmark:
         return "GuideLLM benchmark disabled"
 
-    config = phase_inputs.build_test_inputs(
+    copy_guidellm_results(
         artifact_dir=args.artifact_dir,
-        config_dir=".",
-        preset_name="run-guidellm-benchmark",
         namespace=args.namespace,
-        platform={},
-        model_key="unused",
-        model={},
-        scheduler_profile_key="default",
-        scheduler_profile=None,
-        model_cache={},
-        smoke_request={},
         benchmark=args.benchmark,
     )
-    copy_guidellm_results(config)
     return f"GuideLLM benchmark {args.benchmark['job_name']} results copied"
 
 
-def copy_guidellm_results(config: phase_inputs.TestInputs) -> None:
-    if not config.benchmark:
+def copy_guidellm_results(*, artifact_dir: Path, namespace: str, benchmark: dict | None) -> None:
+    if not benchmark:
         return
 
-    benchmark_name = config.benchmark["job_name"]
-    namespace = config.namespace
+    benchmark_name = benchmark["job_name"]
     pod_data = llmd_runtime.oc_get_json(
         "pods",
         namespace=namespace,
@@ -185,8 +157,12 @@ def copy_guidellm_results(config: phase_inputs.TestInputs) -> None:
         node_name = pod_data["items"][0].get("spec", {}).get("nodeName")
 
     llmd_runtime.apply_manifest(
-        config.artifact_dir / "src" / "guidellm-copy-pod.yaml",
-        llmd_runtime.render_guidellm_copy_pod(config, node_name=node_name),
+        artifact_dir / "src" / "guidellm-copy-pod.yaml",
+        llmd_runtime.render_guidellm_copy_pod_from_parts(
+            namespace=namespace,
+            benchmark=benchmark,
+            node_name=node_name,
+        ),
     )
 
     def _helper_ready() -> bool:
@@ -221,18 +197,17 @@ def copy_guidellm_results(config: phase_inputs.TestInputs) -> None:
     )
     if result.returncode == 0 and result.stdout:
         llmd_runtime.write_text(
-            config.artifact_dir / "artifacts" / "results" / "benchmarks.json",
+            artifact_dir / "artifacts" / "results" / "benchmarks.json",
             result.stdout,
         )
 
 
-def capture_guidellm_state(config: phase_inputs.TestInputs) -> None:
-    if not config.benchmark:
+def capture_guidellm_state(*, artifact_dir: Path, namespace: str, benchmark: dict | None) -> None:
+    if not benchmark:
         return
 
-    benchmark_name = config.benchmark["job_name"]
-    namespace = config.namespace
-    artifacts_dir = config.artifact_dir / "artifacts"
+    benchmark_name = benchmark["job_name"]
+    artifacts_dir = artifact_dir / "artifacts"
 
     capture_get(
         "job",

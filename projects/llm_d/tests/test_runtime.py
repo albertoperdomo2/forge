@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -253,6 +254,7 @@ def test_orchestration_test_writes_inputs_and_invokes_toolbox(
         "namespace": config.namespace,
         "inference_service": config.platform["inference_service"],
         "gateway": config.platform["gateway"],
+        "model_key": config.model_key,
         "model": config.model,
         "scheduler_profile_key": config.scheduler_profile_key,
         "scheduler_profile": config.scheduler_profile,
@@ -444,6 +446,28 @@ def test_render_guidellm_job_uses_target_and_rate(
     assert container["image"] == "ghcr.io/vllm-project/guidellm:v0.5.4"
     assert "--target=https://example.test" in container["args"]
     assert "--rate=1" in container["args"]
+
+
+def test_render_guidellm_job_supports_rate_lists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(
+        tmp_path,
+        requested_preset="benchmark-short",
+    )
+    benchmark = llmd_runtime.load_yaml(config.config_dir / "config.d" / "workloads.yaml")[
+        "benchmarks"
+    ]["concurrent-1k-1k"]
+    config = replace(config, benchmark=benchmark)
+
+    manifest = llmd_runtime.render_guidellm_job(config, "https://example.test")
+
+    container = manifest["spec"]["template"]["spec"]["containers"][0]
+    assert "--target=https://example.test" in container["args"]
+    assert "--rate=1" not in container["args"]
+    assert "--rates=300,200,100,50,1" in container["args"]
+    assert "--max-seconds=600" in container["args"]
+    assert "--data=prompt_tokens=1000,output_tokens=1000" in container["args"]
 
 
 def test_render_smoke_request_job_uses_curl_helper(
@@ -961,7 +985,11 @@ def test_resolve_endpoint_url_requires_gateway_address(
     monkeypatch.setattr(llmd_runtime, "oc_get_json", fake_oc_get_json)
 
     with pytest.raises(RuntimeError, match="Gateway address"):
-        deploy_llmisvc_toolbox.resolve_endpoint_url(config)
+        deploy_llmisvc_toolbox.resolve_endpoint_url(
+            namespace=config.namespace,
+            inference_service=config.platform["inference_service"],
+            gateway=config.platform["gateway"],
+        )
 
 
 def test_run_smoke_request_uses_helper_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -989,9 +1017,16 @@ def test_run_smoke_request_uses_helper_job(tmp_path: Path, monkeypatch: pytest.M
         "apply_manifest",
         lambda artifact_path, _manifest: applied.append(artifact_path),
     )
-    monkeypatch.setattr(run_smoke_request_toolbox, "capture_smoke_state", lambda _config: None)
+    monkeypatch.setattr(run_smoke_request_toolbox, "capture_smoke_state", lambda **_kwargs: None)
 
-    response = run_smoke_request_toolbox.run_smoke_request(config, "https://example.test")
+    response = run_smoke_request_toolbox.run_smoke_request(
+        artifact_dir=artifact_dir,
+        namespace=config.namespace,
+        smoke=config.platform["smoke"],
+        model=config.model,
+        smoke_request=config.smoke_request,
+        endpoint_url="https://example.test",
+    )
 
     assert response["choices"][0]["text"] == "ok"
     assert applied == [artifact_dir / "src" / "smoke-job.yaml"]
@@ -1099,6 +1134,7 @@ def test_test_phase_deploy_delegates_to_toolbox_command(
         namespace=config.namespace,
         inference_service=config.platform["inference_service"],
         gateway=config.platform["gateway"],
+        model_key=config.model_key,
         model=config.model,
         scheduler_profile_key=config.scheduler_profile_key,
         scheduler_profile=config.scheduler_profile,
@@ -1113,6 +1149,7 @@ def test_test_phase_deploy_delegates_to_toolbox_command(
         "namespace": config.namespace,
         "inference_service": config.platform["inference_service"],
         "gateway": config.platform["gateway"],
+        "model_key": config.model_key,
         "model": config.model,
         "scheduler_profile_key": config.scheduler_profile_key,
         "scheduler_profile": config.scheduler_profile,

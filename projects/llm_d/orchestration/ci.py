@@ -49,6 +49,7 @@ def run_test_phase() -> int:
         namespace=config.namespace,
         inference_service=config.platform["inference_service"],
         gateway=config.platform["gateway"],
+        model_key=config.model_key,
         model=config.model,
         scheduler_profile_key=config.scheduler_profile_key,
         scheduler_profile=config.scheduler_profile,

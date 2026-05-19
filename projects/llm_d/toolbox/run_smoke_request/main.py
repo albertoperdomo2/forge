@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from projects.core.dsl import execute_tasks, task, toolbox
-from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.runtime import llmd_runtime
 
 
 def run(
@@ -38,35 +38,35 @@ def run(
 def run_smoke_request_task(args, ctx):
     """Run the smoke request job and validate its response"""
 
-    config = phase_inputs.build_test_inputs(
+    ctx.response = run_smoke_request(
         artifact_dir=args.artifact_dir,
-        config_dir=".",
-        preset_name="run-smoke-request",
         namespace=args.namespace,
-        platform={"smoke": args.smoke},
-        model_key="unused",
+        smoke=args.smoke,
         model=args.model,
-        scheduler_profile_key="default",
-        scheduler_profile=None,
-        model_cache={},
         smoke_request=args.smoke_request,
-        benchmark=None,
+        endpoint_url=args.endpoint_url,
     )
-    ctx.response = run_smoke_request(config, args.endpoint_url)
     return "Smoke request completed"
 
 
-def run_smoke_request(config: phase_inputs.TestInputs, endpoint_url: str) -> dict[str, Any]:
-    namespace = config.namespace
-    job_name = config.platform["smoke"]["job_name"]
+def run_smoke_request(
+    *,
+    artifact_dir: Path,
+    namespace: str,
+    smoke: dict,
+    model: dict,
+    smoke_request: dict,
+    endpoint_url: str,
+) -> dict[str, Any]:
+    job_name = smoke["job_name"]
 
     payload = {
-        "model": config.model["served_model_name"],
-        "prompt": config.smoke_request["prompt"],
-        "max_tokens": config.smoke_request["max_tokens"],
-        "temperature": config.smoke_request["temperature"],
+        "model": model["served_model_name"],
+        "prompt": smoke_request["prompt"],
+        "max_tokens": smoke_request["max_tokens"],
+        "temperature": smoke_request["temperature"],
     }
-    llmd_runtime.write_json(config.artifact_dir / "artifacts" / "smoke.request.json", payload)
+    llmd_runtime.write_json(artifact_dir / "artifacts" / "smoke.request.json", payload)
 
     llmd_runtime.oc(
         "delete",
@@ -85,8 +85,13 @@ def run_smoke_request(config: phase_inputs.TestInputs, endpoint_url: str) -> dic
     )
 
     llmd_runtime.apply_manifest(
-        config.artifact_dir / "src" / "smoke-job.yaml",
-        llmd_runtime.render_smoke_request_job(config, endpoint_url, payload),
+        artifact_dir / "src" / "smoke-job.yaml",
+        llmd_runtime.render_smoke_request_job_from_parts(
+            namespace=namespace,
+            smoke=smoke,
+            endpoint_url=endpoint_url,
+            payload=payload,
+        ),
     )
 
     try:
@@ -94,16 +99,17 @@ def run_smoke_request(config: phase_inputs.TestInputs, endpoint_url: str) -> dic
             job_name,
             namespace,
             timeout_seconds=(
-                config.platform["smoke"]["request_retries"]
-                * (
-                    config.platform["smoke"]["request_timeout_seconds"]
-                    + config.platform["smoke"]["request_retry_delay_seconds"]
-                )
+                smoke["request_retries"]
+                * (smoke["request_timeout_seconds"] + smoke["request_retry_delay_seconds"])
             ),
             interval_seconds=5,
         )
     finally:
-        capture_smoke_state(config)
+        capture_smoke_state(
+            artifact_dir=artifact_dir,
+            namespace=namespace,
+            smoke=smoke,
+        )
 
     result = llmd_runtime.oc(
         "logs",
@@ -123,14 +129,13 @@ def run_smoke_request(config: phase_inputs.TestInputs, endpoint_url: str) -> dic
     if not response.get("choices"):
         raise RuntimeError(f"Invalid smoke response payload: {result.stdout}")
 
-    llmd_runtime.write_json(config.artifact_dir / "artifacts" / "smoke.response.json", response)
+    llmd_runtime.write_json(artifact_dir / "artifacts" / "smoke.response.json", response)
     return response
 
 
-def capture_smoke_state(config: phase_inputs.TestInputs) -> None:
-    job_name = config.platform["smoke"]["job_name"]
-    namespace = config.namespace
-    artifacts_dir = config.artifact_dir / "artifacts"
+def capture_smoke_state(*, artifact_dir: Path, namespace: str, smoke: dict) -> None:
+    job_name = smoke["job_name"]
+    artifacts_dir = artifact_dir / "artifacts"
 
     capture_get("job", job_name, namespace, "yaml", artifacts_dir / "smoke_job.yaml")
     capture_get(

@@ -234,10 +234,25 @@ def version_tuple(value: str) -> tuple[int, ...]:
 
 
 def resolve_model_cache(config: ResolvedConfig) -> ModelCacheSpec | None:
-    if not config.model_cache.get("enabled", False):
+    return resolve_model_cache_spec(
+        namespace=config.namespace,
+        model_key=config.model_key,
+        model=config.model,
+        model_cache=config.model_cache,
+    )
+
+
+def resolve_model_cache_spec(
+    *,
+    namespace: str,
+    model_key: str,
+    model: dict[str, Any],
+    model_cache: dict[str, Any],
+) -> ModelCacheSpec | None:
+    if not model_cache.get("enabled", False):
         return None
 
-    source_uri = config.model["uri"]
+    source_uri = model["uri"]
     if source_uri.startswith(("pvc://", "pvc+hf://")):
         return None
 
@@ -246,14 +261,14 @@ def resolve_model_cache(config: ResolvedConfig) -> ModelCacheSpec | None:
     elif source_uri.startswith("oci://"):
         source_scheme = "oci"
     else:
-        raise ValueError(f"Unsupported model cache source URI for {config.model_key}: {source_uri}")
+        raise ValueError(f"Unsupported model cache source URI for {model_key}: {source_uri}")
 
-    model_cache_overrides = config.model.get("cache", {})
-    pvc_defaults = config.model_cache["pvc"]
-    pvc_prefix = config.model_cache["pvc"]["name_prefix"]
+    model_cache_overrides = model.get("cache", {})
+    pvc_defaults = model_cache["pvc"]
+    pvc_prefix = model_cache["pvc"]["name_prefix"]
     cache_key = hashlib.sha256(source_uri.encode("utf-8")).hexdigest()[:10]
     pvc_name = truncate_k8s_name(
-        f"{pvc_prefix}-{slugify_identifier(config.model_key, max_length=32)}-{cache_key}"
+        f"{pvc_prefix}-{slugify_identifier(model_key, max_length=32)}-{cache_key}"
     )
     model_path = pvc_defaults["model_directory_name"]
 
@@ -261,7 +276,7 @@ def resolve_model_cache(config: ResolvedConfig) -> ModelCacheSpec | None:
         source_uri=source_uri,
         source_scheme=source_scheme,
         cache_key=cache_key,
-        namespace=config.namespace,
+        namespace=namespace,
         pvc_name=pvc_name,
         pvc_size=model_cache_overrides.get("pvc_size", pvc_defaults["size"]),
         access_mode=model_cache_overrides.get("access_mode", pvc_defaults["access_mode"]),
@@ -270,20 +285,20 @@ def resolve_model_cache(config: ResolvedConfig) -> ModelCacheSpec | None:
         ),
         model_path=model_path,
         model_uri=f"pvc://{pvc_name}/{model_path}",
-        marker_filename=config.model_cache["marker_filename"],
+        marker_filename=model_cache["marker_filename"],
         download_job_name=truncate_k8s_name(f"{pvc_name}-download"),
         hf_token_secret_name=model_cache_overrides.get(
-            "hf_token_secret_name", config.model_cache["hf"].get("token_secret_name")
+            "hf_token_secret_name", model_cache["hf"].get("token_secret_name")
         ),
-        hf_token_secret_key=config.model_cache["hf"].get("token_secret_key"),
+        hf_token_secret_key=model_cache["hf"].get("token_secret_key"),
         oci_image_path=model_cache_overrides.get(
-            "oci_image_path", config.model_cache["oci"].get("image_path")
+            "oci_image_path", model_cache["oci"].get("image_path")
         ),
         oci_registry_auth_secret_name=model_cache_overrides.get(
             "oci_registry_auth_secret_name",
-            config.model_cache["oci"].get("registry_auth_secret_name"),
+            model_cache["oci"].get("registry_auth_secret_name"),
         ),
-        oci_registry_auth_secret_key=config.model_cache["oci"].get("registry_auth_secret_key"),
+        oci_registry_auth_secret_key=model_cache["oci"].get("registry_auth_secret_key"),
     )
 
 
