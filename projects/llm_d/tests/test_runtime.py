@@ -1238,6 +1238,98 @@ def test_test_phase_guidellm_delegates_to_toolbox_command(
     }
 
 
+def test_test_phase_cleanup_deletes_helpers_and_llmisvc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(
+        tmp_path,
+        requested_preset="benchmark-short",
+    )
+    oc_calls: list[tuple[object, ...]] = []
+    wait_descriptions: list[str] = []
+
+    monkeypatch.setattr(
+        llmd_runtime,
+        "oc",
+        lambda *args, **kwargs: (
+            oc_calls.append((*args, kwargs.get("timeout_seconds")))  # type: ignore[misc]
+            or subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+        ),
+    )
+    monkeypatch.setattr(llmd_runtime, "resource_exists", lambda *args, **kwargs: False)
+    monkeypatch.setattr(llmd_runtime, "oc_get_json", lambda *args, **kwargs: {"items": []})
+    monkeypatch.setattr(
+        llmd_runtime,
+        "wait_until",
+        lambda description, **kwargs: wait_descriptions.append(description) or True,
+    )
+
+    ctx = SimpleNamespace(
+        namespace=config.namespace,
+        inference_service=config.platform["inference_service"],
+        smoke=config.platform["smoke"],
+        benchmark=config.benchmark,
+    )
+    result = test_toolbox.cleanup_runtime_resources_task(SimpleNamespace(), ctx)
+
+    assert result == "Test deployment and helper resources deleted"
+    assert (
+        "delete",
+        "job",
+        config.platform["smoke"]["job_name"],
+        "-n",
+        config.namespace,
+        "--ignore-not-found=true",
+        60,
+    ) in oc_calls
+    assert (
+        "delete",
+        "job,pvc",
+        config.benchmark["job_name"],
+        "-n",
+        config.namespace,
+        "--ignore-not-found=true",
+        60,
+    ) in oc_calls
+    assert (
+        "delete",
+        "llminferenceservice",
+        config.platform["inference_service"]["name"],
+        "-n",
+        config.namespace,
+        "--ignore-not-found=true",
+        60,
+    ) in oc_calls
+    assert any("llminferenceservice/" in description for description in wait_descriptions)
+    assert any("workload pods deletion" in description for description in wait_descriptions)
+
+
+def test_test_phase_cleanup_ignores_helper_delete_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _artifact_dir = _load_runtime_configuration(tmp_path)
+
+    def fake_oc(*args, **kwargs):
+        if args[:2] == ("delete", "job,pvc"):
+            raise subprocess.TimeoutExpired(["oc", *args], timeout=60)
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(llmd_runtime, "oc", fake_oc)
+    monkeypatch.setattr(llmd_runtime, "resource_exists", lambda *args, **kwargs: False)
+    monkeypatch.setattr(llmd_runtime, "oc_get_json", lambda *args, **kwargs: {"items": []})
+    monkeypatch.setattr(llmd_runtime, "wait_until", lambda *args, **kwargs: True)
+
+    ctx = SimpleNamespace(
+        namespace=config.namespace,
+        inference_service=config.platform["inference_service"],
+        smoke=config.platform["smoke"],
+        benchmark=config.benchmark,
+    )
+    result = test_toolbox.cleanup_runtime_resources_task(SimpleNamespace(), ctx)
+
+    assert result == "Test deployment and helper resources deleted"
+
+
 def test_wait_until_reraises_runtime_error() -> None:
     with pytest.raises(RuntimeError, match="terminal failure"):
         llmd_runtime.wait_until(

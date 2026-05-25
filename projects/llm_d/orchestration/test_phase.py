@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import subprocess
 
 from projects.core.dsl import always, execute_tasks, shell, task
 from projects.llm_d.runtime import llmd_runtime
@@ -148,7 +149,7 @@ def write_endpoint_url_task(args, ctx):
 @always
 @task
 def cleanup_runtime_resources_task(args, ctx):
-    """Delete smoke and benchmark helper resources"""
+    """Delete the test deployment and helper resources"""
 
     namespace = getattr(ctx, "namespace", None)
     inference_service = getattr(ctx, "inference_service", None)
@@ -159,35 +160,80 @@ def cleanup_runtime_resources_task(args, ctx):
 
     benchmark_name = benchmark["job_name"] if benchmark else "guidellm-benchmark"
     smoke_job_name = smoke["job_name"]
+    inference_service_name = inference_service["name"]
+    cleanup_timeout_seconds = inference_service["delete_timeout_seconds"]
 
-    llmd_runtime.oc(
+    _best_effort_delete(
+        "smoke helper job",
         "delete",
         "job",
         smoke_job_name,
         "-n",
         namespace,
         "--ignore-not-found=true",
-        check=False,
     )
-    llmd_runtime.oc(
+    _best_effort_delete(
+        "benchmark helper job and pvc",
         "delete",
         "job,pvc",
         benchmark_name,
         "-n",
         namespace,
         "--ignore-not-found=true",
-        check=False,
     )
-    llmd_runtime.oc(
+    _best_effort_delete(
+        "benchmark helper copy pod",
         "delete",
         "pod",
         f"{benchmark_name}-copy",
         "-n",
         namespace,
         "--ignore-not-found=true",
-        check=False,
     )
-    return "Test helper resources deleted"
+    _best_effort_delete(
+        "llminferenceservice",
+        "delete",
+        "llminferenceservice",
+        inference_service_name,
+        "-n",
+        namespace,
+        "--ignore-not-found=true",
+    )
+
+    llmd_runtime.wait_until(
+        f"llminferenceservice/{inference_service_name} deletion in {namespace}",
+        timeout_seconds=cleanup_timeout_seconds,
+        interval_seconds=10,
+        predicate=lambda: (
+            not llmd_runtime.resource_exists(
+                "llminferenceservice", inference_service_name, namespace=namespace
+            )
+        ),
+    )
+    llmd_runtime.wait_until(
+        f"llm-d workload pods deletion in {namespace}",
+        timeout_seconds=cleanup_timeout_seconds,
+        interval_seconds=10,
+        predicate=lambda: _llm_d_pods_gone(namespace, inference_service_name),
+    )
+    return "Test deployment and helper resources deleted"
+
+
+def _best_effort_delete(description: str, *oc_args: str) -> None:
+    try:
+        llmd_runtime.oc(*oc_args, check=False, timeout_seconds=60)
+    except subprocess.TimeoutExpired:
+        LOGGER.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
+
+
+def _llm_d_pods_gone(namespace: str, inference_service_name: str) -> bool:
+    payload = llmd_runtime.oc_get_json(
+        "pods",
+        namespace=namespace,
+        selector=f"app.kubernetes.io/name={inference_service_name}",
+        ignore_not_found=True,
+    )
+    return not payload or not payload.get("items")
 
 
 @always
