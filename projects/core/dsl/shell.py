@@ -77,13 +77,21 @@ def run(
             if stdout_dest:
                 logger.info(f"| <stdout saved into {stdout_dest}>")
             elif log_stdout:
-                logger.info(f"| <stdout> {result.stdout.strip()}")
+                stdout = result.stdout.strip().splitlines()
+                if len(stdout) == 1:
+                    logger.info(f"| <stdout> {stdout[0]}")
+                else:
+                    logger.info("| <stdout>\n" + "\n|   ".join(stdout) + "\n| </stdout>")
             else:
                 logger.info("| <stdout logging skipped>")
 
         if result.stderr and result.stderr.strip():
             if log_stderr:
-                logger.info(f"| <stderr> {result.stderr.strip()}")
+                stderr = result.stderr.strip().splitlines()
+                if len(stderr) == 1:
+                    logger.info(f"| <stderr> {stderr[0]}")
+                else:
+                    logger.info("| <stderr>\n" + "\n|   ".join(stderr) + "\n| </stderr")
             else:
                 logger.info("| <stderr logging skipped>")
 
