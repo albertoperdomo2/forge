@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import sys
+from pathlib import Path
+from typing import Any
 
-from projects.core.dsl import always, execute_tasks, shell, task
+from projects.core.dsl import shell
 from projects.llm_d.runtime import llmd_runtime
 from projects.llm_d.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
 from projects.llm_d.toolbox.deploy_llmisvc import main as deploy_llmisvc
@@ -29,135 +32,157 @@ def run(
     benchmark: dict | None = None,
     capture_namespace_events: bool = True,
 ) -> int:
-    """Deploy llm_d, run the smoke request, and optionally execute GuideLLM.
+    artifact_dir = llmd_runtime.init()
 
-    Args:
-        config_dir: Configuration directory
-        namespace: Namespace used by llm_d
-        inference_service: Inference-service configuration block
-        gateway: Gateway configuration block
-        model_key: Selected model key
-        model: Selected model configuration
-        scheduler_profile_key: Scheduler profile key
-        scheduler_profile: Scheduler profile configuration
-        model_cache: Model-cache configuration
-        smoke: Smoke configuration block
-        smoke_request: Smoke-request configuration
-        benchmark: Optional benchmark configuration
-        capture_namespace_events: Whether namespace events should be captured
-    """
+    endpoint_url: str | None = None
+    primary_exc: tuple[type[BaseException], BaseException, Any] | None = None
+    finalizer_exc: tuple[type[BaseException], BaseException, Any] | None = None
 
-    llmd_runtime.init()
-    execute_tasks(locals())
+    try:
+        endpoint_url = deploy_inference_service(
+            config_dir=config_dir,
+            namespace=namespace,
+            inference_service=inference_service,
+            gateway=gateway,
+            model_key=model_key,
+            model=model,
+            scheduler_profile_key=scheduler_profile_key,
+            scheduler_profile=scheduler_profile,
+            model_cache=model_cache,
+        )
+        run_smoke_request(
+            namespace=namespace,
+            smoke=smoke,
+            model=model,
+            smoke_request=smoke_request,
+            endpoint_url=endpoint_url,
+        )
+        run_guidellm_benchmark(
+            namespace=namespace,
+            benchmark=benchmark,
+            endpoint_url=endpoint_url,
+        )
+    except Exception:
+        primary_exc = sys.exc_info()
+    finally:
+        finalizer_exc = _run_finalizer(
+            primary_exc,
+            finalizer_exc,
+            "capture inference-service state",
+            capture_inference_service_state,
+            namespace=namespace,
+            inference_service=inference_service,
+        )
+        finalizer_exc = _run_finalizer(
+            primary_exc,
+            finalizer_exc,
+            "write endpoint URL",
+            write_endpoint_url,
+            artifact_dir=artifact_dir,
+            endpoint_url=endpoint_url,
+        )
+        finalizer_exc = _run_finalizer(
+            primary_exc,
+            finalizer_exc,
+            "cleanup runtime resources",
+            cleanup_runtime_resources,
+            namespace=namespace,
+            inference_service=inference_service,
+            smoke=smoke,
+            benchmark=benchmark,
+        )
+        finalizer_exc = _run_finalizer(
+            primary_exc,
+            finalizer_exc,
+            "capture namespace events",
+            capture_namespace_events_after_test,
+            artifact_dir=artifact_dir,
+            namespace=namespace,
+            capture_namespace_events=capture_namespace_events,
+        )
+
+    if primary_exc is not None:
+        raise primary_exc[1].with_traceback(primary_exc[2])
+    if finalizer_exc is not None:
+        raise finalizer_exc[1].with_traceback(finalizer_exc[2])
+
     return 0
 
 
-@task
-def load_inputs(args, ctx):
-    """Load the test phase inputs"""
-
-    ctx.artifact_dir = args.artifact_dir
-    ctx.namespace = args.namespace
-    ctx.inference_service = args.inference_service
-    ctx.smoke = args.smoke
-    ctx.benchmark = args.benchmark
-    ctx.capture_namespace_events = args.capture_namespace_events
-    return f"Loaded test inputs for namespace {ctx.namespace}"
-
-
-@task
-def deploy_inference_service_task(args, ctx):
-    """Deploy the LLMInferenceService and resolve its endpoint"""
-
-    ctx.endpoint_url = deploy_llmisvc.run(
-        config_dir=args.config_dir,
-        namespace=args.namespace,
-        inference_service=args.inference_service,
-        gateway=args.gateway,
-        model_key=args.model_key,
-        model=args.model,
-        scheduler_profile_key=args.scheduler_profile_key,
-        scheduler_profile=args.scheduler_profile,
-        model_cache=args.model_cache,
+def deploy_inference_service(
+    *,
+    config_dir: str,
+    namespace: str,
+    inference_service: dict,
+    gateway: dict,
+    model_key: str,
+    model: dict,
+    scheduler_profile_key: str,
+    scheduler_profile: dict | None,
+    model_cache: dict,
+) -> str:
+    return deploy_llmisvc.run(
+        config_dir=config_dir,
+        namespace=namespace,
+        inference_service=inference_service,
+        gateway=gateway,
+        model_key=model_key,
+        model=model,
+        scheduler_profile_key=scheduler_profile_key,
+        scheduler_profile=scheduler_profile,
+        model_cache=model_cache,
     )
-    return f"Endpoint resolved: {ctx.endpoint_url}"
 
 
-@task
-def run_smoke_request_task(args, ctx):
-    """Run the smoke request against the deployed service"""
-
-    ctx.smoke_response = run_smoke_request_command.run(
-        namespace=args.namespace,
-        smoke=args.smoke,
-        model=args.model,
-        smoke_request=args.smoke_request,
-        endpoint_url=ctx.endpoint_url,
+def run_smoke_request(
+    *,
+    namespace: str,
+    smoke: dict,
+    model: dict,
+    smoke_request: dict,
+    endpoint_url: str,
+) -> dict[str, object]:
+    return run_smoke_request_command.run(
+        namespace=namespace,
+        smoke=smoke,
+        model=model,
+        smoke_request=smoke_request,
+        endpoint_url=endpoint_url,
     )
-    return "Smoke request completed"
 
 
-@task
-def run_guidellm_benchmark_task(args, ctx):
-    """Run the GuideLLM benchmark when enabled for the preset"""
-
-    if not args.benchmark:
-        return "GuideLLM benchmark disabled"
+def run_guidellm_benchmark(*, namespace: str, benchmark: dict | None, endpoint_url: str) -> None:
+    if not benchmark:
+        return
 
     run_guidellm_benchmark_command.run(
-        namespace=args.namespace,
-        benchmark=args.benchmark,
-        endpoint_url=ctx.endpoint_url,
+        namespace=namespace,
+        benchmark=benchmark,
+        endpoint_url=endpoint_url,
     )
-    return f"GuideLLM benchmark {args.benchmark['job_name']} completed"
 
 
-@always
-@task
-def capture_inference_service_state_task(args, ctx):
-    """Capture the LLMInferenceService state and related resources"""
-
-    namespace = getattr(ctx, "namespace", None)
-    inference_service = getattr(ctx, "inference_service", None)
-    if not namespace or not inference_service:
-        return "Test inputs unavailable; skipping state capture"
-
+def capture_inference_service_state(*, namespace: str, inference_service: dict) -> None:
     capture_llmisvc_state.run(
         llmisvc_name=inference_service["name"],
         namespace=namespace,
     )
-    return "Inference-service artifacts captured"
 
 
-@always
-@task
-def write_endpoint_url_task(args, ctx):
-    """Persist the resolved endpoint URL when available"""
-
-    artifact_dir = getattr(ctx, "artifact_dir", None)
-    if not artifact_dir:
-        return "Test inputs unavailable; skipping endpoint capture"
-
-    endpoint_url = getattr(ctx, "endpoint_url", None)
+def write_endpoint_url(*, artifact_dir: Path, endpoint_url: str | None) -> None:
     if not endpoint_url:
-        return "Endpoint URL not available"
+        return
 
     llmd_runtime.write_text(artifact_dir / "artifacts" / "endpoint.url", f"{endpoint_url}\n")
-    return "Endpoint URL captured"
 
 
-@always
-@task
-def cleanup_runtime_resources_task(args, ctx):
-    """Delete the test deployment and helper resources"""
-
-    namespace = getattr(ctx, "namespace", None)
-    inference_service = getattr(ctx, "inference_service", None)
-    smoke = getattr(ctx, "smoke", None)
-    benchmark = getattr(ctx, "benchmark", None)
-    if not namespace or not inference_service or not smoke:
-        return "Test inputs unavailable; skipping cleanup"
-
+def cleanup_runtime_resources(
+    *,
+    namespace: str,
+    inference_service: dict,
+    smoke: dict,
+    benchmark: dict | None,
+) -> None:
     benchmark_name = benchmark["job_name"] if benchmark else "guidellm-benchmark"
     smoke_job_name = smoke["job_name"]
     inference_service_name = inference_service["name"]
@@ -216,7 +241,39 @@ def cleanup_runtime_resources_task(args, ctx):
         interval_seconds=10,
         predicate=lambda: _llm_d_pods_gone(namespace, inference_service_name),
     )
-    return "Test deployment and helper resources deleted"
+
+
+def capture_namespace_events_after_test(
+    *,
+    artifact_dir: Path,
+    namespace: str,
+    capture_namespace_events: bool,
+) -> None:
+    if not capture_namespace_events:
+        return
+
+    shell.run(
+        f"oc get events -n {namespace} --sort-by=.metadata.creationTimestamp",
+        check=False,
+        stdout_dest=artifact_dir / "artifacts" / "namespace.events.txt",
+    )
+
+
+def _run_finalizer(
+    primary_exc: tuple[type[BaseException], BaseException, Any] | None,
+    finalizer_exc: tuple[type[BaseException], BaseException, Any] | None,
+    description: str,
+    callback,
+    **kwargs,
+) -> tuple[type[BaseException], BaseException, Any] | None:
+    try:
+        callback(**kwargs)
+    except Exception:
+        if primary_exc is None:
+            LOGGER.exception("Finalizer failed: %s", description)
+            return finalizer_exc or sys.exc_info()
+        LOGGER.exception("Ignoring %s failure after primary test failure", description)
+    return finalizer_exc
 
 
 def _best_effort_delete(description: str, *oc_args: str) -> None:
@@ -234,22 +291,3 @@ def _llm_d_pods_gone(namespace: str, inference_service_name: str) -> bool:
         ignore_not_found=True,
     )
     return not payload or not payload.get("items")
-
-
-@always
-@task
-def capture_namespace_events_task(args, ctx):
-    """Capture namespace events after the test run"""
-
-    artifact_dir = getattr(ctx, "artifact_dir", None)
-    namespace = getattr(ctx, "namespace", None)
-    capture_namespace_events = getattr(ctx, "capture_namespace_events", False)
-    if not artifact_dir or not namespace or not capture_namespace_events:
-        return "Test inputs unavailable; skipping namespace events capture"
-
-    shell.run(
-        f"oc get events -n {namespace} --sort-by=.metadata.creationTimestamp",
-        check=False,
-        stdout_dest=artifact_dir / "artifacts" / "namespace.events.txt",
-    )
-    return "Namespace events captured"

@@ -238,13 +238,23 @@ def test_orchestration_prepare_runs_sequence(
     monkeypatch.setattr(
         orchestration,
         "run_prepare_sequence",
-        lambda cfg: captured.setdefault("config", cfg) or 17,
+        lambda **kwargs: captured.update(kwargs) or 17,
     )
 
     result = orchestration.run_prepare_phase()
 
-    assert result is config
-    assert captured["config"] is config
+    assert result == 17
+    assert captured == {
+        "artifact_dir": config.artifact_dir,
+        "config_dir": str(config.config_dir),
+        "namespace": config.namespace,
+        "namespace_is_managed": config.namespace_is_managed,
+        "platform": config.platform,
+        "model_key": config.model_key,
+        "model": config.model,
+        "model_cache": config.model_cache,
+        "benchmark": config.benchmark,
+    }
 
 
 @pytest.mark.parametrize("orchestration", [llmd_ci, llmd_cli])
@@ -592,24 +602,17 @@ def test_prepare_model_cache_task_delegates_to_toolbox_command(
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(
-        prepare_model_cache_toolbox,
-        "run",
+        prepare_toolbox,
+        "prepare_model_cache_toolbox_run",
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    prepare_toolbox.prepare_model_cache_task(
-        SimpleNamespace(
-            artifact_dir=config.artifact_dir,
-            config_dir=str(config.config_dir),
-            namespace=config.namespace,
-            namespace_is_managed=config.namespace_is_managed,
-            platform=config.platform,
-            model_key=config.model_key,
-            model=config.model,
-            model_cache=config.model_cache,
-            benchmark=config.benchmark,
-        ),
-        SimpleNamespace(),
+    prepare_toolbox.prepare_model_cache(
+        namespace=config.namespace,
+        namespace_is_managed=config.namespace_is_managed,
+        model_key=config.model_key,
+        model=config.model,
+        model_cache=config.model_cache,
     )
 
     assert captured == {
@@ -625,7 +628,7 @@ def test_cleanup_deletes_leftovers_but_not_namespace_or_preserved_pvcs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, _artifact_dir = _load_runtime_configuration(tmp_path)
-    shell_calls: list[str] = []
+    oc_calls: list[tuple[object, ...]] = []
 
     def fake_resource_exists(kind: str, name: str, namespace: str | None = None) -> bool:
         if kind == "namespace":
@@ -634,21 +637,33 @@ def test_cleanup_deletes_leftovers_but_not_namespace_or_preserved_pvcs(
 
     monkeypatch.setattr(llmd_runtime, "resource_exists", fake_resource_exists)
     monkeypatch.setattr(
-        cleanup_toolbox.shell,
-        "run",
-        lambda command, **kwargs: shell_calls.append(command),
+        llmd_runtime,
+        "oc",
+        lambda *args, **kwargs: (
+            oc_calls.append((*args, kwargs.get("timeout_seconds")))  # type: ignore[misc]
+            or subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+        ),
     )
     monkeypatch.setattr(llmd_runtime, "wait_until", lambda *args, **kwargs: True)
     monkeypatch.setattr(cleanup_toolbox, "_llm_d_pods_gone", lambda *_args: True)
 
-    cleanup_toolbox.delete_run_leftovers(config)
+    cleanup_toolbox.cleanup_namespace(
+        namespace=config.namespace,
+        inference_service_name=config.platform["inference_service"]["name"],
+        cleanup_timeout_seconds=config.platform["cluster"]["cleanup_timeout_seconds"],
+        benchmark_name=config.benchmark["job_name"] if config.benchmark else None,
+    )
 
-    assert f"oc delete namespace {config.namespace} --ignore-not-found=true" not in shell_calls
     assert (
-        f"oc delete pvc -n {config.namespace} "
-        '-l "forge.openshift.io/project=llm_d,forge.openshift.io/preserve!=true" '
-        "--ignore-not-found=true"
-    ) in shell_calls
+        "delete",
+        "pvc",
+        "-n",
+        config.namespace,
+        "-l",
+        "forge.openshift.io/project=llm_d,forge.openshift.io/preserve!=true",
+        "--ignore-not-found=true",
+        60,
+    ) in oc_calls
 
 
 def test_cleanup_previous_run_task_delegates_to_cleanup_toolbox(
@@ -658,25 +673,17 @@ def test_cleanup_previous_run_task_delegates_to_cleanup_toolbox(
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(
-        cleanup_toolbox,
-        "run",
+        prepare_toolbox,
+        "cleanup_toolbox_run",
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    args = SimpleNamespace(
-        artifact_dir=config.artifact_dir,
-        config_dir=str(config.config_dir),
+    prepare_toolbox.cleanup_previous_run(
         namespace=config.namespace,
-        namespace_is_managed=config.namespace_is_managed,
-        platform=config.platform,
-        model_key=config.model_key,
-        model=config.model,
-        model_cache=config.model_cache,
-        benchmark=config.benchmark,
+        inference_service_name=config.platform["inference_service"]["name"],
+        cleanup_timeout_seconds=config.platform["cluster"]["cleanup_timeout_seconds"],
+        benchmark_name=config.benchmark["job_name"] if config.benchmark else None,
     )
-    result = prepare_toolbox.cleanup_previous_run_task(args, SimpleNamespace())
-
-    assert result == f"Previous llm_d leftovers deleted from {config.namespace}"
     assert captured == {
         "namespace": config.namespace,
         "inference_service_name": config.platform["inference_service"]["name"],
@@ -708,7 +715,7 @@ def test_prepare_gpu_operator_delegates_to_bootstrap_command(
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    prepare_toolbox.prepare_gpu_operator(config)
+    prepare_toolbox.prepare_gpu_operator(platform=config.platform)
 
     assert calls == [
         "subscription:gpu-operator-certified",
@@ -741,7 +748,7 @@ def test_prepare_nfd_delegates_to_bootstrap_command(
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    prepare_toolbox.prepare_nfd(config)
+    prepare_toolbox.prepare_nfd(platform=config.platform)
 
     assert calls == [
         "subscription:nfd",
@@ -765,7 +772,10 @@ def test_apply_datasciencecluster_delegates_to_toolbox_command(
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    prepare_toolbox.apply_datasciencecluster(config)
+    prepare_toolbox.apply_datasciencecluster(
+        config_dir=str(config.config_dir),
+        rhoai=config.platform["rhoai"],
+    )
 
     assert captured == {
         "config_dir": str(config.config_dir),
@@ -785,7 +795,7 @@ def test_wait_for_datasciencecluster_ready_delegates_to_toolbox_command(
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    prepare_toolbox.wait_for_datasciencecluster_ready(config)
+    prepare_toolbox.wait_for_datasciencecluster_ready(rhoai=config.platform["rhoai"])
 
     assert captured == {"rhoai": config.platform["rhoai"]}
 
@@ -802,7 +812,10 @@ def test_ensure_gateway_delegates_to_toolbox_command(
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    prepare_toolbox.ensure_gateway(config)
+    prepare_toolbox.ensure_gateway(
+        config_dir=str(config.config_dir),
+        gateway=config.platform["gateway"],
+    )
 
     assert captured == {
         "config_dir": str(config.config_dir),
@@ -917,7 +930,7 @@ def test_rhoai_custom_catalog_deploy_is_skipped_by_default(
         lambda **kwargs: (_ for _ in ()).throw(AssertionError("must not deploy custom catalog")),
     )
 
-    assert prepare_toolbox.deploy_rhoai_custom_catalog(config) == 0
+    assert prepare_toolbox.deploy_rhoai_custom_catalog(rhoai=config.platform["rhoai"]) == 0
 
 
 def test_rhoai_custom_catalog_deploys_when_enabled(
@@ -942,7 +955,7 @@ def test_rhoai_custom_catalog_deploys_when_enabled(
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    assert prepare_toolbox.deploy_rhoai_custom_catalog(config) == 0
+    assert prepare_toolbox.deploy_rhoai_custom_catalog(rhoai=config.platform["rhoai"]) == 0
     assert captured == {
         "catalog_source_name": "rhods-rc",
         "catalog_namespace": "openshift-marketplace",
@@ -966,7 +979,10 @@ def test_rhoai_operator_spec_uses_custom_catalog_when_enabled(
     )
     operator_spec = llmd_runtime.operator_spec_by_package(config.platform, "rhods-operator")
 
-    resolved = prepare_toolbox.rhoai_operator_spec(config, operator_spec)
+    resolved = prepare_toolbox.rhoai_operator_spec(
+        rhoai=config.platform["rhoai"],
+        operator_spec=operator_spec,
+    )
 
     assert resolved["source"] == "rhods-rc"
     assert resolved["source_namespace"] == "openshift-marketplace"
@@ -1176,8 +1192,7 @@ def test_test_phase_deploy_delegates_to_toolbox_command(
         lambda **kwargs: captured.update(kwargs) or "https://example.test",
     )
 
-    ctx = SimpleNamespace()
-    args = SimpleNamespace(
+    result = test_toolbox.deploy_inference_service(
         config_dir=str(config.config_dir),
         namespace=config.namespace,
         inference_service=config.platform["inference_service"],
@@ -1188,10 +1203,8 @@ def test_test_phase_deploy_delegates_to_toolbox_command(
         scheduler_profile=config.scheduler_profile,
         model_cache=config.model_cache,
     )
-    result = test_toolbox.deploy_inference_service_task(args, ctx)
 
-    assert result == "Endpoint resolved: https://example.test"
-    assert ctx.endpoint_url == "https://example.test"
+    assert result == "https://example.test"
     assert captured == {
         "config_dir": str(config.config_dir),
         "namespace": config.namespace,
@@ -1217,17 +1230,15 @@ def test_test_phase_smoke_delegates_to_toolbox_command(
         lambda **kwargs: captured.update(kwargs) or {"choices": [{"text": "ok"}]},
     )
 
-    ctx = SimpleNamespace(endpoint_url="https://example.test")
-    args = SimpleNamespace(
+    response = test_toolbox.run_smoke_request(
         namespace=config.namespace,
         smoke=config.platform["smoke"],
         model=config.model,
         smoke_request=config.smoke_request,
+        endpoint_url="https://example.test",
     )
-    response = test_toolbox.run_smoke_request_task(args, ctx)
 
-    assert response == "Smoke request completed"
-    assert ctx.smoke_response["choices"][0]["text"] == "ok"
+    assert response["choices"][0]["text"] == "ok"
     assert captured == {
         "namespace": config.namespace,
         "smoke": config.platform["smoke"],
@@ -1252,14 +1263,13 @@ def test_test_phase_guidellm_delegates_to_toolbox_command(
         lambda **kwargs: captured.update(kwargs) or 0,
     )
 
-    ctx = SimpleNamespace(endpoint_url="https://example.test")
-    args = SimpleNamespace(
+    result = test_toolbox.run_guidellm_benchmark(
         namespace=config.namespace,
         benchmark=config.benchmark,
+        endpoint_url="https://example.test",
     )
-    result = test_toolbox.run_guidellm_benchmark_task(args, ctx)
 
-    assert result == f"GuideLLM benchmark {config.benchmark['job_name']} completed"
+    assert result is None
     assert captured == {
         "namespace": config.namespace,
         "benchmark": config.benchmark,
@@ -1293,15 +1303,12 @@ def test_test_phase_cleanup_deletes_helpers_and_llmisvc(
         lambda description, **kwargs: wait_descriptions.append(description) or True,
     )
 
-    ctx = SimpleNamespace(
+    test_toolbox.cleanup_runtime_resources(
         namespace=config.namespace,
         inference_service=config.platform["inference_service"],
         smoke=config.platform["smoke"],
         benchmark=config.benchmark,
     )
-    result = test_toolbox.cleanup_runtime_resources_task(SimpleNamespace(), ctx)
-
-    assert result == "Test deployment and helper resources deleted"
     assert (
         "delete",
         "job",
@@ -1348,15 +1355,12 @@ def test_test_phase_cleanup_ignores_helper_delete_timeout(
     monkeypatch.setattr(llmd_runtime, "oc_get_json", lambda *args, **kwargs: {"items": []})
     monkeypatch.setattr(llmd_runtime, "wait_until", lambda *args, **kwargs: True)
 
-    ctx = SimpleNamespace(
+    test_toolbox.cleanup_runtime_resources(
         namespace=config.namespace,
         inference_service=config.platform["inference_service"],
         smoke=config.platform["smoke"],
         benchmark=config.benchmark,
     )
-    result = test_toolbox.cleanup_runtime_resources_task(SimpleNamespace(), ctx)
-
-    assert result == "Test deployment and helper resources deleted"
 
 
 def test_wait_until_reraises_runtime_error() -> None:

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from projects.core.dsl import execute_tasks, shell, task
-from projects.llm_d.runtime import llmd_runtime, phase_inputs
+import logging
+import subprocess
+
+from projects.llm_d.runtime import llmd_runtime
+
+LOGGER = logging.getLogger(__name__)
 
 
 def run(
@@ -21,120 +25,88 @@ def run(
     """
 
     llmd_runtime.init()
-    execute_tasks(locals())
+    cleanup_namespace(
+        namespace=namespace,
+        inference_service_name=inference_service_name,
+        cleanup_timeout_seconds=cleanup_timeout_seconds,
+        benchmark_name=benchmark_name,
+    )
     return 0
 
 
-@task
-def delete_leftovers(args, ctx):
-    """Delete llm_d runtime leftovers"""
-
-    if not llmd_runtime.resource_exists("namespace", args.namespace):
-        return f"Namespace {args.namespace} does not exist; nothing to clean"
-
-    inference_service_name = args.inference_service_name
-    namespace = args.namespace
-    cleanup_timeout_seconds = args.cleanup_timeout_seconds
-    benchmark_names = {"guidellm-benchmark"}
-    if args.benchmark_name:
-        benchmark_names.add(args.benchmark_name)
-
-    shell.run(
-        f"oc delete llminferenceservice {inference_service_name} "
-        f"-n {namespace} --ignore-not-found=true",
-        check=False,
-    )
-
-    for benchmark_name in sorted(benchmark_names):
-        shell.run(
-            f"oc delete job,pvc {benchmark_name} -n {namespace} --ignore-not-found=true",
-            check=False,
-        )
-        shell.run(
-            f"oc delete pod {benchmark_name}-copy -n {namespace} --ignore-not-found=true",
-            check=False,
-        )
-
-    shell.run(
-        f'oc delete job -n {namespace} -l "forge.openshift.io/project=llm_d" '
-        "--ignore-not-found=true",
-        check=False,
-    )
-    shell.run(
-        f'oc delete pod -n {namespace} -l "forge.openshift.io/project=llm_d" '
-        "--ignore-not-found=true",
-        check=False,
-    )
-    shell.run(
-        f"oc delete pvc -n {namespace} "
-        '-l "forge.openshift.io/project=llm_d,forge.openshift.io/preserve!=true" '
-        "--ignore-not-found=true",
-        check=False,
-    )
-
-    llmd_runtime.wait_until(
-        f"llminferenceservice/{inference_service_name} deletion in {namespace}",
-        timeout_seconds=cleanup_timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: (
-            not llmd_runtime.resource_exists(
-                "llminferenceservice", inference_service_name, namespace=namespace
-            )
-        ),
-    )
-
-    llmd_runtime.wait_until(
-        f"llm-d workload pods deletion in {namespace}",
-        timeout_seconds=cleanup_timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: _llm_d_pods_gone(namespace, inference_service_name),
-    )
-
-    return f"Cleanup finished for namespace {namespace}"
-
-
-def delete_run_leftovers(inputs: phase_inputs.CleanupInputs) -> None:
-    if not llmd_runtime.resource_exists("namespace", inputs.namespace):
+def cleanup_namespace(
+    *,
+    namespace: str,
+    inference_service_name: str,
+    cleanup_timeout_seconds: int,
+    benchmark_name: str | None = None,
+) -> None:
+    if not llmd_runtime.resource_exists("namespace", namespace):
         return
 
-    inference_service_name = inputs.platform["inference_service"]["name"]
-    namespace = inputs.namespace
-    cleanup_timeout_seconds = inputs.platform["cluster"]["cleanup_timeout_seconds"]
     benchmark_names = {"guidellm-benchmark"}
-    if inputs.benchmark:
-        benchmark_names.add(inputs.benchmark["job_name"])
+    if benchmark_name:
+        benchmark_names.add(benchmark_name)
 
-    shell.run(
-        f"oc delete llminferenceservice {inference_service_name} "
-        f"-n {namespace} --ignore-not-found=true",
-        check=False,
+    _best_effort_delete(
+        "llminferenceservice",
+        "delete",
+        "llminferenceservice",
+        inference_service_name,
+        "-n",
+        namespace,
+        "--ignore-not-found=true",
     )
 
-    for benchmark_name in sorted(benchmark_names):
-        shell.run(
-            f"oc delete job,pvc {benchmark_name} -n {namespace} --ignore-not-found=true",
-            check=False,
+    for current_benchmark_name in sorted(benchmark_names):
+        _best_effort_delete(
+            "benchmark helper job and pvc",
+            "delete",
+            "job,pvc",
+            current_benchmark_name,
+            "-n",
+            namespace,
+            "--ignore-not-found=true",
         )
-        shell.run(
-            f"oc delete pod {benchmark_name}-copy -n {namespace} --ignore-not-found=true",
-            check=False,
+        _best_effort_delete(
+            "benchmark helper copy pod",
+            "delete",
+            "pod",
+            f"{current_benchmark_name}-copy",
+            "-n",
+            namespace,
+            "--ignore-not-found=true",
         )
 
-    shell.run(
-        f'oc delete job -n {namespace} -l "forge.openshift.io/project=llm_d" '
+    _best_effort_delete(
+        "llm_d jobs",
+        "delete",
+        "job",
+        "-n",
+        namespace,
+        "-l",
+        "forge.openshift.io/project=llm_d",
         "--ignore-not-found=true",
-        check=False,
     )
-    shell.run(
-        f'oc delete pod -n {namespace} -l "forge.openshift.io/project=llm_d" '
+    _best_effort_delete(
+        "llm_d pods",
+        "delete",
+        "pod",
+        "-n",
+        namespace,
+        "-l",
+        "forge.openshift.io/project=llm_d",
         "--ignore-not-found=true",
-        check=False,
     )
-    shell.run(
-        f"oc delete pvc -n {namespace} "
-        '-l "forge.openshift.io/project=llm_d,forge.openshift.io/preserve!=true" '
+    _best_effort_delete(
+        "llm_d non-preserved pvcs",
+        "delete",
+        "pvc",
+        "-n",
+        namespace,
+        "-l",
+        "forge.openshift.io/project=llm_d,forge.openshift.io/preserve!=true",
         "--ignore-not-found=true",
-        check=False,
     )
 
     llmd_runtime.wait_until(
@@ -154,6 +126,13 @@ def delete_run_leftovers(inputs: phase_inputs.CleanupInputs) -> None:
         interval_seconds=10,
         predicate=lambda: _llm_d_pods_gone(namespace, inference_service_name),
     )
+
+
+def _best_effort_delete(description: str, *oc_args: str) -> None:
+    try:
+        llmd_runtime.oc(*oc_args, check=False, timeout_seconds=60)
+    except subprocess.TimeoutExpired:
+        LOGGER.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
 
 
 def _llm_d_pods_gone(namespace: str, inference_service_name: str) -> bool:

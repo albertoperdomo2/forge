@@ -6,6 +6,7 @@ import logging
 
 from projects.core.dsl import execute_tasks, task, toolbox
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.toolbox import toolbox_helper
 
 LOGGER = logging.getLogger(__name__)
 
@@ -176,7 +177,7 @@ def capture_model_cache_state(
     config: phase_inputs.PrepareModelCacheInputs, cache_spec: llmd_runtime.ModelCacheSpec
 ) -> None:
     artifact_dir = config.artifact_dir / "artifacts" / "model-cache"
-    llmd_runtime.write_json(
+    toolbox_helper.write_json(
         artifact_dir / "spec.json",
         {
             "pvc_name": cache_spec.pvc_name,
@@ -217,7 +218,7 @@ def capture_model_cache_state(
             capture_output=True,
         )
         if log_result.returncode == 0 and log_result.stdout:
-            llmd_runtime.write_text(artifact_dir / f"{pod_name}.log", log_result.stdout)
+            toolbox_helper.write_text(artifact_dir / f"{pod_name}.log", log_result.stdout)
 
 
 def capture_resource_yaml(
@@ -240,7 +241,7 @@ def capture_resource_yaml(
         capture_output=True,
     )
     if result.returncode == 0 and result.stdout:
-        llmd_runtime.write_text(destination, result.stdout)
+        toolbox_helper.write_text(destination, result.stdout)
 
 
 main = toolbox.create_toolbox_main(run)

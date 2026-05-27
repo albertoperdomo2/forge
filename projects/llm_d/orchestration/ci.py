@@ -39,7 +39,17 @@ def load_runtime_configuration(*, cwd=None, artifact_dir=None):
 
 def run_prepare_phase() -> int:
     config = load_runtime_configuration()
-    return run_prepare_sequence(config)
+    return run_prepare_sequence(
+        artifact_dir=config.artifact_dir,
+        config_dir=str(config.config_dir),
+        namespace=config.namespace,
+        namespace_is_managed=config.namespace_is_managed,
+        platform=config.platform,
+        model_key=config.model_key,
+        model=config.model,
+        model_cache=config.model_cache,
+        benchmark=config.benchmark,
+    )
 
 
 def run_test_phase() -> int:

@@ -8,6 +8,7 @@ from typing import Any
 
 from projects.core.dsl import execute_tasks, task, toolbox
 from projects.llm_d.runtime import llmd_runtime
+from projects.llm_d.toolbox import toolbox_helper
 
 
 def run(
@@ -66,7 +67,7 @@ def run_smoke_request(
         "max_tokens": smoke_request["max_tokens"],
         "temperature": smoke_request["temperature"],
     }
-    llmd_runtime.write_json(artifact_dir / "artifacts" / "smoke.request.json", payload)
+    toolbox_helper.write_json(artifact_dir / "artifacts" / "smoke.request.json", payload)
 
     llmd_runtime.oc(
         "delete",
@@ -129,7 +130,7 @@ def run_smoke_request(
     if not response.get("choices"):
         raise RuntimeError(f"Invalid smoke response payload: {result.stdout}")
 
-    llmd_runtime.write_json(artifact_dir / "artifacts" / "smoke.response.json", response)
+    toolbox_helper.write_json(artifact_dir / "artifacts" / "smoke.response.json", response)
     return response
 
 
@@ -155,7 +156,7 @@ def capture_smoke_state(*, artifact_dir: Path, namespace: str, smoke: dict) -> N
         capture_output=True,
     )
     if result.returncode == 0 and result.stdout:
-        llmd_runtime.write_text(artifacts_dir / "smoke_job.logs", result.stdout)
+        toolbox_helper.write_text(artifacts_dir / "smoke_job.logs", result.stdout)
 
 
 def capture_get(
@@ -176,7 +177,7 @@ def capture_get(
     args.extend(["-o", output])
     result = llmd_runtime.oc(*args, check=False, capture_output=True)
     if result.returncode == 0 and result.stdout:
-        llmd_runtime.write_text(destination, result.stdout)
+        toolbox_helper.write_text(destination, result.stdout)
 
 
 main = toolbox.create_toolbox_main(run)

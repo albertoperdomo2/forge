@@ -6,6 +6,7 @@ from pathlib import Path
 
 from projects.core.dsl import execute_tasks, task, toolbox
 from projects.llm_d.runtime import llmd_runtime
+from projects.llm_d.toolbox import toolbox_helper
 
 
 def run(
@@ -144,7 +145,7 @@ def deploy_llmisvc(
             gateway=gateway,
         ),
     )
-    llmd_runtime.write_text(artifact_dir / "artifacts" / "endpoint.url", f"{endpoint_url}\n")
+    toolbox_helper.write_text(artifact_dir / "artifacts" / "endpoint.url", f"{endpoint_url}\n")
     return endpoint_url
 
 
