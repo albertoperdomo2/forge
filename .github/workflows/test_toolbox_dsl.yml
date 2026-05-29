@@ -1,5 +1,6 @@
-# Python tests for repo-managed suites discovered via pyproject testpaths.
-name: Python test suites
+# Unit tests for projects/core/dsl (task decorators, execute_tasks, failure/always/skip)
+# and projects/core/toolbox (unified toolbox script).
+name: Toolbox DSL and Core tests
 
 on:
   pull_request:
@@ -35,6 +36,7 @@ jobs:
         run: |
           set -o errexit
           # Tree + docstrings (what is being tested), then execute with one line per test + result.
+          # This runs both DSL tests (test_dsl_*.py) and toolbox tests (test_run_toolbox*.py)
           python -m pytest --collect-only -vv -o addopts='-ra --strict-markers --strict-config'
           echo ""
           python -m pytest -vv -o addopts='-ra --strict-markers --strict-config'
