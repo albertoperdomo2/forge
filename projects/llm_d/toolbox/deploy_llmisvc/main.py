@@ -12,9 +12,9 @@ from projects.core.dsl.utils.k8s import (
     oc_get_json,
     wait_until,
 )
-from projects.llm_d.runtime import llmd_runtime
 from projects.llm_d.runtime.runtime_config import init as runtime_init
 from projects.llm_d.toolbox import toolbox_helper
+from projects.llm_d.toolbox.deploy_llmisvc.utils import render_inference_service_from_parts
 
 
 def run(
@@ -105,7 +105,7 @@ def deploy_llmisvc(
         predicate=_old_pods_gone,
     )
 
-    manifest = llmd_runtime.render_inference_service_from_parts(
+    manifest = render_inference_service_from_parts(
         config_dir=config_dir,
         namespace=namespace,
         inference_service=inference_service,

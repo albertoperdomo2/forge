@@ -10,8 +10,9 @@ from projects.core.dsl.utils.k8s import (
     resource_exists,
     wait_until,
 )
-from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.runtime import phase_inputs
 from projects.llm_d.runtime.runtime_config import init as runtime_init
+from projects.llm_d.toolbox.ensure_gateway.utils import render_gateway
 
 
 def run(
@@ -54,7 +55,7 @@ def ensure_gateway(args, ctx):
             raise RuntimeError(
                 f"Required gateway {gateway['name']} does not exist in {gateway['namespace']}"
             )
-        manifest = llmd_runtime.render_gateway(config)
+        manifest = render_gateway(config)
         apply_manifest(config.artifact_dir / "src" / "gateway.yaml", manifest)
 
     def _gateway_programmed() -> bool:

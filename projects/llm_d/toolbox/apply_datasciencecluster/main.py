@@ -7,8 +7,9 @@ from projects.core.dsl.utils.k8s import (
     apply_manifest,
     oc,
 )
-from projects.llm_d.runtime import llmd_runtime, phase_inputs
+from projects.llm_d.runtime import phase_inputs
 from projects.llm_d.runtime.runtime_config import init as runtime_init
+from projects.llm_d.toolbox.apply_datasciencecluster.utils import render_datasciencecluster
 
 
 def run(
@@ -45,7 +46,7 @@ def apply_datasciencecluster(args, ctx):
         model_cache={},
         benchmark=None,
     )
-    manifest = llmd_runtime.render_datasciencecluster(config)
+    manifest = render_datasciencecluster(config)
     apply_manifest(config.artifact_dir / "src" / "datasciencecluster.yaml", manifest)
     oc(
         "get",

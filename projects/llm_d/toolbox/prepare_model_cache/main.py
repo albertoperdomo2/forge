@@ -14,8 +14,21 @@ from projects.core.dsl.utils.k8s import (
     wait_for_job_completion,
     wait_until,
 )
-from projects.llm_d.runtime import llmd_runtime, phase_inputs
-from projects.llm_d.runtime.runtime_config import init as runtime_init
+from projects.llm_d.runtime import phase_inputs
+from projects.llm_d.runtime.llmd_runtime import (
+    annotate_model_cache_pvc,
+    model_cache_pvc_ready,
+    pvc_access_mode_matches,
+    render_model_cache_job,
+)
+from projects.llm_d.runtime.runtime_config import (
+    ModelCacheSpec,
+    resolve_model_cache,
+)
+from projects.llm_d.runtime.runtime_config import (
+    init as runtime_init,
+)
+from projects.llm_d.runtime.runtime_manifests import render_model_cache_pvc
 from projects.llm_d.toolbox import toolbox_helper
 
 logger = logging.getLogger("TOOLBOX")
@@ -57,7 +70,7 @@ def prepare_model_cache(args, ctx):
         model=args.model,
         model_cache=args.model_cache,
     )
-    cache_spec = llmd_runtime.resolve_model_cache(config)
+    cache_spec = resolve_model_cache(config)
     if not cache_spec:
         logger.info("Model cache disabled for namespace=%s", config.namespace)
         return "Model cache disabled"
@@ -70,7 +83,7 @@ def prepare_model_cache(args, ctx):
         )
 
     ensure_model_cache_pvc(config, cache_spec)
-    if llmd_runtime.model_cache_pvc_ready(cache_spec):
+    if model_cache_pvc_ready(cache_spec):
         logger.info(
             "Model cache PVC %s already contains %s; skipping download",
             cache_spec.pvc_name,
@@ -80,13 +93,13 @@ def prepare_model_cache(args, ctx):
         return f"Model cache already populated in {cache_spec.pvc_name}"
 
     run_model_cache_download_job(config, cache_spec)
-    llmd_runtime.annotate_model_cache_pvc(cache_spec)
+    annotate_model_cache_pvc(cache_spec)
     capture_model_cache_state(config, cache_spec)
     return f"Model cache step finished for namespace {config.namespace}"
 
 
 def run_prepare_model_cache(config: phase_inputs.PrepareModelCacheInputs) -> int:
-    cache_spec = llmd_runtime.resolve_model_cache(config)
+    cache_spec = resolve_model_cache(config)
     if not cache_spec:
         logger.info("Model cache disabled for preset=%s", config.preset_name)
         return 0
@@ -99,7 +112,7 @@ def run_prepare_model_cache(config: phase_inputs.PrepareModelCacheInputs) -> int
         )
 
     ensure_model_cache_pvc(config, cache_spec)
-    if llmd_runtime.model_cache_pvc_ready(cache_spec):
+    if model_cache_pvc_ready(cache_spec):
         logger.info(
             "Model cache PVC %s already contains %s; skipping download",
             cache_spec.pvc_name,
@@ -109,13 +122,13 @@ def run_prepare_model_cache(config: phase_inputs.PrepareModelCacheInputs) -> int
         return 0
 
     run_model_cache_download_job(config, cache_spec)
-    llmd_runtime.annotate_model_cache_pvc(cache_spec)
+    annotate_model_cache_pvc(cache_spec)
     capture_model_cache_state(config, cache_spec)
     return 0
 
 
 def ensure_model_cache_pvc(
-    config: phase_inputs.PrepareModelCacheInputs, cache_spec: llmd_runtime.ModelCacheSpec
+    config: phase_inputs.PrepareModelCacheInputs, cache_spec: ModelCacheSpec
 ) -> None:
     existing = oc_get_json(
         "persistentvolumeclaim",
@@ -125,7 +138,7 @@ def ensure_model_cache_pvc(
     )
     if existing:
         actual_modes = existing.get("spec", {}).get("accessModes", [])
-        if not llmd_runtime.pvc_access_mode_matches(actual_modes, cache_spec.access_mode):
+        if not pvc_access_mode_matches(actual_modes, cache_spec.access_mode):
             raise RuntimeError(
                 f"PVC {cache_spec.pvc_name} exists with access modes {actual_modes}, expected {cache_spec.access_mode}"
             )
@@ -140,12 +153,12 @@ def ensure_model_cache_pvc(
 
     apply_manifest(
         config.artifact_dir / "src" / "model-cache-pvc.yaml",
-        llmd_runtime.render_model_cache_pvc(cache_spec),
+        render_model_cache_pvc(cache_spec),
     )
 
 
 def run_model_cache_download_job(
-    config: phase_inputs.PrepareModelCacheInputs, cache_spec: llmd_runtime.ModelCacheSpec
+    config: phase_inputs.PrepareModelCacheInputs, cache_spec: ModelCacheSpec
 ) -> None:
     oc(
         "delete",
@@ -167,7 +180,7 @@ def run_model_cache_download_job(
 
     apply_manifest(
         config.artifact_dir / "src" / "model-cache-job.yaml",
-        llmd_runtime.render_model_cache_job(config, cache_spec),
+        render_model_cache_job(config, cache_spec),
     )
 
     try:
@@ -182,7 +195,7 @@ def run_model_cache_download_job(
 
 
 def capture_model_cache_state(
-    config: phase_inputs.PrepareModelCacheInputs, cache_spec: llmd_runtime.ModelCacheSpec
+    config: phase_inputs.PrepareModelCacheInputs, cache_spec: ModelCacheSpec
 ) -> None:
     artifact_dir = config.artifact_dir / "artifacts" / "model-cache"
     toolbox_helper.write_json(

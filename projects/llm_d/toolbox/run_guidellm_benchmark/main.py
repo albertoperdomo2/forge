@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from pathlib import Path
 
@@ -12,9 +13,15 @@ from projects.core.dsl.utils.k8s import (
     oc_get_json,
     wait_until,
 )
-from projects.llm_d.runtime import llmd_runtime
 from projects.llm_d.runtime.runtime_config import init as runtime_init
 from projects.llm_d.toolbox import toolbox_helper
+from projects.llm_d.toolbox.run_guidellm_benchmark.utils import (
+    render_guidellm_copy_pod_from_parts,
+    render_guidellm_job_from_parts,
+    render_guidellm_pvc_from_parts,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def run(
@@ -71,7 +78,7 @@ def _best_effort_delete(description: str, *oc_args: str) -> None:
     try:
         oc(*oc_args, check=False, timeout_seconds=60)
     except subprocess.TimeoutExpired:
-        llmd_runtime.logger.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
+        logger.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
 
 
 @task
@@ -83,14 +90,14 @@ def create_guidellm_resources_task(args, ctx):
 
     apply_manifest(
         args.artifact_dir / "src" / "guidellm-pvc.yaml",
-        llmd_runtime.render_guidellm_pvc_from_parts(
+        render_guidellm_pvc_from_parts(
             namespace=args.namespace,
             benchmark=args.benchmark,
         ),
     )
     apply_manifest(
         args.artifact_dir / "src" / "guidellm-job.yaml",
-        llmd_runtime.render_guidellm_job_from_parts(
+        render_guidellm_job_from_parts(
             namespace=args.namespace,
             benchmark=args.benchmark,
             endpoint_url=args.endpoint_url,
@@ -174,7 +181,7 @@ def copy_guidellm_results(*, artifact_dir: Path, namespace: str, benchmark: dict
 
     apply_manifest(
         artifact_dir / "src" / "guidellm-copy-pod.yaml",
-        llmd_runtime.render_guidellm_copy_pod_from_parts(
+        render_guidellm_copy_pod_from_parts(
             namespace=namespace,
             benchmark=benchmark,
             node_name=node_name,

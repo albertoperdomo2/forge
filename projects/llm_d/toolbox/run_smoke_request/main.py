@@ -14,9 +14,9 @@ from projects.core.dsl.utils.k8s import (
     wait_for_job_completion,
     wait_until,
 )
-from projects.llm_d.runtime import llmd_runtime
 from projects.llm_d.runtime.runtime_config import init as runtime_init
 from projects.llm_d.toolbox import toolbox_helper
+from projects.llm_d.toolbox.run_smoke_request.utils import render_smoke_request_job_from_parts
 
 
 def run(
@@ -95,7 +95,7 @@ def run_smoke_request(
 
     apply_manifest(
         artifact_dir / "src" / "smoke-job.yaml",
-        llmd_runtime.render_smoke_request_job_from_parts(
+        render_smoke_request_job_from_parts(
             namespace=namespace,
             smoke=smoke,
             endpoint_url=endpoint_url,
