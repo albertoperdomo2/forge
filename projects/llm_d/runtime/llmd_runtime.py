@@ -1,17 +1,28 @@
 from __future__ import annotations
 
-import json
 import logging
-import re
-import shlex
-import subprocess
-import time
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+# Import generic K8s utilities from core DSL
+from projects.core.dsl.utils.k8s import (
+    CommandError,
+    apply_manifest,
+    condition_status,
+    ensure_namespace,
+    job_pod_names,
+    oc,
+    oc_get_json,
+    resource_exists,
+    run_command,
+    wait_for_crd,
+    wait_for_job_completion,
+    wait_for_namespace_deleted,
+    wait_for_pvc_bound,
+    wait_until,
+)
 from projects.llm_d.runtime.runtime_config import (
     CONFIG_DIR,
     ORCHESTRATION_DIR,
@@ -112,175 +123,11 @@ __all__ = [
 ]
 
 
-class CommandError(RuntimeError):
-    """Raised when an external command exits unsuccessfully."""
-
-
-def run_command(
-    args: Iterable[str],
-    *,
-    check: bool = True,
-    capture_output: bool = True,
-    input_text: str | None = None,
-    timeout_seconds: float | None = 300,
-) -> subprocess.CompletedProcess[str]:
-    cmd = [str(arg) for arg in args]
-    logger.info("run: %s", " ".join(shlex.quote(arg) for arg in cmd))
-    try:
-        result = subprocess.run(
-            cmd,
-            check=False,
-            text=True,
-            capture_output=capture_output,
-            input=input_text,
-            timeout=timeout_seconds,
-        )
-    except subprocess.TimeoutExpired:
-        logger.error(
-            "Command timed out after %ss: %s",
-            timeout_seconds,
-            " ".join(shlex.quote(arg) for arg in cmd),
-        )
-        raise
-
-    if capture_output:
-        if result.stdout:
-            logger.info("stdout:\n%s", result.stdout.rstrip())
-        if result.stderr:
-            logger.info("stderr:\n%s", result.stderr.rstrip())
-
-    if check and result.returncode != 0:
-        raise CommandError(
-            f"Command failed with exit code {result.returncode}: "
-            f"{' '.join(shlex.quote(arg) for arg in cmd)}"
-        )
-
-    return result
-
-
-def oc(
-    *args: str,
-    check: bool = True,
-    capture_output: bool = True,
-    input_text: str | None = None,
-    timeout_seconds: float | None = 300,
-) -> subprocess.CompletedProcess[str]:
-    return run_command(
-        ["oc", *args],
-        check=check,
-        capture_output=capture_output,
-        input_text=input_text,
-        timeout_seconds=timeout_seconds,
-    )
-
-
-def apply_manifest(artifact_path: Any, manifest: dict[str, Any]) -> None:
-    write_yaml(artifact_path, manifest)
-    oc("apply", "-f", str(artifact_path))
-
-
-def oc_get_json(
-    kind: str,
-    *,
-    name: str | None = None,
-    namespace: str | None = None,
-    selector: str | None = None,
-    ignore_not_found: bool = False,
-) -> dict[str, Any] | None:
-    args = ["get", kind]
-    if name:
-        args.append(name)
-    if namespace:
-        args.extend(["-n", namespace])
-    if selector:
-        args.extend(["-l", selector])
-    args.extend(["-o", "json"])
-
-    result = oc(*args, check=not ignore_not_found, capture_output=True)
-    if result.returncode != 0:
-        if ignore_not_found and _is_oc_not_found_error(result.stderr):
-            return None
-        raise CommandError(
-            f"oc {' '.join(shlex.quote(arg) for arg in args)} failed with exit code "
-            f"{result.returncode}: {result.stderr.strip()}"
-        )
-    if not result.stdout:
-        raise CommandError(f"oc {' '.join(shlex.quote(arg) for arg in args)} returned no output")
-    return json.loads(result.stdout)
-
-
-def resource_exists(kind: str, name: str, *, namespace: str | None = None) -> bool:
-    return (
-        oc_get_json(
-            kind,
-            name=name,
-            namespace=namespace,
-            ignore_not_found=True,
-        )
-        is not None
-    )
-
-
-def _is_oc_not_found_error(stderr: str | None) -> bool:
-    if not stderr:
-        return False
-
-    normalized = stderr.lower()
-    if "error from server (notfound)" in normalized:
-        return True
-    if "no resources found" in normalized:
-        return True
-
-    return bool(re.search(r"\bnot found\b", normalized))
-
-
-def wait_until(
-    description: str,
-    *,
-    timeout_seconds: int,
-    interval_seconds: int,
-    predicate,
-) -> Any:
-    deadline = time.time() + timeout_seconds
-    last_error: Exception | None = None
-
-    while time.time() < deadline:
-        try:
-            value = predicate()
-            if value:
-                return value
-            last_error = None
-        except Exception as exc:  # pragma: no cover - exercised in integration paths
-            if isinstance(exc, RuntimeError):
-                raise
-            last_error = exc
-            logger.info("waiting for %s: %s", description, exc)
-        time.sleep(interval_seconds)
-
-    if last_error:
-        raise RuntimeError(f"Timed out waiting for {description}: {last_error}") from last_error
-    raise RuntimeError(f"Timed out waiting for {description}")
-
-
-def wait_for_namespace_deleted(namespace: str, timeout_seconds: int) -> None:
-    wait_until(
-        f"namespace/{namespace} deletion",
-        timeout_seconds=timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: not resource_exists("namespace", namespace),
-    )
-
-
-def wait_for_crd(crd_name: str, timeout_seconds: int) -> None:
-    wait_until(
-        f"crd/{crd_name}",
-        timeout_seconds=timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: resource_exists("crd", crd_name),
-    )
-
-
 def wait_for_operator_csv(package: str, namespace: str, timeout_seconds: int) -> dict[str, Any]:
+    """Wait for an operator CSV to be ready in the specified namespace.
+
+    This is LLM-D specific as it deals with operator lifecycle management.
+    """
     selector = f"operators.coreos.com/{package}.{namespace}"
 
     def _csv_ready() -> dict[str, Any] | None:
@@ -301,14 +148,6 @@ def wait_for_operator_csv(package: str, namespace: str, timeout_seconds: int) ->
         interval_seconds=15,
         predicate=_csv_ready,
     )
-
-
-def ensure_namespace(namespace: str, *, labels: dict[str, str] | None = None) -> None:
-    if not resource_exists("namespace", namespace):
-        oc("create", "namespace", namespace)
-
-    if labels:
-        oc("label", "namespace", namespace, "--overwrite", *[f"{k}={v}" for k, v in labels.items()])
 
 
 def ensure_operator_group(namespace: str, package: str) -> None:
@@ -403,82 +242,8 @@ def operator_spec_by_package(platform: dict[str, Any], package: str) -> dict[str
     raise KeyError(f"Unknown operator package in llm_d platform config: {package}")
 
 
-def condition_status(resource: dict[str, Any], condition_type: str) -> str | None:
-    for condition in resource.get("status", {}).get("conditions", []):
-        if condition.get("type") == condition_type:
-            return condition.get("status")
-    return None
-
-
 def pvc_access_mode_matches(actual_modes: list[str], expected_mode: str) -> bool:
     return expected_mode in actual_modes
-
-
-def wait_for_pvc_bound(pvc_name: str, namespace: str, *, timeout_seconds: int) -> dict[str, Any]:
-    def _pvc_bound() -> dict[str, Any] | None:
-        payload = oc_get_json(
-            "persistentvolumeclaim",
-            name=pvc_name,
-            namespace=namespace,
-            ignore_not_found=True,
-        )
-        if not payload:
-            return None
-        if payload.get("status", {}).get("phase") == "Bound":
-            return payload
-        return None
-
-    return wait_until(
-        f"persistentvolumeclaim/{pvc_name} bound in {namespace}",
-        timeout_seconds=timeout_seconds,
-        interval_seconds=5,
-        predicate=_pvc_bound,
-    )
-
-
-def wait_for_job_completion(
-    job_name: str, namespace: str, *, timeout_seconds: int, interval_seconds: int = 10
-) -> dict[str, Any]:
-    def _job_completed() -> dict[str, Any] | None:
-        payload = oc_get_json(
-            "job",
-            name=job_name,
-            namespace=namespace,
-            ignore_not_found=True,
-        )
-        if not payload:
-            return None
-        status = payload.get("status", {})
-        if status.get("succeeded", 0):
-            return payload
-        failed_count = status.get("failed", 0)
-        for condition in status.get("conditions", []):
-            if condition.get("type") == "Failed" and condition.get("status") == "True":
-                raise RuntimeError(
-                    f"job/{job_name} failed: {condition.get('reason') or 'unknown reason'}"
-                )
-        if failed_count:
-            raise RuntimeError(f"job/{job_name} failed after {failed_count} attempt(s)")
-        return None
-
-    return wait_until(
-        f"job/{job_name} completion in {namespace}",
-        timeout_seconds=timeout_seconds,
-        interval_seconds=interval_seconds,
-        predicate=_job_completed,
-    )
-
-
-def job_pod_names(job_name: str, namespace: str) -> list[str]:
-    payload = oc_get_json(
-        "pods",
-        namespace=namespace,
-        selector=f"job-name={job_name}",
-        ignore_not_found=True,
-    )
-    if not payload:
-        return []
-    return [item["metadata"]["name"] for item in payload.get("items", [])]
 
 
 def resolve_default_serviceaccount_image_pull_secret(namespace: str) -> str | None:
