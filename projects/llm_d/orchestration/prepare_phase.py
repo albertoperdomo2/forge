@@ -17,7 +17,7 @@ from projects.llm_d.toolbox.wait_datasciencecluster_ready import (
     main as wait_datasciencecluster_ready_command,
 )
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def verify_oc_access() -> None:
@@ -58,7 +58,7 @@ def ensure_operator_subscription(operator_spec: dict[str, str]) -> dict[str, obj
 def deploy_rhoai_custom_catalog(*, rhoai: dict) -> int:
     custom_catalog = rhoai["custom_catalog"]
     if not custom_catalog["enabled"]:
-        LOGGER.info("RHOAI custom catalog disabled; using default catalog source")
+        logger.info("RHOAI custom catalog disabled; using default catalog source")
         return 0
 
     if not custom_catalog.get("image"):

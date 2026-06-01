@@ -8,7 +8,7 @@ from projects.core.dsl import execute_tasks, task, toolbox
 from projects.llm_d.runtime import llmd_runtime, phase_inputs
 from projects.llm_d.toolbox import toolbox_helper
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger("TOOLBOX")
 
 
 def run(
@@ -49,11 +49,11 @@ def prepare_model_cache(args, ctx):
     )
     cache_spec = llmd_runtime.resolve_model_cache(config)
     if not cache_spec:
-        LOGGER.info("Model cache disabled for namespace=%s", config.namespace)
+        logger.info("Model cache disabled for namespace=%s", config.namespace)
         return "Model cache disabled"
 
     if config.namespace_is_managed:
-        LOGGER.warning(
+        logger.warning(
             "Model cache PVC %s lives in managed namespace %s. Namespace cleanup will remove it; cache reuse requires a stable namespace override.",
             cache_spec.pvc_name,
             cache_spec.namespace,
@@ -61,7 +61,7 @@ def prepare_model_cache(args, ctx):
 
     ensure_model_cache_pvc(config, cache_spec)
     if llmd_runtime.model_cache_pvc_ready(cache_spec):
-        LOGGER.info(
+        logger.info(
             "Model cache PVC %s already contains %s; skipping download",
             cache_spec.pvc_name,
             cache_spec.source_uri,
@@ -78,11 +78,11 @@ def prepare_model_cache(args, ctx):
 def run_prepare_model_cache(config: phase_inputs.PrepareModelCacheInputs) -> int:
     cache_spec = llmd_runtime.resolve_model_cache(config)
     if not cache_spec:
-        LOGGER.info("Model cache disabled for preset=%s", config.preset_name)
+        logger.info("Model cache disabled for preset=%s", config.preset_name)
         return 0
 
     if config.namespace_is_managed:
-        LOGGER.warning(
+        logger.warning(
             "Model cache PVC %s lives in managed namespace %s. Namespace cleanup will remove it; cache reuse requires a stable namespace override.",
             cache_spec.pvc_name,
             cache_spec.namespace,
@@ -90,7 +90,7 @@ def run_prepare_model_cache(config: phase_inputs.PrepareModelCacheInputs) -> int
 
     ensure_model_cache_pvc(config, cache_spec)
     if llmd_runtime.model_cache_pvc_ready(cache_spec):
-        LOGGER.info(
+        logger.info(
             "Model cache PVC %s already contains %s; skipping download",
             cache_spec.pvc_name,
             cache_spec.source_uri,

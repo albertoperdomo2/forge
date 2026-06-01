@@ -5,7 +5,7 @@ import subprocess
 
 from projects.llm_d.runtime import llmd_runtime
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def run(
@@ -132,7 +132,7 @@ def _best_effort_delete(description: str, *oc_args: str) -> None:
     try:
         llmd_runtime.oc(*oc_args, check=False, timeout_seconds=60)
     except subprocess.TimeoutExpired:
-        LOGGER.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
+        logger.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
 
 
 def _llm_d_pods_gone(namespace: str, inference_service_name: str) -> bool:

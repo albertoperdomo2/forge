@@ -13,7 +13,7 @@ from projects.llm_d.toolbox.deploy_llmisvc import main as deploy_llmisvc
 from projects.llm_d.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_command
 from projects.llm_d.toolbox.run_smoke_request import main as run_smoke_request_command
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def run(
@@ -270,9 +270,9 @@ def _run_finalizer(
         callback(**kwargs)
     except Exception:
         if primary_exc is None:
-            LOGGER.exception("Finalizer failed: %s", description)
+            logger.exception("Finalizer failed: %s", description)
             return finalizer_exc or sys.exc_info()
-        LOGGER.exception("Ignoring %s failure after primary test failure", description)
+        logger.exception("Ignoring %s failure after primary test failure", description)
     return finalizer_exc
 
 
@@ -280,7 +280,7 @@ def _best_effort_delete(description: str, *oc_args: str) -> None:
     try:
         llmd_runtime.oc(*oc_args, check=False, timeout_seconds=60)
     except subprocess.TimeoutExpired:
-        LOGGER.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
+        logger.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
 
 
 def _llm_d_pods_gone(namespace: str, inference_service_name: str) -> bool:
