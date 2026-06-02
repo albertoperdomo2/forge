@@ -6,7 +6,6 @@ from projects.core.dsl import entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils import write_text
 from projects.core.dsl.utils.k8s import (
     apply_manifest,
-    condition_status,
     oc,
     oc_get_json,
 )
@@ -91,7 +90,12 @@ def apply_inference_service(args, ctx):
         scheduler_profile=args.scheduler_profile,
         model_cache=args.model_cache,
     )
-    apply_manifest(args.artifact_dir / "src" / "llminferenceservice.yaml", manifest)
+
+    # Ensure the src directory exists
+    src_dir = args.artifact_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+
+    apply_manifest(src_dir / "llminferenceservice.yaml", manifest)
     return f"Applied LLMInferenceService manifest for {ctx.service_name}"
 
 
@@ -113,10 +117,48 @@ def wait_pods_appear(args, ctx):
 def wait_service_ready(args, ctx):
     """Wait for LLMInferenceService to be ready"""
 
-    payload = oc_get_json("llminferenceservice", name=ctx.service_name, namespace=args.namespace)
-    if condition_status(payload, "Ready") == "True":
-        return f"LLMInferenceService {ctx.service_name} ready"
-    return False  # Retry
+    # Query only the status field and show output
+    result = oc(
+        "get",
+        "llminferenceservice",
+        ctx.service_name,
+        "-n",
+        args.namespace,
+        "-o",
+        "jsonpath={.status}",
+        capture_output=True,
+        log_stdout=True,  # Show the output
+    )
+
+    if not result.stdout.strip():
+        return "Waiting for LLMInferenceService status to appear"
+
+    # Try to parse the status JSON
+    try:
+        import json
+
+        status = json.loads(result.stdout)
+
+        # Check for Ready condition
+        conditions = status.get("conditions", [])
+        ready_condition = None
+        for condition in conditions:
+            if condition.get("type") == "Ready":
+                ready_condition = condition
+                break
+
+        if ready_condition:
+            if ready_condition.get("status") == "True":
+                return f"LLMInferenceService {ctx.service_name} ready"
+            else:
+                reason = ready_condition.get("reason", "Unknown")
+                message = ready_condition.get("message", "No message")
+                return f"Waiting for Ready condition - Reason: {reason}, Message: {message}"
+        else:
+            return "Waiting for Ready condition to appear in status"
+
+    except (json.JSONDecodeError, KeyError) as e:
+        return f"Waiting for valid status - Parse error: {e}"
 
 
 @retry(attempts=90, delay=10, backoff=1.0)
