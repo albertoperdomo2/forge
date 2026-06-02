@@ -13,11 +13,11 @@ from projects.core.dsl.utils.k8s import (
     resource_exists,
     wait_until,
 )
+from projects.guidellm.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_command
+from projects.guidellm.toolbox.run_smoke_request import main as run_smoke_request_command
+from projects.kserve.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
+from projects.kserve.toolbox.deploy_llmisvc import main as deploy_llmisvc
 from projects.llm_d.runtime.runtime_config import init as runtime_init
-from projects.llm_d.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
-from projects.llm_d.toolbox.deploy_llmisvc import main as deploy_llmisvc
-from projects.llm_d.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_command
-from projects.llm_d.toolbox.run_smoke_request import main as run_smoke_request_command
 
 logger = logging.getLogger(__name__)
 

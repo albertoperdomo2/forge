@@ -11,16 +11,17 @@ from projects.core.dsl.utils.k8s import (
     oc,
     oc_get_json,
     wait_for_crd,
-    wait_until,
 )
+from projects.gpu_operator.toolbox.bootstrap_gpu_clusterpolicy import (
+    main as bootstrap_gpu_clusterpolicy,
+)
+from projects.gpu_operator.toolbox.bootstrap_nfd_instance import main as bootstrap_nfd_instance
+from projects.kserve.toolbox.ensure_gateway import main as ensure_gateway_command
+from projects.kserve.toolbox.prepare_model_cache.main import run as prepare_model_cache_toolbox_run
 from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_run
 from projects.llm_d.runtime import llmd_runtime
-from projects.llm_d.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_command
-from projects.llm_d.toolbox.bootstrap_gpu_clusterpolicy import main as bootstrap_gpu_clusterpolicy
-from projects.llm_d.toolbox.bootstrap_nfd_instance import main as bootstrap_nfd_instance
-from projects.llm_d.toolbox.ensure_gateway import main as ensure_gateway_command
-from projects.llm_d.toolbox.prepare_model_cache.main import run as prepare_model_cache_toolbox_run
-from projects.llm_d.toolbox.wait_datasciencecluster_ready import (
+from projects.rhoai.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_command
+from projects.rhoai.toolbox.wait_datasciencecluster_ready import (
     main as wait_datasciencecluster_ready_command,
 )
 
@@ -37,6 +38,8 @@ def verify_cluster_version(*, platform: dict) -> None:
 
     openshift_version = (
         payload.get("openshiftVersion")
+        or payload.get("releaseClientVersion")
+        or payload.get("clientVersion", {}).get("gitVersion")
         or payload.get("serverVersion", {}).get("gitVersion")
         or payload.get("serverVersion", {}).get("platform")
     )
@@ -59,6 +62,7 @@ def ensure_operator_subscription(operator_spec: dict[str, str]) -> dict[str, obj
         source_namespace=operator_spec.get("source_namespace", "openshift-marketplace"),
         wait_timeout_seconds=operator_spec["wait_timeout_seconds"],
         display_name=operator_spec.get("display_name", operator_spec["package"]),
+        artifact_dirname_suffix=f"_{operator_spec['package']}",
     )
 
 
@@ -97,51 +101,7 @@ def rhoai_operator_spec(
 
 def prepare_rhcl_operator(*, platform: dict) -> None:
     operator_spec = llmd_runtime.operator_spec_by_package(platform, "rhcl-operator")
-    ensure_global_operator_subscription(operator_spec)
-
-
-def ensure_global_operator_subscription(operator_spec: dict[str, str]) -> None:
-    namespace = operator_spec["namespace"]
-    package = operator_spec["package"]
-
-    ensure_namespace(namespace)
-    operator_groups = oc_get_json(
-        "operatorgroup",
-        namespace=namespace,
-        ignore_not_found=True,
-    )
-    if not any(
-        not item.get("spec", {}).get("targetNamespaces")
-        for item in (operator_groups or {}).get("items", [])
-    ):
-        raise RuntimeError(
-            f"Operator {package} requires a global OperatorGroup in {namespace}, but none exists"
-        )
-
-    subscription = llmd_runtime.desired_subscription(operator_spec)
-    oc("apply", "-f", "-", input_text=json.dumps(subscription))
-
-    def _subscription_reconciled() -> dict[str, object] | None:
-        payload = oc_get_json(
-            "subscription.operators.coreos.com",
-            name=package,
-            namespace=namespace,
-        )
-        if llmd_runtime.subscription_spec_matches(payload.get("spec", {}), subscription["spec"]):
-            return payload
-        return None
-
-    wait_until(
-        f"subscription/{package} reconciliation in {namespace}",
-        timeout_seconds=60,
-        interval_seconds=5,
-        predicate=_subscription_reconciled,
-    )
-    llmd_runtime.wait_for_operator_csv(
-        package,
-        namespace,
-        timeout_seconds=operator_spec["wait_timeout_seconds"],
-    )
+    ensure_operator_subscription(operator_spec)
 
 
 def prepare_cert_manager(*, platform: dict) -> None:
@@ -164,7 +124,6 @@ def prepare_nfd(*, platform: dict) -> None:
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
     bootstrap_nfd_instance.run(
-        gpu_label_selectors=",".join(platform["cluster"]["nfd_gpu_detection_labels"]),
         timeout_seconds=operator_spec["wait_timeout_seconds"],
     )
 

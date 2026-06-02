@@ -15,12 +15,6 @@ from projects.core.dsl.utils.k8s import (
     wait_until,
 )
 from projects.llm_d.runtime import phase_inputs
-from projects.llm_d.runtime.llmd_runtime import (
-    annotate_model_cache_pvc,
-    model_cache_pvc_ready,
-    pvc_access_mode_matches,
-    render_model_cache_job,
-)
 from projects.llm_d.runtime.runtime_config import (
     ModelCacheSpec,
     resolve_model_cache,
@@ -28,7 +22,13 @@ from projects.llm_d.runtime.runtime_config import (
 from projects.llm_d.runtime.runtime_config import (
     init as runtime_init,
 )
-from projects.llm_d.runtime.runtime_manifests import render_model_cache_pvc
+from projects.kserve.toolbox.prepare_model_cache.utils import (
+    annotate_model_cache_pvc,
+    model_cache_pvc_ready,
+    pvc_access_mode_matches,
+    render_model_cache_job,
+    render_model_cache_pvc,
+)
 from projects.llm_d.toolbox import toolbox_helper
 
 logger = logging.getLogger("TOOLBOX")

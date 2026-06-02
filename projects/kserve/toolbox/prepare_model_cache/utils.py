@@ -1,42 +1,53 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any
 
-# Import generic K8s utilities from core DSL
-from projects.core.dsl.utils.k8s import (
-    oc,
-    oc_get_json,
-)
-from projects.llm_d.runtime.runtime_config import (
-    ModelCacheSpec,
-    ResolvedConfig,
-)
-
-logger = logging.getLogger(__name__)
-
-
-def subscription_spec_matches(actual: dict[str, Any], expected: dict[str, Any]) -> bool:
-    keys = ("channel", "installPlanApproval", "name", "source", "sourceNamespace")
-    return all(actual.get(key) == expected.get(key) for key in keys)
-
-
-def operator_spec_by_package(platform: dict[str, Any], package: str) -> dict[str, Any]:
-    operators = platform["operators"]
-    if isinstance(operators, dict):
-        if package in operators:
-            return {"package": package, **operators[package]}
-        raise KeyError(f"Unknown operator package in llm_d platform config: {package}")
-
-    for operator_spec in operators:
-        if operator_spec["package"] == package:
-            return operator_spec
-    raise KeyError(f"Unknown operator package in llm_d platform config: {package}")
+from projects.core.dsl.utils.k8s import oc, oc_get_json
+from projects.llm_d.runtime.runtime_config import ModelCacheSpec, ResolvedConfig
 
 
 def pvc_access_mode_matches(actual_modes: list[str], expected_mode: str) -> bool:
     return expected_mode in actual_modes
+
+
+def annotate_model_cache_pvc(spec: ModelCacheSpec) -> None:
+    oc(
+        "annotate",
+        "persistentvolumeclaim",
+        spec.pvc_name,
+        "-n",
+        spec.namespace,
+        "--overwrite",
+        "forge.openshift.io/model-cache-ready=true",
+        f"forge.openshift.io/model-cache-key={spec.cache_key}",
+        f"forge.openshift.io/model-source-uri={spec.source_uri}",
+        f"forge.openshift.io/model-uri={spec.model_uri}",
+    )
+
+
+def model_cache_pvc_ready(spec: ModelCacheSpec) -> bool:
+    payload = oc_get_json(
+        "persistentvolumeclaim",
+        name=spec.pvc_name,
+        namespace=spec.namespace,
+        ignore_not_found=True,
+    )
+    if not payload:
+        return False
+
+    annotations = payload.get("metadata", {}).get("annotations", {})
+    return (
+        annotations.get("forge.openshift.io/model-cache-ready") == "true"
+        and annotations.get("forge.openshift.io/model-cache-key") == spec.cache_key
+        and annotations.get("forge.openshift.io/model-source-uri") == spec.source_uri
+    )
+
+
+def load_runtime_script(name: str) -> str:
+    # Load scripts from the llm_d runtime scripts directory
+    script_path = Path(__file__).resolve().parent.parent.parent.parent.parent / "llm_d" / "runtime" / "scripts" / name
+    return script_path.read_text(encoding="utf-8")
 
 
 def resolve_default_serviceaccount_image_pull_secret(namespace: str) -> str | None:
@@ -46,16 +57,12 @@ def resolve_default_serviceaccount_image_pull_secret(namespace: str) -> str | No
     if not payload:
         return None
 
-    for item in payload.get("imagePullSecrets", []):
-        name = item.get("name")
-        if name:
-            return name
+    for pull_secret in payload.get("imagePullSecrets", []):
+        secret_name = pull_secret.get("name")
+        if secret_name and secret_name.startswith("default-dockercfg-"):
+            return secret_name
+
     return None
-
-
-def load_runtime_script(name: str) -> str:
-    script_path = Path(__file__).resolve().parent / "scripts" / name
-    return script_path.read_text(encoding="utf-8")
 
 
 def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict[str, Any]:
@@ -168,34 +175,29 @@ def render_model_cache_job(config: ResolvedConfig, spec: ModelCacheSpec) -> dict
     }
 
 
-def model_cache_pvc_ready(spec: ModelCacheSpec) -> bool:
-    payload = oc_get_json(
-        "persistentvolumeclaim",
-        name=spec.pvc_name,
-        namespace=spec.namespace,
-        ignore_not_found=True,
-    )
-    if not payload:
-        return False
-
-    annotations = payload.get("metadata", {}).get("annotations", {})
-    return (
-        annotations.get("forge.openshift.io/model-cache-ready") == "true"
-        and annotations.get("forge.openshift.io/model-cache-key") == spec.cache_key
-        and annotations.get("forge.openshift.io/model-source-uri") == spec.source_uri
-    )
-
-
-def annotate_model_cache_pvc(spec: ModelCacheSpec) -> None:
-    oc(
-        "annotate",
-        "persistentvolumeclaim",
-        spec.pvc_name,
-        "-n",
-        spec.namespace,
-        "--overwrite",
-        "forge.openshift.io/model-cache-ready=true",
-        f"forge.openshift.io/model-cache-key={spec.cache_key}",
-        f"forge.openshift.io/model-source-uri={spec.source_uri}",
-        f"forge.openshift.io/model-uri={spec.model_uri}",
-    )
+def render_model_cache_pvc(spec: ModelCacheSpec) -> dict[str, Any]:
+    manifest: dict[str, Any] = {
+        "apiVersion": "v1",
+        "kind": "PersistentVolumeClaim",
+        "metadata": {
+            "name": spec.pvc_name,
+            "namespace": spec.namespace,
+            "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "forge.openshift.io/project": "llm_d",
+                "forge.openshift.io/model-cache": "true",
+                "forge.openshift.io/preserve": "true",
+            },
+            "annotations": {
+                "forge.openshift.io/model-cache-key": spec.cache_key,
+                "forge.openshift.io/model-source-uri": spec.source_uri,
+            },
+        },
+        "spec": {
+            "accessModes": [spec.access_mode],
+            "resources": {"requests": {"storage": spec.pvc_size}},
+        },
+    }
+    if spec.storage_class_name:
+        manifest["spec"]["storageClassName"] = spec.storage_class_name
+    return manifest
