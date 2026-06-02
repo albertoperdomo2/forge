@@ -8,6 +8,8 @@ import logging
 import os
 import time
 
+from projects.core.library.run import SignalError
+
 from .log import log_task_header
 from .script_manager import get_script_manager
 
@@ -56,7 +58,7 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
         attempts: Number of retry attempts
         delay: Initial delay between retries in seconds
         backoff: Multiplier for delay on each retry
-        retry_on_exceptions: If True, retry on raised exceptions (never on KeyboardInterrupt)
+        retry_on_exceptions: If True, retry on raised exceptions (never on KeyboardInterrupt/SignalError)
         *args, **kwargs: Arguments to pass to the function
 
     Returns:
@@ -249,7 +251,7 @@ def task(func):
             if task_result:
                 task_result._set_result(result)
             return result
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, SignalError):
             raise
         except Exception as e:
             logger.error(f"==> TASK FAILED: {task_name}: {func.__doc__ or 'No description'}")
@@ -336,7 +338,7 @@ def retry(attempts=3, delay=1, backoff=1.0, retry_on_exceptions=False):
         attempts: Number of retry attempts
         delay: Initial delay between retries in seconds
         backoff: Multiplier for delay on each retry
-        retry_on_exceptions: If True, also retry when the task raises (never on KeyboardInterrupt)
+        retry_on_exceptions: If True, also retry when the task raises (never on KeyboardInterrupt/SignalError)
     """
 
     def decorator(func):
