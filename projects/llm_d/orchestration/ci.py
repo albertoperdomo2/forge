@@ -201,10 +201,23 @@ def get_vaults_for_phase(phase: str) -> list[str]:
 def init_vaults_for_phase(phase: str) -> None:
     """Initialize vaults for a specific phase."""
 
-    # Get mandatory vaults for the phase
-    mandatory_vaults = get_vaults_for_phase(phase)
+    # Get global mandatory vaults (always loaded)
+    global_mandatory = get_vaults_for_phase("all")
 
-    optional_vaults = get_vaults_for_phase(f"{phase}-optional")
+    # Get phase-specific mandatory vaults
+    phase_mandatory = get_vaults_for_phase(phase)
+
+    # Combine all mandatory vaults
+    mandatory_vaults = global_mandatory + phase_mandatory
+
+    # Get global optional vaults (always loaded optionally)
+    global_optional = get_vaults_for_phase("all-optional")
+
+    # Get phase-specific optional vaults
+    phase_optional = get_vaults_for_phase(f"{phase}-optional")
+
+    # Combine all optional vaults
+    optional_vaults = global_optional + phase_optional
 
     if not mandatory_vaults and not optional_vaults:
         logger.info(f"No vault to initialize for phase '{phase}'")
@@ -224,13 +237,15 @@ def main(ctx):
     ctx.ensure_object(types.SimpleNamespace)
     init()
 
+    if ctx.invoked_subcommand != "resolve-fournos-config":
+        init_vaults_for_phase(ctx.invoked_subcommand)
+
 
 @main.command()
 @click.pass_context
 @ci_lib.safe_ci_command
 def prepare(ctx) -> int:
     """Prepare phase - Set up environment and dependencies."""
-    init_vaults_for_phase("prepare")
     return run_prepare_phase()
 
 
@@ -239,7 +254,6 @@ def prepare(ctx) -> int:
 @ci_lib.safe_ci_command
 def test(ctx) -> int:
     """Test phase - Execute the main testing logic."""
-    init_vaults_for_phase("test")
     return run_test_phase()
 
 
