@@ -73,7 +73,7 @@ spec:
   executionEngine:
     forge:
       project: rhaiis
-      args: [test, llama-8b, short-workload]
+      args: [test, llama-8b, profile1]
       configOverrides:
         rhaiis.images.nvidia: "quay.io/custom/image:tag"
 ```
@@ -103,21 +103,25 @@ Config overrides (e.g. `rhaiis.images.nvidia`) are applied as variable overrides
 # Activate the virtualenv
 source ~/test_foo/python3_virt/bin/activate
 
-# Dry run
+# Dry run (prints config without deploying)
 python3 -m projects.rhaiis.orchestration.cli test \
-  --model qwen3-0_6b --workload short --namespace kserve-e2e-perf --dry-run
+  --model qwen3-0_6b --workload profile1 --dry-run
+
+# Dry run with a specific model
+python3 -m projects.rhaiis.orchestration.cli test \
+  --model llama-4-scout-fp8 --workload profile2 --dry-run
 
 # Full E2E test
 python3 -m projects.rhaiis.orchestration.cli test \
   --model qwen3-0_6b \
-  --workload short \
+  --workload profile1 \
   --namespace kserve-e2e-perf \
   --image-pull-secret npalaska-image-pull
 
 # Custom rates
 python3 -m projects.rhaiis.orchestration.cli test \
   --model llama-3-1-8b-fp8 \
-  --workload balanced \
+  --workload profile1 \
   --namespace kserve-e2e-perf \
   --image-pull-secret npalaska-image-pull \
   --rates 1,10,50 --max-seconds 60
@@ -125,6 +129,10 @@ python3 -m projects.rhaiis.orchestration.cli test \
 # Cleanup only
 python3 -m projects.rhaiis.orchestration.cli cleanup \
   --deployment-name qwen3-0-6b --namespace kserve-e2e-perf
+
+# CI resolve dry-run (shows what Fournos would resolve)
+PYTHONPATH=$PWD python3 projects/rhaiis/orchestration/ci.py \
+  resolve-fournos-config --dry-run
 ```
 
 ## Result extraction
@@ -141,16 +149,31 @@ Artifacts are stored under `/tmp/forge_<timestamp>/002__run_guidellm_benchmark/a
 
 ## Available models
 
-| Key | Model | Notes |
-|-----|-------|-------|
-| `qwen3-0_6b` | Qwen/Qwen3-0.6B | Small, fast for validation |
-| `llama-3-1-8b-fp8` | RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8 | Medium, max-model-len 16384 |
-| `llama-3-3-70b-fp8` | RedHatAI/Llama-3.3-70B-Instruct-FP8 | Large, tensor-parallel-size 4 |
+52 models from model_furnace are defined in `config.yaml`. Key families:
 
-## Available workloads
+| Family | Key examples | TP size |
+|--------|-------------|---------|
+| Llama-4 Scout | `llama-4-scout`, `llama-4-scout-fp8`, `llama-4-scout-int4` | 2-4 |
+| Llama-4 Maverick | `llama-4-maverick`, `llama-4-maverick-fp8` | 8 |
+| Llama-3.3-70B | `llama-3-3-70b`, `llama-3-3-70b-fp8`, `-w8a8`, `-w4a16` | 4 |
+| Llama-3.1-8B | `llama-3-1-8b`, `llama-3-1-8b-fp8`, `-w8a8`, `-w4a16` | 1 |
+| Llama-3.1-405B | `llama-3-1-405b`, `llama-3-1-405b-fp8`, `-w8a8` | 8 |
+| Granite 3.1 8B | `granite-3-1-8b-instruct`, `-fp8`, `-w4a16`, `-w8a8` | 1 |
+| Mistral Small 3.1 | `mistral-2503`, `-fp8`, `-w4a16`, `-w8a8` | 1 |
+| Qwen3 235B | `qwen3-235b-instruct`, `-fp8` | 4 |
+| DeepSeek | `deepseek-r1-0528`, `deepseek-v3-2`, `deepseek-v4-pro` | 8 |
+| Phi-4 | `phi-4`, `phi-4-fp8`, `-w4a16`, `-w8a8` | 1 |
+| Validation | `qwen3-0_6b` | 1 |
 
-| Key | Data shape | Rates | Max seconds |
-|-----|-----------|-------|-------------|
-| `balanced` | 1000 in / 1000 out | 1, 50, 100, 200 | 180 |
-| `short` | 256 in / 256 out | 1, 50, 100, 200 | 120 |
-| `long-prompt` | 8000 in / 1000 out | 1, 25, 50, 100 | 300 |
+Full list: `grep "^  [a-z]" orchestration/config.yaml`
+
+## Workload profiles
+
+From model_furnace `guidellm_profiles.iterations`:
+
+| Key | Prompt tokens | Output tokens | Rates | Max seconds |
+|-----|--------------|---------------|-------|-------------|
+| `profile1` | 1000 | 1000 | 1, 50, 100, 200, 300 | 450 |
+| `profile2` | 512 (stdev 128) | 2048 (stdev 512) | 1, 50, 100, 200, 300 | 450 |
+| `profile3` | 2048 | 128 | 1, 50, 100, 200, 300 | 450 |
+| `profile4` | 8000 | 1000 | 1, 25, 50, 75, 100 | 450 |

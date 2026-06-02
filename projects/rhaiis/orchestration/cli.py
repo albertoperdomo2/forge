@@ -65,7 +65,7 @@ def cli(ctx):
 
 @cli.command()
 @click.option("--model", "-m", default="qwen3-0_6b", help="Model key from config.yaml")
-@click.option("--workload", "-w", default="balanced", help="Workload profile name")
+@click.option("--workload", "-w", default="profile1", help="Workload profile name")
 @click.option("--namespace", "-n", default=None, help="Kubernetes namespace")
 @click.option("--deployment-name", default=None, help="Deployment name (defaults to model name)")
 @click.option("--accelerator", type=click.Choice(["nvidia", "amd"]), default=None)
