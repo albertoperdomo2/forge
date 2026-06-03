@@ -383,11 +383,11 @@ def _generate_execution_metadata(function_args: dict, caller_frame, meta_dir):
 
     metadata = {
         "execution_metadata": {
+            "file": str(rel_filename),
             "timestamp": datetime.now().isoformat(),
-            "file": rel_filename,
-            "command": function_name,
             "artifact_dir": str(env.ARTIFACT_DIR),
             "working_directory": str(Path.cwd()),
+            "command": function_name,
             "arguments": {},
         }
     }
