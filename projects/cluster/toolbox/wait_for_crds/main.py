@@ -14,7 +14,6 @@ logger = logging.getLogger("DSL")
 def run(
     crd_names: list[str],
     *,
-    timeout_seconds: int = 900,
     display_name: str = "",
 ) -> int:
     """
@@ -22,7 +21,6 @@ def run(
 
     Args:
         crd_names: List of CRD names to wait for
-        timeout_seconds: Maximum time to wait for each CRD
         display_name: Optional human-friendly name used in logs
     """
 
@@ -48,10 +46,8 @@ def validate_parameters(args, ctx):
 
     if not args.crd_names:
         raise ValueError("crd_names list cannot be empty")
-    if args.timeout_seconds <= 0:
-        raise ValueError("timeout_seconds must be positive")
 
-    return f"Will wait for {len(args.crd_names)} CRDs with {args.timeout_seconds}s timeout each"
+    return f"Will wait for {len(args.crd_names)} CRDs"
 
 
 @retry(attempts=90, delay=10, backoff=1.0)

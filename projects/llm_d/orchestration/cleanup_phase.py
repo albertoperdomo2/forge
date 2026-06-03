@@ -23,7 +23,6 @@ def cleanup_namespace(*, namespace: str | None = None) -> None:
         namespace = runtime_config.get_namespace()
     platform = runtime_config.get_platform_config()
     inference_service_name = platform["inference_service"]["name"]
-    cleanup_timeout_seconds = platform["cluster"]["cleanup_timeout_seconds"]
     benchmark = runtime_config.get_benchmark_config()
     benchmark_name = benchmark["job_name"] if benchmark else None
 
@@ -35,6 +34,5 @@ def cleanup_namespace(*, namespace: str | None = None) -> None:
         inference_service_name=inference_service_name,
         smoke_pod_name=None,  # No specific smoke pod name for runtime cleanup
         benchmark_job_name=benchmark_name,
-        cleanup_timeout_seconds=cleanup_timeout_seconds,
         cleanup_all_llm_d_resources=True,  # Enable broad cleanup for runtime
     )
