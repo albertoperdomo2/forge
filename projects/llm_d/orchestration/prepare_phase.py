@@ -5,11 +5,11 @@ import logging
 
 from projects.cluster.toolbox.cluster_deploy_operator import main as cluster_deploy_operator
 from projects.cluster.toolbox.deploy_custom_catalog import main as deploy_custom_catalog
+from projects.cluster.toolbox.wait_for_crds import main as wait_for_crds_command
 from projects.core.dsl.utils.k8s import (
     ensure_namespace,
     oc,
     oc_get_json,
-    wait_for_crd,
 )
 from projects.core.library import vault
 from projects.gpu_operator.toolbox.bootstrap_gpu_clusterpolicy import (
@@ -127,9 +127,10 @@ def prepare_nfd() -> None:
     platform = runtime_config.get_platform_config()
     operator_spec = llmd_runtime.operator_spec_by_package(platform, "nfd")
     ensure_operator_subscription(operator_spec)
-    wait_for_crd(
-        operator_spec["bootstrap_crd"],
+    wait_for_crds_command.run(
+        crd_names=[operator_spec["bootstrap_crd"]],
         timeout_seconds=900,
+        display_name="NFD bootstrap CRD",
     )
     bootstrap_nfd_instance.run()
 
@@ -138,9 +139,10 @@ def prepare_gpu_operator() -> None:
     platform = runtime_config.get_platform_config()
     operator_spec = llmd_runtime.operator_spec_by_package(platform, "gpu-operator-certified")
     ensure_operator_subscription(operator_spec)
-    wait_for_crd(
-        operator_spec["bootstrap_crd"],
+    wait_for_crds_command.run(
+        crd_names=[operator_spec["bootstrap_crd"]],
         timeout_seconds=1800,
+        display_name="GPU Operator bootstrap CRD",
     )
     bootstrap_gpu_clusterpolicy.run()
 
@@ -158,22 +160,22 @@ def prepare_rhoai_operator() -> None:
 def ensure_required_crds_before_dsc() -> None:
     platform = runtime_config.get_platform_config()
     rhoai = platform["rhoai"]
-    for crd_name in rhoai["required_crds_before_dsc"]:
-        wait_for_crd(
-            crd_name,
-            timeout_seconds=1800,
-        )
+    wait_for_crds_command.run(
+        crd_names=rhoai["required_crds_before_dsc"],
+        timeout_seconds=1800,
+        display_name="RHOAI pre-DSC CRDs",
+    )
 
 
 def ensure_required_crds() -> None:
     """Ensure CRDs required after DataScienceCluster deployment"""
     platform = runtime_config.get_platform_config()
     rhoai = platform["rhoai"]
-    for crd_name in rhoai["required_crds_after_dsc"]:
-        wait_for_crd(
-            crd_name,
-            timeout_seconds=1800,
-        )
+    wait_for_crds_command.run(
+        crd_names=rhoai["required_crds_after_dsc"],
+        timeout_seconds=1800,
+        display_name="RHOAI post-DSC CRDs",
+    )
 
 
 def apply_datasciencecluster() -> None:
