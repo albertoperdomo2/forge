@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 
-from projects.core.dsl import entrypoint, execute_tasks, task
-from projects.core.dsl.utils.k8s import wait_for_crd
+from projects.core.dsl import entrypoint, execute_tasks, retry, task
+from projects.core.dsl.utils.k8s import resource_exists
 
 logger = logging.getLogger("DSL")
 
@@ -54,24 +54,19 @@ def validate_parameters(args, ctx):
     return f"Will wait for {len(args.crd_names)} CRDs with {args.timeout_seconds}s timeout each"
 
 
+@retry(attempts=90, delay=10, backoff=1.0)
 @task
 def wait_for_all_crds(args, ctx):
     """Wait for all specified CRDs to exist"""
 
-    failed_crds = []
+    missing_crds = []
 
     for crd_name in args.crd_names:
-        try:
-            logger.info(f"Waiting for CRD {crd_name}...")
-            wait_for_crd(crd_name, timeout_seconds=args.timeout_seconds)
-            logger.info(f"CRD {crd_name} is available")
-        except Exception as e:
-            logger.error(f"Failed to wait for CRD {crd_name}: {e}")
-            failed_crds.append(crd_name)
-            continue
+        if not resource_exists("crd", crd_name):
+            missing_crds.append(crd_name)
 
-    if failed_crds:
-        raise RuntimeError(f"Failed to wait for CRDs: {', '.join(failed_crds)}")
+    if missing_crds:
+        return (False, f"Waiting for CRDs: {', '.join(missing_crds)}")
 
     return f"All {len(args.crd_names)} CRDs are available"
 

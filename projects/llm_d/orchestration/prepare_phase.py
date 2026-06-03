@@ -7,11 +7,11 @@ from projects.cluster.toolbox.cluster_deploy_operator import main as cluster_dep
 from projects.cluster.toolbox.deploy_custom_catalog import main as deploy_custom_catalog
 from projects.cluster.toolbox.wait_for_crds import main as wait_for_crds_command
 from projects.core.dsl.utils.k8s import (
-    ensure_namespace,
     oc,
     oc_get_json,
 )
 from projects.core.library import vault
+from projects.core.orchestration.utils.k8s import ensure_namespace
 from projects.gpu_operator.toolbox.bootstrap_gpu_clusterpolicy import (
     main as bootstrap_gpu_clusterpolicy,
 )

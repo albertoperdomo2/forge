@@ -5,10 +5,8 @@ Kubernetes utilities for DSL tasks
 import json
 import logging
 import re
-import shlex
 import subprocess
 import time
-from collections.abc import Iterable
 from typing import Any
 
 import yaml
@@ -16,59 +14,6 @@ import yaml
 from projects.core.dsl import shell
 
 logger = logging.getLogger(__name__)
-
-
-class CommandError(RuntimeError):
-    """Raised when an external command exits unsuccessfully."""
-
-
-def run_command(
-    args: Iterable[str],
-    *,
-    check: bool = True,
-    capture_output: bool = True,
-    input_text: str | None = None,
-    timeout_seconds: float | None = 300,
-    log_stdout: bool = True,
-    log_stderr: bool = True,
-) -> subprocess.CompletedProcess[str]:
-    """Run a command and return the result.
-
-    Args:
-        args: Command arguments
-        check: Raise CommandError if command fails
-        capture_output: Capture stdout/stderr
-        input_text: Input to send to command
-        timeout_seconds: Command timeout
-        log_stdout: Log stdout to console (default True)
-        log_stderr: Log stderr to console (default True)
-
-    Returns:
-        CompletedProcess result (compatible with subprocess.CompletedProcess)
-
-    Raises:
-        CommandError: If command fails and check=True
-        subprocess.TimeoutExpired: If command times out
-    """
-    cmd = [str(arg) for arg in args]
-    command_str = " ".join(shlex.quote(arg) for arg in cmd)
-
-    try:
-        result = shell.run(
-            command_str,
-            check=check,
-            log_stdout=log_stdout,
-            log_stderr=log_stderr,
-        )
-
-        # Convert shell.CommandResult to subprocess.CompletedProcess for compatibility
-        proc_result = subprocess.CompletedProcess(
-            args=cmd, returncode=result.returncode, stdout=result.stdout, stderr=result.stderr
-        )
-        return proc_result
-
-    except subprocess.CalledProcessError as e:
-        raise CommandError(f"Command failed with exit code {e.returncode}: {command_str}") from e
 
 
 def oc(
@@ -79,27 +24,27 @@ def oc(
     timeout_seconds: float | None = 300,
     log_stdout: bool = True,
     log_stderr: bool = True,
-) -> subprocess.CompletedProcess[str]:
+) -> shell.CommandResult:
     """Run an oc command.
 
     Args:
         *args: Arguments to pass to oc
-        check: Raise CommandError if command fails
-        capture_output: Capture stdout/stderr
-        input_text: Input to send to command
-        timeout_seconds: Command timeout
+        check: Raise subprocess.CalledProcessError if command fails
+        capture_output: Capture stdout/stderr (for compatibility, always True with shell.run)
+        input_text: Input to send to command (not supported)
+        timeout_seconds: Command timeout (not supported)
         log_stdout: Log stdout to console (default True)
         log_stderr: Log stderr to console (default True)
 
     Returns:
-        CompletedProcess result
+        CommandResult with execution details
     """
-    return run_command(
-        ["oc", *args],
+    cmd = ["oc", *args]
+
+    return shell.run(
+        cmd,
         check=check,
-        capture_output=capture_output,
-        input_text=input_text,
-        timeout_seconds=timeout_seconds,
+        shell=False,
         log_stdout=log_stdout,
         log_stderr=log_stderr,
     )
@@ -126,7 +71,7 @@ def oc_get_json(
         Resource data as dict, or None if not found and ignore_not_found=True
 
     Raises:
-        CommandError: If oc command fails
+        subprocess.CalledProcessError: If oc command fails
     """
     args = ["get", kind]
     if name:
@@ -147,12 +92,11 @@ def oc_get_json(
     if result.returncode != 0:
         if ignore_not_found and _is_oc_not_found_error(result.stderr):
             return None
-        raise CommandError(
-            f"oc {' '.join(shlex.quote(arg) for arg in args)} failed with exit code "
-            f"{result.returncode}: {result.stderr.strip()}"
+        raise subprocess.CalledProcessError(
+            result.returncode, f"oc {' '.join(args)}", result.stdout, result.stderr
         )
     if not result.stdout:
-        raise CommandError(f"oc {' '.join(shlex.quote(arg) for arg in args)} returned no output")
+        raise ValueError(f"oc {' '.join(args)} returned no output")
     return json.loads(result.stdout)
 
 
@@ -234,69 +178,6 @@ def wait_until(
     raise RuntimeError(f"Timed out waiting for {description}")
 
 
-def wait_for_namespace_deleted(namespace: str, timeout_seconds: int) -> None:
-    """Wait for a namespace to be deleted.
-
-    Args:
-        namespace: Namespace name
-        timeout_seconds: Maximum time to wait
-    """
-    wait_until(
-        f"namespace/{namespace} deletion",
-        timeout_seconds=timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: not resource_exists("namespace", namespace),
-    )
-
-
-def wait_for_crd(crd_name: str, timeout_seconds: int) -> None:
-    """Wait for a CustomResourceDefinition to exist.
-
-    Args:
-        crd_name: CRD name
-        timeout_seconds: Maximum time to wait
-    """
-    wait_until(
-        f"crd/{crd_name}",
-        timeout_seconds=timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: resource_exists("crd", crd_name),
-    )
-
-
-def wait_for_pvc_bound(pvc_name: str, namespace: str, *, timeout_seconds: int) -> dict[str, Any]:
-    """Wait for a PersistentVolumeClaim to be bound.
-
-    Args:
-        pvc_name: PVC name
-        namespace: Namespace
-        timeout_seconds: Maximum time to wait
-
-    Returns:
-        PVC resource data
-    """
-
-    def _pvc_bound() -> dict[str, Any] | None:
-        payload = oc_get_json(
-            "persistentvolumeclaim",
-            name=pvc_name,
-            namespace=namespace,
-            ignore_not_found=True,
-        )
-        if not payload:
-            return None
-        if payload.get("status", {}).get("phase") == "Bound":
-            return payload
-        return None
-
-    return wait_until(
-        f"persistentvolumeclaim/{pvc_name} bound in {namespace}",
-        timeout_seconds=timeout_seconds,
-        interval_seconds=5,
-        predicate=_pvc_bound,
-    )
-
-
 def wait_for_job_completion(
     job_name: str, namespace: str, *, timeout_seconds: int, interval_seconds: int = 10
 ) -> dict[str, Any]:
@@ -364,20 +245,6 @@ def job_pod_names(job_name: str, namespace: str) -> list[str]:
     if not payload:
         return []
     return [item["metadata"]["name"] for item in payload.get("items", [])]
-
-
-def ensure_namespace(namespace: str, *, labels: dict[str, str] | None = None) -> None:
-    """Ensure a namespace exists, creating it if necessary.
-
-    Args:
-        namespace: Namespace name
-        labels: Labels to apply to the namespace
-    """
-    if not resource_exists("namespace", namespace):
-        oc("create", "namespace", namespace)
-
-    if labels:
-        oc("label", "namespace", namespace, "--overwrite", *[f"{k}={v}" for k, v in labels.items()])
 
 
 def apply_manifest(artifact_path: Any, manifest: dict[str, Any]) -> None:
