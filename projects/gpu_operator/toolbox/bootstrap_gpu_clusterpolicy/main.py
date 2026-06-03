@@ -66,7 +66,6 @@ def wait_for_clusterpolicy_ready(args, ctx):
         "-o",
         "json",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
     if result.returncode != 0:

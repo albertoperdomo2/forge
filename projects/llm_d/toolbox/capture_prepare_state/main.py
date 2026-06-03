@@ -64,7 +64,6 @@ def capture_datasciencecluster_state(args, ctx):
         "-o",
         "yaml",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
 
@@ -91,7 +90,6 @@ def capture_gateway_state(args, ctx):
         "-o",
         "yaml",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
 
@@ -118,7 +116,6 @@ def capture_gateway_service_state(args, ctx):
         "-o",
         "yaml",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
 
@@ -146,7 +143,6 @@ def capture_namespace_events(args, ctx):
         args.namespace,
         "--sort-by=.metadata.creationTimestamp",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
 

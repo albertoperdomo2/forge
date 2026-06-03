@@ -202,7 +202,6 @@ def create_hf_token_secret(args, ctx):
             f"--from-file=token={args.hf_token_file_path}",
             "-n",
             cache_spec["namespace"],
-            capture_output=True,
             log_stdout=False,
         )
 
@@ -364,7 +363,6 @@ def capture_download_artifacts(args, ctx):
         "yaml",
         "--ignore-not-found=true",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
     if pvc_result.returncode == 0 and pvc_result.stdout:
@@ -381,7 +379,6 @@ def capture_download_artifacts(args, ctx):
         "yaml",
         "--ignore-not-found=true",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
     if job_result.returncode == 0 and job_result.stdout:
@@ -400,7 +397,6 @@ def capture_download_artifacts(args, ctx):
             "yaml",
             "--ignore-not-found=true",
             check=False,
-            capture_output=True,
             log_stdout=False,
         )
         if pod_result.returncode == 0 and pod_result.stdout:
@@ -413,7 +409,6 @@ def capture_download_artifacts(args, ctx):
             "-n",
             cache_spec["namespace"],
             check=False,
-            capture_output=True,
             log_stdout=False,
         )
         if log_result.returncode == 0 and log_result.stdout:
@@ -452,7 +447,6 @@ def cleanup_download_job(args, ctx):
         cache_spec["namespace"],
         "--ignore-not-found=true",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
 
@@ -478,7 +472,6 @@ def cleanup_hf_token_secret(args, ctx):
         cache_spec["namespace"],
         "--ignore-not-found=true",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
 

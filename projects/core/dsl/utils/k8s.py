@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 def oc(
     *args: str,
     check: bool = True,
-    capture_output: bool = True,
     input_text: str | None = None,
     timeout_seconds: float | None = 300,
     log_stdout: bool = True,
@@ -29,7 +28,6 @@ def oc(
     Args:
         *args: Arguments to pass to oc
         check: Raise subprocess.CalledProcessError if command fails
-        capture_output: Capture stdout/stderr (for compatibility, always True with shell.run)
         input_text: Input to send to command (not supported)
         timeout_seconds: Command timeout (not supported)
         log_stdout: Log stdout to console (default True)
@@ -84,7 +82,6 @@ def oc_get_json(
     result = oc(
         *args,
         check=not ignore_not_found,
-        capture_output=True,
         log_stdout=False,
         log_stderr=not ignore_not_found,
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from projects.core.dsl import entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils import write_json, write_text
@@ -13,6 +14,8 @@ from projects.core.dsl.utils.k8s import (
     oc_resource_exists,
 )
 from projects.guidellm.toolbox.run_smoke_request.utils import render_smoke_request_pod_from_parts
+
+logger = logging.getLogger(__name__)
 
 
 @entrypoint
@@ -180,7 +183,6 @@ def execute_smoke_request(args, ctx):
         "--",
         *curl_cmd,
         check=False,
-        capture_output=True,
     )
 
     # Save stdout and stderr for debugging
@@ -189,60 +191,53 @@ def execute_smoke_request(args, ctx):
     if result.stderr:
         write_text(args.artifact_dir / "artifacts" / "smoke.curl.stderr", result.stderr)
 
-    if result.returncode == 0 and result.stdout:
-        try:
-            response = json.loads(result.stdout)
-            if response.get("choices"):
-                ctx.response = response
-                write_json(args.artifact_dir / "artifacts" / "smoke.response.json", response)
-                return "Smoke request completed successfully"
-            else:
-                raise ValueError(f"Invalid response format: {result.stdout}")
-        except json.JSONDecodeError as e:
-            raise RuntimeError(f"Invalid JSON response: {result.stdout}") from e
-    else:
+    if result.returncode != 0 or not result.stdout:
         # Request failed
         raise RuntimeError(
             f"Smoke request failed (exit {result.returncode}): {result.stderr or 'No error message'}"
         )
 
+    response = None
+    try:
+        response = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Invalid JSON response: {result.stdout}") from e
+
+    if not response.get("choices"):
+        raise ValueError(f"Invalid response format: {result.stdout}")
+
+    ctx.response = response
+    write_json(args.artifact_dir / "artifacts" / "smoke.response.json", response)
+
+    # Log the response for visibility
+    logger.info("Smoke request response: %s", json.dumps(response, indent=2))
+
+    # Log summary of the response
+    choices = response.get("choices", [])
+    if choices:
+        first_choice_text = choices[0].get("text", "").strip()
+        logger.info(
+            "Generated text: %s",
+            first_choice_text[:200] + "..." if len(first_choice_text) > 200 else first_choice_text,
+        )
+
+    return "Smoke request completed successfully"
+
 
 @task
-def capture_smoke_state(args, ctx):
-    """Capture the smoke pod state for debugging"""
+def cleanup_smoke_pod(args, ctx):
+    """Delete the smoke pod after test completion"""
 
-    artifacts_dir = args.artifact_dir / "artifacts"
-
-    # Capture pod YAML
-    result = oc(
-        "get",
+    oc(
+        "delete",
         "pod",
         ctx.pod_name,
         "-n",
         args.namespace,
-        "-o",
-        "yaml",
+        "--ignore-not-found=true",
         check=False,
-        capture_output=True,
     )
-    if result.returncode == 0 and result.stdout:
-        write_text(artifacts_dir / "smoke_pod.yaml", result.stdout)
-
-    # Capture pod logs
-    result = oc(
-        "logs",
-        ctx.pod_name,
-        "-n",
-        args.namespace,
-        "-c",
-        "smoke",
-        check=False,
-        capture_output=True,
-    )
-    if result.returncode == 0 and result.stdout:
-        write_text(artifacts_dir / "smoke_pod.logs", result.stdout)
-
-    return f"Captured smoke pod state for {ctx.pod_name}"
+    return f"Cleaned up smoke pod {ctx.pod_name}"
 
 
 if __name__ == "__main__":

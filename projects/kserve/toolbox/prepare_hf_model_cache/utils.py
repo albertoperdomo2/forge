@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
+import yaml
+
+from projects.core.dsl import template
 from projects.core.dsl.utils.k8s import oc, oc_get_json
 
 
@@ -67,8 +71,6 @@ def model_cache_pvc_ready(spec: dict[str, Any]) -> bool:
 
 
 def _hf_cache_ready(spec: dict[str, Any]) -> bool:
-    import json
-
     pod_spec = {
         "restartPolicy": "Never",
         "containers": [
@@ -97,7 +99,6 @@ def _hf_cache_ready(spec: dict[str, Any]) -> bool:
         "--attach",
         "--quiet",
         check=False,
-        capture_output=True,
         log_stdout=False,
         log_stderr=False,
     )
@@ -111,7 +112,6 @@ def _hf_cache_ready(spec: dict[str, Any]) -> bool:
         spec["namespace"],
         "--ignore-not-found=true",
         check=False,
-        capture_output=True,
         log_stdout=False,
         log_stderr=False,
     )
@@ -119,37 +119,25 @@ def _hf_cache_ready(spec: dict[str, Any]) -> bool:
     # Check both return code and verify the command actually ran
     if check_result.returncode == 0:
         # Double-check by listing the directory contents to verify the file exists
+        rendered_override = template.render_template(
+            "verify_pod_override.yaml.j2",
+            {
+                "model_path": spec["model_path"],
+                "pvc_name": spec["pvc_name"],
+            },
+        )
+        override_data = yaml.safe_load(rendered_override)
+
         verify_result = oc(
             "run",
             f"{spec['pvc_name']}-verify-check",
             "--image=registry.access.redhat.com/ubi9/ubi-minimal:9.5",
-            f"--overrides={
-                json.dumps(
-                    {
-                        'restartPolicy': 'Never',
-                        'containers': [
-                            {
-                                'name': 'verify',
-                                'image': 'registry.access.redhat.com/ubi9/ubi-minimal:9.5',
-                                'command': ['ls', '-la', f'/cache/{spec["model_path"]}/'],
-                                'volumeMounts': [{'name': 'cache', 'mountPath': '/cache'}],
-                            }
-                        ],
-                        'volumes': [
-                            {
-                                'name': 'cache',
-                                'persistentVolumeClaim': {'claimName': spec['pvc_name']},
-                            }
-                        ],
-                    }
-                )
-            }",
+            f"--overrides={json.dumps(override_data)}",
             f"-n={spec['namespace']}",
             "--restart=Never",
             "--attach",
             "--quiet",
             check=False,
-            capture_output=True,
             log_stdout=True,
             log_stderr=True,
         )
@@ -163,7 +151,6 @@ def _hf_cache_ready(spec: dict[str, Any]) -> bool:
             spec["namespace"],
             "--ignore-not-found=true",
             check=False,
-            capture_output=True,
             log_stdout=False,
             log_stderr=False,
         )

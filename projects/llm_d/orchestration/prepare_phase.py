@@ -48,12 +48,12 @@ def operator_spec_by_package(platform: dict[str, Any], package: str) -> dict[str
 
 
 def verify_oc_access() -> None:
-    oc("whoami", capture_output=True)
+    oc("whoami")
 
 
 def verify_cluster_version() -> None:
     platform = runtime_config.get_platform_config()
-    version_info = oc("version", "-o", "json", capture_output=True)
+    version_info = oc("version", "-o", "json")
     payload = json.loads(version_info.stdout)
 
     openshift_version = (
@@ -232,15 +232,7 @@ def ensure_test_namespace() -> None:
 
 def cleanup_previous_run() -> None:
     namespace = runtime_config.get_namespace()
-    platform = runtime_config.get_platform_config()
-    benchmark = runtime_config.get_benchmark_config()
-
-    cleanup_toolbox_run(
-        namespace=namespace,
-        inference_service_name=platform["inference_service"]["name"],
-        cleanup_timeout_seconds=platform["cluster"]["cleanup_timeout_seconds"],
-        benchmark_name=benchmark["job_name"] if benchmark else None,
-    )
+    cleanup_toolbox_run(namespace=namespace)
 
 
 def prepare_model_cache() -> None:

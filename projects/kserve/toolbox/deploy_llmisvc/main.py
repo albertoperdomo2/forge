@@ -125,7 +125,6 @@ def query_service_status(args, ctx):
         args.namespace,
         "-o",
         "jsonpath={.status.conditions[?(@.type=='Ready')].status}",
-        capture_output=True,
         log_stdout=False,
     )
 
@@ -151,7 +150,6 @@ def query_service_message(args, ctx):
         args.namespace,
         "-o",
         "jsonpath={.status.conditions[?(@.type=='Ready')]}",
-        capture_output=True,
         log_stdout=False,
     )
 
@@ -187,7 +185,6 @@ def wait_service_ready(args, ctx):
         args.namespace,
         "-o",
         "jsonpath={.status.conditions[?(@.type=='Ready')]}",
-        capture_output=True,
         log_stdout=True,
     )
 

@@ -48,7 +48,6 @@ def capture_initial_dsc(args, ctx):
         "-o",
         "yaml",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
 
@@ -99,7 +98,6 @@ def capture_final_dsc(args, ctx):
         "-o",
         "yaml",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
 

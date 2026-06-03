@@ -106,19 +106,17 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
                             # Convert to relative path if it's within the project
                             if "/forge/" in source_file:
                                 rel_path = source_file.split("/forge/", 1)[1]
-                                source_info = f"~~ {rel_path}:{line_number} "
+                                source_info = f"{rel_path}:{line_number} "
                             else:
-                                source_info = f"~~ {source_file}:{line_number} "
+                                source_info = f"{source_file}:{line_number} "
                     except (OSError, TypeError):
                         # Source info not available, continue without it
                         pass
 
                     logger.info("")
                     logger.info("~" * LINE_WIDTH)
-                    logger.info(
-                        f"{source_info}~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}"
-                    )
-
+                    logger.info(f"~~ {source_info}")
+                    logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
                     # Show reason if provided, otherwise show the returned value
                     if retry_reason:
                         logger.warning(

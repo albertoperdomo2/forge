@@ -3,45 +3,30 @@ from __future__ import annotations
 import logging
 
 from projects.core.dsl.utils.k8s import oc_resource_exists
-from projects.llm_d.orchestration.runtime_config import init as runtime_init
 from projects.llm_d.toolbox.cleanup_test_resources import main as cleanup_test_resources_command
 
 logger = logging.getLogger(__name__)
 
 
-def run(
-    *,
-    namespace: str,
-    inference_service_name: str,
-    cleanup_timeout_seconds: int,
-    benchmark_name: str | None = None,
-) -> int:
-    """Delete llm_d runtime leftovers from a namespace.
+def run(*, namespace: str | None = None) -> int:
+    """Delete llm_d runtime leftovers from a namespace."""
 
-    Args:
-        namespace: Namespace to clean
-        inference_service_name: Inference-service resource name
-        cleanup_timeout_seconds: Cleanup timeout in seconds
-        benchmark_name: Optional GuideLLM benchmark job name
-    """
-
-    runtime_init()
-    cleanup_namespace(
-        namespace=namespace,
-        inference_service_name=inference_service_name,
-        cleanup_timeout_seconds=cleanup_timeout_seconds,
-        benchmark_name=benchmark_name,
-    )
+    cleanup_namespace(namespace=namespace)
     return 0
 
 
-def cleanup_namespace(
-    *,
-    namespace: str,
-    inference_service_name: str,
-    cleanup_timeout_seconds: int,
-    benchmark_name: str | None = None,
-) -> None:
+def cleanup_namespace(*, namespace: str | None = None) -> None:
+    # Load config where it's consumed
+    from projects.llm_d.orchestration import runtime_config
+
+    if namespace is None:
+        namespace = runtime_config.get_namespace()
+    platform = runtime_config.get_platform_config()
+    inference_service_name = platform["inference_service"]["name"]
+    cleanup_timeout_seconds = platform["cluster"]["cleanup_timeout_seconds"]
+    benchmark = runtime_config.get_benchmark_config()
+    benchmark_name = benchmark["job_name"] if benchmark else None
+
     if not oc_resource_exists("namespace", namespace):
         return
 

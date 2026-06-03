@@ -42,7 +42,6 @@ def capture_initial_dsc(args, ctx):
         "-o",
         "yaml",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
 
@@ -71,7 +70,6 @@ def wait_for_datasciencecluster_ready(args, ctx):
         args.namespace,
         "-o",
         "jsonpath={.status.phase}",
-        capture_output=True,
         log_stdout=True,  # Show the output
         check=False,
     )
@@ -107,7 +105,6 @@ def capture_final_dsc(args, ctx):
         "-o",
         "yaml",
         check=False,
-        capture_output=True,
         log_stdout=False,
     )
 
