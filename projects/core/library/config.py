@@ -227,7 +227,9 @@ class Config:
             with open(preset_file) as preset_f:
                 preset_dict = yaml.safe_load(preset_f)
             if "__multiple" in preset_dict:
-                self.config["presets"].update(preset_dict)
+                # Filter out __multiple key when merging presets
+                filtered_dict = {k: v for k, v in preset_dict.items() if k != "__multiple"}
+                self.config["presets"].update(filtered_dict)
             else:
                 self.config["presets"][preset_file.stem] = preset_dict
 
