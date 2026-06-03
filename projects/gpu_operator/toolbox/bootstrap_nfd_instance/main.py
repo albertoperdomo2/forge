@@ -5,9 +5,7 @@ from __future__ import annotations
 import logging
 
 from projects.core.dsl import always, entrypoint, execute_tasks, retry, shell, task, template
-from projects.core.dsl.utils.k8s import (
-    resource_exists,
-)
+from projects.core.dsl.utils.k8s import oc_resource_exists
 
 NFD_NAME = "nfd-instance"
 NFD_NAMESPACE = "openshift-nfd"
@@ -50,7 +48,7 @@ def render_manifest(args, ctx):
 def apply_manifest_if_missing(args, ctx):
     """Apply the NodeFeatureDiscovery manifest when missing"""
 
-    if resource_exists("nodefeaturediscovery", NFD_NAME, namespace=NFD_NAMESPACE):
+    if oc_resource_exists("nodefeaturediscovery", NFD_NAME, namespace=NFD_NAMESPACE):
         return f"NodeFeatureDiscovery/{NFD_NAME} already exists"
 
     shell.run(f"oc apply -f {ctx.manifest_file}")
@@ -62,7 +60,7 @@ def apply_manifest_if_missing(args, ctx):
 def wait_for_nfd_resource(args, ctx):
     """Wait for the NodeFeatureDiscovery resource to exist"""
 
-    if resource_exists("nodefeaturediscovery", NFD_NAME, namespace=NFD_NAMESPACE):
+    if oc_resource_exists("nodefeaturediscovery", NFD_NAME, namespace=NFD_NAMESPACE):
         return f"NodeFeatureDiscovery/{NFD_NAME} exists"
     return False
 

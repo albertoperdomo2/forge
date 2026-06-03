@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from projects.core.dsl import entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils.k8s import (
-    apply_manifest,
     condition_status,
+    oc_apply,
     oc_get_json,
-    resource_exists,
+    oc_resource_exists,
 )
 from projects.kserve.toolbox.ensure_gateway.utils import render_gateway
 
@@ -50,7 +50,7 @@ def create_gateway_if_needed(args, ctx):
         "create_if_missing": args.create_if_missing,
     }
 
-    if not resource_exists("gateway", args.name, namespace=args.namespace):
+    if not oc_resource_exists("gateway", args.name, namespace=args.namespace):
         if not args.create_if_missing:
             raise RuntimeError(f"Required gateway {args.name} does not exist in {args.namespace}")
 
@@ -63,7 +63,7 @@ def create_gateway_if_needed(args, ctx):
             namespace=args.namespace,
             gateway_class_name=args.gateway_class_name,
         )
-        apply_manifest(src_dir / "gateway.yaml", manifest)
+        oc_apply(src_dir / "gateway.yaml", manifest)
         return f"Created gateway {args.name}"
 
     return f"Gateway {args.name} already exists"

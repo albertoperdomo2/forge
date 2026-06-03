@@ -26,8 +26,7 @@ def render_inference_service_from_parts(
     inference_service: dict[str, Any],
     model_key: str,
     model: dict[str, Any],
-    scheduler_profile_key: str,
-    scheduler_profile: dict[str, Any] | None,
+    scheduler_profile_config_path: str | None,
     model_cache: dict[str, Any],
 ) -> dict[str, Any]:
     """Render an LLM inference service manifest from individual components.
@@ -38,8 +37,7 @@ def render_inference_service_from_parts(
         inference_service: Inference service configuration
         model_key: Model key identifier
         model: Model configuration
-        scheduler_profile_key: Scheduler profile key
-        scheduler_profile: Scheduler profile configuration
+        scheduler_profile_config_path: Full path to scheduler profile config file (None for default)
         model_cache: Model cache configuration
 
     Returns:
@@ -110,14 +108,11 @@ def render_inference_service_from_parts(
     manifest["spec"]["model"]["name"] = model["served_model_name"]
     manifest["spec"]["template"]["containers"][0]["resources"] = copy.deepcopy(model["resources"])
 
-    if scheduler_profile_key == "default":
+    if scheduler_profile_config_path is None:
         manifest["spec"]["router"]["scheduler"] = {}
         return manifest
 
-    if scheduler_profile is None:
-        raise ValueError(f"Missing scheduler profile config for {scheduler_profile_key}")
-
-    scheduler_profile_path = Path(config_dir) / scheduler_profile["config_path"]
+    scheduler_profile_path = Path(config_dir) / scheduler_profile_config_path
     scheduler_profile_config = scheduler_profile_path.read_text(encoding="utf-8")
     router_args = manifest["spec"]["router"]["scheduler"]["template"]["containers"][0]["args"]
     if not router_args or router_args[-1] != "--config-text":

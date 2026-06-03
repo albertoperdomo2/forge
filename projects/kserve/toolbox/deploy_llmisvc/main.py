@@ -2,45 +2,52 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import yaml
+
 from projects.core.dsl import entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils import write_text
 from projects.core.dsl.utils.k8s import (
-    apply_manifest,
     oc,
+    oc_apply,
     oc_get_json,
 )
-from projects.kserve.toolbox.deploy_llmisvc.utils import render_inference_service_from_parts
+
+
+def load_yaml(path: Path):
+    with path.open(encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
 
 
 @entrypoint
 def run(
     *,
-    config_dir: str,
     namespace: str,
-    inference_service: dict,
-    gateway: dict,
-    model_key: str,
-    model: dict,
-    scheduler_profile_key: str,
-    scheduler_profile: dict | None,
-    model_cache: dict,
+    inference_service_manifest_path: str,
+    gateway_status_address_name: str = "gateway-external",
 ) -> str:
     """
-    Deploy the llm_d LLMInferenceService and wait for its endpoint.
+    Deploy an LLMInferenceService and wait for its endpoint.
 
     Args:
-        config_dir: Configuration directory
         namespace: Namespace used by llm_d
-        inference_service: Inference-service configuration block
-        gateway: Gateway configuration block
-        model_key: Selected model key
-        model: Selected model configuration
-        scheduler_profile_key: Scheduler profile key
-        scheduler_profile: Scheduler profile configuration
-        model_cache: Model-cache configuration
+        inference_service_manifest_path: Path to the InferenceService YAML manifest file
+        gateway_status_address_name: Gateway status address name for endpoint resolution
     """
 
-    context = execute_tasks(locals())
+    # Load manifest to extract the service name
+    manifest = load_yaml(Path(inference_service_manifest_path))
+    inference_service_name = manifest["metadata"]["name"]
+
+    # Pass only the required arguments to avoid including manifest content in logs
+    task_args = {
+        "namespace": namespace,
+        "inference_service_manifest_path": inference_service_manifest_path,
+        "inference_service_name": inference_service_name,
+        "gateway_status_address_name": gateway_status_address_name,
+    }
+    context = execute_tasks(task_args)
     return context.endpoint_url
 
 
@@ -48,7 +55,7 @@ def run(
 def delete_existing_service(args, ctx):
     """Delete existing LLMInferenceService"""
 
-    name = args.inference_service["name"]
+    name = args.inference_service_name
     oc(
         "delete",
         "llminferenceservice",
@@ -80,22 +87,9 @@ def wait_old_pods_gone(args, ctx):
 def apply_inference_service(args, ctx):
     """Apply the LLMInferenceService manifest"""
 
-    manifest = render_inference_service_from_parts(
-        config_dir=args.config_dir,
-        namespace=args.namespace,
-        inference_service=args.inference_service,
-        model_key=args.model_key,
-        model=args.model,
-        scheduler_profile_key=args.scheduler_profile_key,
-        scheduler_profile=args.scheduler_profile,
-        model_cache=args.model_cache,
-    )
-
-    # Ensure the src directory exists
-    src_dir = args.artifact_dir / "src"
-    src_dir.mkdir(parents=True, exist_ok=True)
-
-    apply_manifest(src_dir / "llminferenceservice.yaml", manifest)
+    # Load and apply the provided manifest
+    manifest = load_yaml(Path(args.inference_service_manifest_path))
+    oc_apply(args.inference_service_manifest_path, manifest)
     return f"Applied LLMInferenceService manifest for {ctx.service_name}"
 
 
@@ -112,12 +106,11 @@ def wait_pods_appear(args, ctx):
     return False  # Retry
 
 
-@retry(attempts=90, delay=10, backoff=1.0)
 @task
-def wait_service_ready(args, ctx):
-    """Wait for LLMInferenceService to be ready"""
+def query_service_status(args, ctx):
+    """Query the status of the LLMInferenceService"""
 
-    # Query only the status field and show output
+    # Query only the Ready condition status
     result = oc(
         "get",
         "llminferenceservice",
@@ -125,40 +118,105 @@ def wait_service_ready(args, ctx):
         "-n",
         args.namespace,
         "-o",
-        "jsonpath={.status}",
+        "jsonpath={.status.conditions[?(@.type=='Ready')].status}",
         capture_output=True,
-        log_stdout=True,  # Show the output
+        log_stdout=False,
     )
 
-    if not result.stdout.strip():
-        return "Waiting for LLMInferenceService status to appear"
+    ready_status = result.stdout.strip()
+    ctx.is_ready = ready_status == "True"
 
-    # Try to parse the status JSON
-    try:
-        import json
+    if ctx.is_ready:
+        return f"LLMInferenceService {ctx.service_name} status: Ready"
+    else:
+        return f"LLMInferenceService {ctx.service_name} status: Not Ready"
 
-        status = json.loads(result.stdout)
 
-        # Check for Ready condition
-        conditions = status.get("conditions", [])
-        ready_condition = None
-        for condition in conditions:
-            if condition.get("type") == "Ready":
-                ready_condition = condition
-                break
+@task
+def query_service_message(args, ctx):
+    """Query detailed message from LLMInferenceService"""
 
-        if ready_condition:
-            if ready_condition.get("status") == "True":
-                return f"LLMInferenceService {ctx.service_name} ready"
+    # Query the Ready condition details
+    result = oc(
+        "get",
+        "llminferenceservice",
+        ctx.service_name,
+        "-n",
+        args.namespace,
+        "-o",
+        "jsonpath={.status.conditions[?(@.type=='Ready')]}",
+        capture_output=True,
+        log_stdout=False,
+    )
+
+    if result.stdout.strip():
+        try:
+            import json
+
+            condition = json.loads(result.stdout)
+            reason = condition.get("reason", "Unknown")
+            message = condition.get("message", "No message")
+
+            if not ctx.is_ready:
+                return f"Not ready - Reason: {reason}, Message: {message}"
             else:
-                reason = ready_condition.get("reason", "Unknown")
-                message = ready_condition.get("message", "No message")
-                return f"Waiting for Ready condition - Reason: {reason}, Message: {message}"
-        else:
-            return "Waiting for Ready condition to appear in status"
+                return "Ready - Service is operational"
+        except (json.JSONDecodeError, KeyError) as e:
+            return f"Failed to parse Ready condition: {e}"
+    else:
+        return "No Ready condition found in status"
 
-    except (json.JSONDecodeError, KeyError) as e:
-        return f"Waiting for valid status - Parse error: {e}"
+
+@retry(attempts=90, delay=10, backoff=1.0)
+@task
+def wait_service_ready(args, ctx):
+    """Wait for LLMInferenceService to be ready"""
+
+    # Query the current status and show diagnostic info
+    result = oc(
+        "get",
+        "llminferenceservice",
+        ctx.service_name,
+        "-n",
+        args.namespace,
+        "-o",
+        "jsonpath={.status.conditions[?(@.type=='Ready')]}",
+        capture_output=True,
+        log_stdout=True,
+    )
+
+    # Also show pod status for debugging
+    oc(
+        "get",
+        "pods",
+        "-l",
+        ctx.selector,
+        "-n",
+        args.namespace,
+        log_stdout=True,  # Show pod status in logs
+    )
+
+    if result.stdout.strip():
+        try:
+            import json
+
+            condition = json.loads(result.stdout)
+            status = condition.get("status", "Unknown")
+            reason = condition.get("reason", "Unknown")
+            message = condition.get("message", "No message")
+
+            if status == "True":
+                return f"LLMInferenceService {ctx.service_name} is ready"
+            else:
+                return (
+                    False,
+                    f"Service not ready - Status: {status}, Reason: {reason}, Message: {message}",
+                )
+
+        except (json.JSONDecodeError, KeyError) as e:
+            return (False, f"Failed to parse Ready condition: {e}")
+    else:
+        return (False, f"No Ready condition found in status for {ctx.service_name}")
 
 
 @retry(attempts=90, delay=10, backoff=1.0)
@@ -168,8 +226,8 @@ def resolve_endpoint_task(args, ctx):
 
     endpoint_url = try_resolve_endpoint_url(
         namespace=args.namespace,
-        inference_service=args.inference_service,
-        gateway=args.gateway,
+        inference_service_name=args.inference_service_name,
+        gateway_status_address_name=args.gateway_status_address_name,
     )
     if endpoint_url:
         ctx.endpoint_url = endpoint_url
@@ -187,14 +245,12 @@ def deploy_llmisvc_task(args, ctx):
 
 
 def try_resolve_endpoint_url(
-    *, namespace: str, inference_service: dict, gateway: dict
+    *, namespace: str, inference_service_name: str, gateway_status_address_name: str
 ) -> str | None:
-    name = inference_service["name"]
-    gateway_name = gateway["status_address_name"]
-    payload = oc_get_json("llminferenceservice", name=name, namespace=namespace)
+    payload = oc_get_json("llminferenceservice", name=inference_service_name, namespace=namespace)
 
     for address in payload.get("status", {}).get("addresses", []):
-        if address.get("name") == gateway_name and address.get("url"):
+        if address.get("name") == gateway_status_address_name and address.get("url"):
             return address["url"]
     return None
 

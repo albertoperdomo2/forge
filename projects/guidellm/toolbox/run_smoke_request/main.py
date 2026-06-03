@@ -8,10 +8,10 @@ from pathlib import Path
 from projects.core.dsl import entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils import write_json, write_text
 from projects.core.dsl.utils.k8s import (
-    apply_manifest,
     oc,
+    oc_apply,
     oc_get_json,
-    resource_exists,
+    oc_resource_exists,
 )
 from projects.guidellm.toolbox.run_smoke_request.utils import render_smoke_request_job_from_parts
 
@@ -20,20 +20,34 @@ from projects.guidellm.toolbox.run_smoke_request.utils import render_smoke_reque
 def run(
     *,
     namespace: str,
-    smoke: dict,
-    model: dict,
-    smoke_request: dict,
     endpoint_url: str,
+    job_name: str = "llm-d-smoke",
+    client_image: str = "curlimages/curl:8.11.1",
+    endpoint_path: str = "/v1/completions",
+    request_retries: int = 30,
+    request_retry_delay_seconds: int = 10,
+    request_timeout_seconds: int = 60,
+    served_model_name: str,
+    prompt: str = "San Francisco is a",
+    max_tokens: int = 50,
+    temperature: float = 0.7,
 ) -> dict[str, object]:
     """
     Run the llm_d smoke request job against a resolved endpoint.
 
     Args:
         namespace: Namespace used by llm_d
-        smoke: Smoke configuration block
-        model: Selected model configuration
-        smoke_request: Smoke-request configuration
         endpoint_url: Gateway endpoint URL returned by the deploy command
+        job_name: Name for the smoke test job
+        client_image: Container image for making HTTP requests
+        endpoint_path: API endpoint path to test
+        request_retries: Number of retry attempts
+        request_retry_delay_seconds: Delay between retries
+        request_timeout_seconds: Timeout for each request
+        served_model_name: Model name to use in API requests
+        prompt: Test prompt to send
+        max_tokens: Maximum tokens to generate
+        temperature: Sampling temperature
     """
 
     context = execute_tasks(locals())
@@ -44,18 +58,22 @@ def run(
 def prepare_smoke_request(args, ctx):
     """Prepare smoke request payload"""
 
-    job_name = args.smoke["job_name"]
-    ctx.job_name = job_name
+    ctx.job_name = args.job_name
 
     payload = {
-        "model": args.model["served_model_name"],
-        "prompt": args.smoke_request["prompt"],
-        "max_tokens": args.smoke_request["max_tokens"],
-        "temperature": args.smoke_request["temperature"],
+        "model": args.served_model_name,
+        "prompt": args.prompt,
+        "max_tokens": args.max_tokens,
+        "temperature": args.temperature,
     }
     ctx.payload = payload
-    write_json(args.artifact_dir / "artifacts" / "smoke.request.json", payload)
-    return f"Prepared smoke request for job {job_name}"
+
+    # Ensure artifacts directory exists
+    artifacts_dir = args.artifact_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    write_json(artifacts_dir / "smoke.request.json", payload)
+    return f"Prepared smoke request for job {args.job_name}"
 
 
 @task
@@ -79,7 +97,7 @@ def delete_existing_smoke_job(args, ctx):
 def wait_smoke_job_deleted(args, ctx):
     """Wait for smoke job deletion to complete"""
 
-    if not resource_exists("job", ctx.job_name, namespace=args.namespace):
+    if not oc_resource_exists("job", ctx.job_name, namespace=args.namespace):
         return f"Job {ctx.job_name} deleted"
     return False  # Retry
 
@@ -88,11 +106,20 @@ def wait_smoke_job_deleted(args, ctx):
 def create_smoke_job(args, ctx):
     """Create the smoke request job"""
 
-    apply_manifest(
-        args.artifact_dir / "src" / "smoke-job.yaml",
+    # Ensure the src directory exists
+    src_dir = args.artifact_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+
+    oc_apply(
+        src_dir / "smoke-job.yaml",
         render_smoke_request_job_from_parts(
             namespace=args.namespace,
-            smoke=args.smoke,
+            job_name=args.job_name,
+            client_image=args.client_image,
+            endpoint_path=args.endpoint_path,
+            request_retries=args.request_retries,
+            request_retry_delay_seconds=args.request_retry_delay_seconds,
+            request_timeout_seconds=args.request_timeout_seconds,
             endpoint_url=args.endpoint_url,
             payload=ctx.payload,
         ),

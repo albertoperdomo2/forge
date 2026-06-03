@@ -11,6 +11,7 @@ def pvc_access_mode_matches(actual_modes: list[str], expected_mode: str) -> bool
 
 
 def annotate_model_cache_pvc(spec: dict[str, Any]) -> None:
+    # Add annotations with metadata
     oc(
         "annotate",
         "persistentvolumeclaim",
@@ -23,12 +24,46 @@ def annotate_model_cache_pvc(spec: dict[str, Any]) -> None:
         "--overwrite",
     )
 
+    # Add labels indicating the content has been populated
+    oc(
+        "label",
+        "persistentvolumeclaim",
+        spec["pvc_name"],
+        "-n",
+        spec["namespace"],
+        "forge.openshift.io/model-cache-populated=true",
+        f"forge.openshift.io/model-cache-scheme={spec['source_scheme']}",
+        "--overwrite",
+    )
+
 
 def model_cache_pvc_ready(spec: dict[str, Any]) -> bool:
-    """Check if the model cache PVC is ready (contains the marker file)."""
+    """Check if the model cache PVC is ready (has populated label and marker file)."""
+
+    # First check if PVC has the populated label
+    from projects.core.dsl.utils.k8s import oc_get_json
+
+    pvc_data = oc_get_json(
+        "persistentvolumeclaim",
+        name=spec["pvc_name"],
+        namespace=spec["namespace"],
+        ignore_not_found=True,
+    )
+
+    if not pvc_data:
+        return False
+
+    # Check if PVC has the populated label
+    labels = pvc_data.get("metadata", {}).get("labels", {})
+    is_labeled_populated = labels.get("forge.openshift.io/model-cache-populated") == "true"
+
+    if not is_labeled_populated:
+        return False
+
+    # Also verify with the marker file check for extra safety
     if spec["source_scheme"] == "hf":
         return _hf_cache_ready(spec)
-    return False
+    return True
 
 
 def _hf_cache_ready(spec: dict[str, Any]) -> bool:
@@ -63,6 +98,8 @@ def _hf_cache_ready(spec: dict[str, Any]) -> bool:
         "--quiet",
         check=False,
         capture_output=True,
+        log_stdout=False,
+        log_stderr=False,
     )
 
     # Clean up the pod
@@ -74,7 +111,76 @@ def _hf_cache_ready(spec: dict[str, Any]) -> bool:
         spec["namespace"],
         "--ignore-not-found=true",
         check=False,
+        capture_output=True,
+        log_stdout=False,
+        log_stderr=False,
     )
+
+    # Check both return code and verify the command actually ran
+    if check_result.returncode == 0:
+        # Double-check by listing the directory contents to verify the file exists
+        verify_result = oc(
+            "run",
+            f"{spec['pvc_name']}-verify-check",
+            "--image=registry.access.redhat.com/ubi9/ubi-minimal:9.5",
+            f"--overrides={
+                json.dumps(
+                    {
+                        'restartPolicy': 'Never',
+                        'containers': [
+                            {
+                                'name': 'verify',
+                                'image': 'registry.access.redhat.com/ubi9/ubi-minimal:9.5',
+                                'command': ['ls', '-la', f'/cache/{spec["model_path"]}/'],
+                                'volumeMounts': [{'name': 'cache', 'mountPath': '/cache'}],
+                            }
+                        ],
+                        'volumes': [
+                            {
+                                'name': 'cache',
+                                'persistentVolumeClaim': {'claimName': spec['pvc_name']},
+                            }
+                        ],
+                    }
+                )
+            }",
+            f"-n={spec['namespace']}",
+            "--restart=Never",
+            "--attach",
+            "--quiet",
+            check=False,
+            capture_output=True,
+            log_stdout=True,
+            log_stderr=True,
+        )
+
+        # Clean up verification pod
+        oc(
+            "delete",
+            "pod",
+            f"{spec['pvc_name']}-verify-check",
+            "-n",
+            spec["namespace"],
+            "--ignore-not-found=true",
+            check=False,
+            capture_output=True,
+            log_stdout=False,
+            log_stderr=False,
+        )
+
+        # Check if marker file is actually listed
+        marker_filename = spec["marker_filename"]
+        file_listed = marker_filename in verify_result.stdout if verify_result.stdout else False
+
+        if not file_listed:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Cache check returned success but marker file {marker_filename} not found in directory listing"
+            )
+            logger.info(f"Directory contents: {verify_result.stdout}")
+            return False
 
     return check_result.returncode == 0
 
@@ -156,6 +262,7 @@ def render_hf_model_cache_job(
             "namespace": spec["namespace"],
         },
         "spec": {
+            "ttlSecondsAfterFinished": 300,  # Auto-cleanup completed jobs after 5 minutes
             "template": {
                 "spec": {
                     "restartPolicy": "Never",
@@ -171,7 +278,7 @@ def render_hf_model_cache_job(
                     ],
                     "volumes": volumes,
                 }
-            }
+            },
         },
     }
 

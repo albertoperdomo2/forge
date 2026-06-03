@@ -11,7 +11,12 @@ from typing import Any
 def render_smoke_request_job_from_parts(
     *,
     namespace: str,
-    smoke: dict[str, Any],
+    job_name: str,
+    client_image: str,
+    endpoint_path: str,
+    request_retries: int,
+    request_retry_delay_seconds: int,
+    request_timeout_seconds: int,
     endpoint_url: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
@@ -19,7 +24,12 @@ def render_smoke_request_job_from_parts(
 
     Args:
         namespace: Target namespace
-        smoke: Smoke configuration
+        job_name: Name for the smoke test job
+        client_image: Container image for making HTTP requests
+        endpoint_path: API endpoint path to test
+        request_retries: Number of retry attempts
+        request_retry_delay_seconds: Delay between retries
+        request_timeout_seconds: Timeout for each request
         endpoint_url: Gateway endpoint URL
         payload: Request payload to send
 
@@ -50,7 +60,7 @@ exit 1
         "apiVersion": "batch/v1",
         "kind": "Job",
         "metadata": {
-            "name": smoke["job_name"],
+            "name": job_name,
             "namespace": namespace,
             "labels": {
                 "app.kubernetes.io/managed-by": "forge",
@@ -61,8 +71,7 @@ exit 1
         "spec": {
             "backoffLimit": 0,
             "activeDeadlineSeconds": (
-                smoke["request_retries"]
-                * (smoke["request_timeout_seconds"] + smoke["request_retry_delay_seconds"])
+                request_retries * (request_timeout_seconds + request_retry_delay_seconds)
             ),
             "template": {
                 "metadata": {
@@ -77,20 +86,20 @@ exit 1
                     "containers": [
                         {
                             "name": "smoke",
-                            "image": smoke["client_image"],
+                            "image": client_image,
                             "command": ["/bin/sh", "-ceu", command],
                             "env": [
                                 {"name": "ENDPOINT_URL", "value": endpoint_url},
-                                {"name": "ENDPOINT_PATH", "value": smoke["endpoint_path"]},
+                                {"name": "ENDPOINT_PATH", "value": endpoint_path},
                                 {"name": "REQUEST_PAYLOAD", "value": json.dumps(payload)},
-                                {"name": "REQUEST_RETRIES", "value": str(smoke["request_retries"])},
+                                {"name": "REQUEST_RETRIES", "value": str(request_retries)},
                                 {
                                     "name": "REQUEST_RETRY_DELAY_SECONDS",
-                                    "value": str(smoke["request_retry_delay_seconds"]),
+                                    "value": str(request_retry_delay_seconds),
                                 },
                                 {
                                     "name": "REQUEST_TIMEOUT_SECONDS",
-                                    "value": str(smoke["request_timeout_seconds"]),
+                                    "value": str(request_timeout_seconds),
                                 },
                             ],
                         }

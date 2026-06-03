@@ -6,7 +6,7 @@ import json
 import logging
 
 from projects.core.dsl import always, entrypoint, execute_tasks, retry, shell, task, template
-from projects.core.dsl.utils.k8s import oc, resource_exists
+from projects.core.dsl.utils.k8s import oc, oc_resource_exists
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def render_manifest(args, ctx):
 def apply_manifest_if_missing(args, ctx):
     """Apply the ClusterPolicy manifest when missing"""
 
-    if resource_exists("clusterpolicy", args.clusterpolicy_name):
+    if oc_resource_exists("clusterpolicy", args.clusterpolicy_name):
         return f"ClusterPolicy/{args.clusterpolicy_name} already exists"
 
     shell.run(f"oc apply -f {ctx.manifest_file}")

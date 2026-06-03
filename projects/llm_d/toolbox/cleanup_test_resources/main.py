@@ -6,7 +6,7 @@ import logging
 import subprocess
 
 from projects.core.dsl import entrypoint, execute_tasks, retry, task
-from projects.core.dsl.utils.k8s import oc, oc_get_json, resource_exists
+from projects.core.dsl.utils.k8s import oc, oc_get_json, oc_resource_exists
 
 logger = logging.getLogger("DSL")
 
@@ -184,7 +184,7 @@ def delete_inference_service(args, ctx):
 def wait_for_inference_service_deletion(args, ctx):
     """Wait for the llminferenceservice to be deleted"""
 
-    if not resource_exists(
+    if not oc_resource_exists(
         "llminferenceservice", args.inference_service_name, namespace=args.namespace
     ):
         return f"llminferenceservice/{args.inference_service_name} deleted from {args.namespace}"

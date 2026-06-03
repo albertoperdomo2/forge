@@ -99,7 +99,7 @@ def oc_get_json(
     return json.loads(result.stdout)
 
 
-def resource_exists(kind: str, name: str, *, namespace: str | None = None) -> bool:
+def oc_resource_exists(kind: str, name: str, *, namespace: str | None = None) -> bool:
     """Check if a Kubernetes resource exists.
 
     Args:
@@ -110,15 +110,18 @@ def resource_exists(kind: str, name: str, *, namespace: str | None = None) -> bo
     Returns:
         True if resource exists, False otherwise
     """
-    return (
-        oc_get_json(
-            kind,
-            name=name,
-            namespace=namespace,
-            ignore_not_found=True,
-        )
-        is not None
+    exists = oc(
+        "get",
+        kind,
+        name,
+        "-n",
+        namespace,
+        "--ignore-not-found",
+        "-oname",
+        check=False,
     )
+
+    return bool(exists.stdout)
 
 
 def _is_oc_not_found_error(stderr: str | None) -> bool:
@@ -135,7 +138,7 @@ def _is_oc_not_found_error(stderr: str | None) -> bool:
     return bool(re.search(r"\bnot found\b", normalized))
 
 
-def apply_manifest(artifact_path: Any, manifest: dict[str, Any]) -> None:
+def oc_apply(artifact_path: Any, manifest: dict[str, Any]) -> None:
     """Apply a Kubernetes manifest.
 
     Args:

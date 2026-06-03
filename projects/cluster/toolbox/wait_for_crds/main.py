@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from projects.core.dsl import entrypoint, execute_tasks, retry, task
-from projects.core.dsl.utils.k8s import resource_exists
+from projects.core.dsl.utils.k8s import oc_resource_exists
 
 logger = logging.getLogger("DSL")
 
@@ -62,7 +62,7 @@ def wait_for_all_crds(args, ctx):
     missing_crds = []
 
     for crd_name in args.crd_names:
-        if not resource_exists("crd", crd_name):
+        if not oc_resource_exists("crd", crd_name):
             missing_crds.append(crd_name)
 
     if missing_crds:

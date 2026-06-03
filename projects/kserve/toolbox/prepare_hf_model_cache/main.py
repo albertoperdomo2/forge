@@ -15,10 +15,10 @@ from projects.core.dsl.utils import (
     write_yaml,
 )
 from projects.core.dsl.utils.k8s import (
-    apply_manifest,
     oc,
+    oc_apply,
     oc_get_json,
-    resource_exists,
+    oc_resource_exists,
 )
 from projects.kserve.toolbox.prepare_hf_model_cache.utils import (
     annotate_model_cache_pvc,
@@ -161,7 +161,7 @@ def ensure_pvc(args, ctx):
     src_dir.mkdir(parents=True, exist_ok=True)
 
     pvc_manifest = render_model_cache_pvc(cache_spec)
-    apply_manifest(src_dir / "model-cache-pvc.yaml", pvc_manifest)
+    oc_apply(src_dir / "model-cache-pvc.yaml", pvc_manifest)
 
     # Save manifest to artifacts
     artifacts_dir = args.artifact_dir / "artifacts"
@@ -259,7 +259,7 @@ def wait_job_deleted(args, ctx):
     """Wait for job deletion to complete"""
 
     cache_spec = ctx.cache_spec
-    if not resource_exists(
+    if not oc_resource_exists(
         "job", cache_spec["download_job_name"], namespace=cache_spec["namespace"]
     ):
         return f"Job {cache_spec['download_job_name']} deleted"
@@ -282,7 +282,7 @@ def create_download_job(args, ctx):
     # Use the created secret if available
     effective_secret_name = ctx.hf_secret_name if ctx.hf_secret_created else None
     job_manifest = render_hf_model_cache_job(args, cache_spec, effective_secret_name)
-    apply_manifest(src_dir / "model-cache-job.yaml", job_manifest)
+    oc_apply(src_dir / "model-cache-job.yaml", job_manifest)
 
     # Save manifest to artifacts (not logs)
     artifacts_dir = args.artifact_dir / "artifacts"
@@ -424,14 +424,40 @@ def capture_download_artifacts(args, ctx):
 
 @task
 def finalize_cache(args, ctx):
-    """Finalize the cache by annotating the PVC"""
+    """Finalize the cache by annotating and labeling the PVC"""
 
     if ctx.cache_ready:
         return f"Cache finalized for existing {ctx.cache_spec['pvc_name']}"
 
     cache_spec = ctx.cache_spec
     annotate_model_cache_pvc(cache_spec)
-    return f"Cache finalized for {cache_spec['pvc_name']}"
+    return f"Cache finalized and labeled as populated for {cache_spec['pvc_name']}"
+
+
+@task
+def cleanup_download_job(args, ctx):
+    """Clean up the completed download job and its pods"""
+
+    if ctx.cache_ready:
+        return "No download job to clean up - cache was already ready"
+
+    cache_spec = ctx.cache_spec
+
+    # Delete the download job (this will also delete associated pods)
+    oc(
+        "delete",
+        "job",
+        cache_spec["download_job_name"],
+        "-n",
+        cache_spec["namespace"],
+        "--ignore-not-found=true",
+        check=False,
+        capture_output=True,
+        log_stdout=False,
+    )
+
+    logger.info(f"Cleaned up download job: {cache_spec['download_job_name']}")
+    return f"Download job {cache_spec['download_job_name']} deleted"
 
 
 @task

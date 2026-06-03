@@ -5,8 +5,8 @@ from __future__ import annotations
 from projects.core.dsl import always, entrypoint, execute_tasks, task
 from projects.core.dsl.utils import write_text
 from projects.core.dsl.utils.k8s import (
-    apply_manifest,
     oc,
+    oc_apply,
 )
 from projects.rhoai.toolbox.apply_datasciencecluster.utils import render_datasciencecluster
 
@@ -77,7 +77,7 @@ def apply_datasciencecluster(args, ctx):
     src_dir = args.artifact_dir / "src"
     src_dir.mkdir(parents=True, exist_ok=True)
 
-    apply_manifest(src_dir / "datasciencecluster.yaml", manifest)
+    oc_apply(src_dir / "datasciencecluster.yaml", manifest)
     return "DataScienceCluster applied"
 
 

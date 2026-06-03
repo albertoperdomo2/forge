@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from projects.core.dsl.utils.k8s import resource_exists
+from projects.core.dsl.utils.k8s import oc_resource_exists
 from projects.llm_d.orchestration.runtime_config import init as runtime_init
 from projects.llm_d.toolbox.cleanup_test_resources import main as cleanup_test_resources_command
 
@@ -42,7 +42,7 @@ def cleanup_namespace(
     cleanup_timeout_seconds: int,
     benchmark_name: str | None = None,
 ) -> None:
-    if not resource_exists("namespace", namespace):
+    if not oc_resource_exists("namespace", namespace):
         return
 
     cleanup_test_resources_command.run(

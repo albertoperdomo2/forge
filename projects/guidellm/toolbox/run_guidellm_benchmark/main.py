@@ -9,8 +9,8 @@ from pathlib import Path
 from projects.core.dsl import entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils import write_text
 from projects.core.dsl.utils.k8s import (
-    apply_manifest,
     oc,
+    oc_apply,
     oc_get_json,
 )
 from projects.guidellm.toolbox.run_guidellm_benchmark.utils import (
@@ -86,14 +86,14 @@ def create_guidellm_resources_task(args, ctx):
     if not args.benchmark:
         return "GuideLLM benchmark disabled"
 
-    apply_manifest(
+    oc_apply(
         args.artifact_dir / "src" / "guidellm-pvc.yaml",
         render_guidellm_pvc_from_parts(
             namespace=args.namespace,
             benchmark=args.benchmark,
         ),
     )
-    apply_manifest(
+    oc_apply(
         args.artifact_dir / "src" / "guidellm-job.yaml",
         render_guidellm_job_from_parts(
             namespace=args.namespace,
@@ -158,7 +158,7 @@ def create_copy_pod(args, ctx):
     if pod_data and pod_data.get("items"):
         node_name = pod_data["items"][0].get("spec", {}).get("nodeName")
 
-    apply_manifest(
+    oc_apply(
         args.artifact_dir / "src" / "guidellm-copy-pod.yaml",
         render_guidellm_copy_pod_from_parts(
             namespace=args.namespace,

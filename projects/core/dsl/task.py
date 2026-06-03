@@ -95,9 +95,29 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
                 if attempt < retry_attempts - 1:  # Not the last attempt
                     elapsed_time = time.time() - start_time
                     elapsed_mins, elapsed_secs = divmod(elapsed_time, 60)
+
+                    # Get source file and line number for logging
+                    source_info = ""
+                    try:
+                        source_file = inspect.getsourcefile(func)
+                        source_lines = inspect.getsourcelines(func)
+                        line_number = source_lines[1]
+                        if source_file:
+                            # Convert to relative path if it's within the project
+                            if "/forge/" in source_file:
+                                rel_path = source_file.split("/forge/", 1)[1]
+                                source_info = f"~~ {rel_path}:{line_number} "
+                            else:
+                                source_info = f"~~ {source_file}:{line_number} "
+                    except (OSError, TypeError):
+                        # Source info not available, continue without it
+                        pass
+
                     logger.info("")
                     logger.info("~" * LINE_WIDTH)
-                    logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
+                    logger.info(
+                        f"{source_info}~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}"
+                    )
 
                     # Show reason if provided, otherwise show the returned value
                     if retry_reason:
@@ -160,9 +180,29 @@ def _execute_with_retry(func, attempts, delay, backoff, retry_on_exceptions, *ar
 
             elapsed_time = time.time() - start_time
             elapsed_mins, elapsed_secs = divmod(elapsed_time, 60)
+
+            # Get source file and line number for logging
+            source_info = ""
+            try:
+                source_file = inspect.getsourcefile(func)
+                source_lines = inspect.getsourcelines(func)
+                line_number = source_lines[1]
+                if source_file:
+                    # Convert to relative path if it's within the project
+                    if "/forge/" in source_file:
+                        rel_path = source_file.split("/forge/", 1)[1]
+                        source_info = f"~~ {rel_path}:{line_number} "
+                    else:
+                        source_info = f"~~ {source_file}:{line_number} "
+            except (OSError, TypeError):
+                # Source info not available, continue without it
+                pass
+
             logger.info("")
             logger.info("~" * LINE_WIDTH)
-            logger.info(f"~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}")
+            logger.info(
+                f"{source_info}~~ TASK: {func.__name__} : {func.__doc__ or 'No description'}"
+            )
             logger.warning(
                 f"~~ RETRY ATTEMPT #{attempt + 1}/{retry_attempts} "
                 f"({exc.__class__.__name__}: {exc})"
