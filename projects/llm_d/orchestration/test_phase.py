@@ -1,23 +1,17 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 from projects.core.dsl import shell
-from projects.core.dsl.utils.k8s import (
-    oc,
-    oc_get_json,
-    resource_exists,
-    wait_until,
-)
 from projects.guidellm.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_command
 from projects.guidellm.toolbox.run_smoke_request import main as run_smoke_request_command
 from projects.kserve.toolbox.capture_llmisvc_state import main as capture_llmisvc_state
 from projects.kserve.toolbox.deploy_llmisvc import main as deploy_llmisvc
 from projects.llm_d.orchestration.runtime_config import init as runtime_init
+from projects.llm_d.toolbox.cleanup_test_resources import main as cleanup_test_resources_command
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +85,7 @@ def run(
             primary_exc,
             finalizer_exc,
             "cleanup runtime resources",
-            cleanup_runtime_resources,
+            cleanup_test_resources,
             namespace=namespace,
             inference_service=inference_service,
             smoke=smoke,
@@ -184,68 +178,23 @@ def write_endpoint_url(*, artifact_dir: Path, endpoint_url: str | None) -> None:
     endpoint_file.write_text(f"{endpoint_url}\n", encoding="utf-8")
 
 
-def cleanup_runtime_resources(
+def cleanup_test_resources(
     *,
     namespace: str,
     inference_service: dict,
     smoke: dict,
     benchmark: dict | None,
 ) -> None:
-    benchmark_name = benchmark["job_name"] if benchmark else "guidellm-benchmark"
-    smoke_job_name = smoke["job_name"]
-    inference_service_name = inference_service["name"]
+    """Cleanup test resources using the toolbox script"""
+    benchmark_job_name = benchmark["job_name"] if benchmark else None
     cleanup_timeout_seconds = inference_service["delete_timeout_seconds"]
 
-    _best_effort_delete(
-        "smoke helper job",
-        "delete",
-        "job",
-        smoke_job_name,
-        "-n",
-        namespace,
-        "--ignore-not-found=true",
-    )
-    _best_effort_delete(
-        "benchmark helper job and pvc",
-        "delete",
-        "job,pvc",
-        benchmark_name,
-        "-n",
-        namespace,
-        "--ignore-not-found=true",
-    )
-    _best_effort_delete(
-        "benchmark helper copy pod",
-        "delete",
-        "pod",
-        f"{benchmark_name}-copy",
-        "-n",
-        namespace,
-        "--ignore-not-found=true",
-    )
-    _best_effort_delete(
-        "llminferenceservice",
-        "delete",
-        "llminferenceservice",
-        inference_service_name,
-        "-n",
-        namespace,
-        "--ignore-not-found=true",
-    )
-
-    wait_until(
-        f"llminferenceservice/{inference_service_name} deletion in {namespace}",
-        timeout_seconds=cleanup_timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: (
-            not resource_exists("llminferenceservice", inference_service_name, namespace=namespace)
-        ),
-    )
-    wait_until(
-        f"llm-d workload pods deletion in {namespace}",
-        timeout_seconds=cleanup_timeout_seconds,
-        interval_seconds=10,
-        predicate=lambda: _llm_d_pods_gone(namespace, inference_service_name),
+    cleanup_test_resources_command.run(
+        namespace=namespace,
+        inference_service_name=inference_service["name"],
+        smoke_job_name=smoke["job_name"],
+        benchmark_job_name=benchmark_job_name,
+        cleanup_timeout_seconds=cleanup_timeout_seconds,
     )
 
 
@@ -280,20 +229,3 @@ def _run_finalizer(
             return finalizer_exc or sys.exc_info()
         logger.exception("Ignoring %s failure after primary test failure", description)
     return finalizer_exc
-
-
-def _best_effort_delete(description: str, *oc_args: str) -> None:
-    try:
-        oc(*oc_args, check=False, timeout_seconds=60)
-    except subprocess.TimeoutExpired:
-        logger.warning("Timed out deleting %s: oc %s", description, " ".join(oc_args))
-
-
-def _llm_d_pods_gone(namespace: str, inference_service_name: str) -> bool:
-    payload = oc_get_json(
-        "pods",
-        namespace=namespace,
-        selector=f"app.kubernetes.io/name={inference_service_name}",
-        ignore_not_found=True,
-    )
-    return not payload or not payload.get("items")
