@@ -187,14 +187,12 @@ def cleanup_test_resources(
 ) -> None:
     """Cleanup test resources using the toolbox script"""
     benchmark_job_name = benchmark["job_name"] if benchmark else None
-    cleanup_timeout_seconds = inference_service["delete_timeout_seconds"]
 
     cleanup_test_resources_command.run(
         namespace=namespace,
         inference_service_name=inference_service["name"],
         smoke_job_name=smoke["job_name"],
         benchmark_job_name=benchmark_job_name,
-        cleanup_timeout_seconds=cleanup_timeout_seconds,
     )
 
 

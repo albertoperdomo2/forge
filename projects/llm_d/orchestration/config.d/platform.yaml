@@ -35,7 +35,6 @@ operators:
     channel: stable
     source: certified-operators
     bootstrap_crd: clusterpolicies.nvidia.com
-    bootstrap_manifest: manifests/gpu-clusterpolicy.yaml
   rhcl-operator:
     display_name: Red Hat Connectivity Link
     namespace: openshift-operators
@@ -56,7 +55,6 @@ rhoai:
     display_name: Red Hat OpenShift AI Custom Catalog
   namespace: redhat-ods-applications
   datasciencecluster_name: default-dsc
-  datasciencecluster_template: manifests/datasciencecluster.yaml
   components:
     - kserve
   required_crds_before_dsc:
@@ -70,15 +68,11 @@ gateway:
   gateway_class_name: data-science-gateway-class
   status_address_name: gateway-external
   create_if_missing: true
-  manifest_template: manifests/gateway.yaml
 
 inference_service:
   name: llm-d
   template: manifests/llminferenceservice.yaml
   workload_deployment_name_suffix: -kserve
-  pod_appearance_timeout_seconds: 600
-  ready_timeout_seconds: 1800
-  delete_timeout_seconds: 900
 
 artifacts:
   capture_namespace_events: true

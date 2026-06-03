@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
 from projects.cluster.toolbox.cluster_deploy_operator import main as cluster_deploy_operator
 from projects.cluster.toolbox.deploy_custom_catalog import main as deploy_custom_catalog
@@ -31,6 +32,19 @@ from projects.rhoai.toolbox.wait_datasciencecluster_ready import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def operator_spec_by_package(platform: dict[str, Any], package: str) -> dict[str, Any]:
+    operators = platform["operators"]
+    if isinstance(operators, dict):
+        if package in operators:
+            return {"package": package, **operators[package]}
+        raise KeyError(f"Unknown operator package in llm_d platform config: {package}")
+
+    for operator_spec in operators:
+        if operator_spec["package"] == package:
+            return operator_spec
+    raise KeyError(f"Unknown operator package in llm_d platform config: {package}")
 
 
 def verify_oc_access() -> None:
@@ -129,7 +143,6 @@ def prepare_nfd() -> None:
     ensure_operator_subscription(operator_spec)
     wait_for_crds_command.run(
         crd_names=[operator_spec["bootstrap_crd"]],
-        timeout_seconds=900,
         display_name="NFD bootstrap CRD",
     )
     bootstrap_nfd_instance.run()
@@ -141,7 +154,6 @@ def prepare_gpu_operator() -> None:
     ensure_operator_subscription(operator_spec)
     wait_for_crds_command.run(
         crd_names=[operator_spec["bootstrap_crd"]],
-        timeout_seconds=1800,
         display_name="GPU Operator bootstrap CRD",
     )
     bootstrap_gpu_clusterpolicy.run()
@@ -162,7 +174,6 @@ def ensure_required_crds_before_dsc() -> None:
     rhoai = platform["rhoai"]
     wait_for_crds_command.run(
         crd_names=rhoai["required_crds_before_dsc"],
-        timeout_seconds=1800,
         display_name="RHOAI pre-DSC CRDs",
     )
 
@@ -173,7 +184,6 @@ def ensure_required_crds() -> None:
     rhoai = platform["rhoai"]
     wait_for_crds_command.run(
         crd_names=rhoai["required_crds_after_dsc"],
-        timeout_seconds=1800,
         display_name="RHOAI post-DSC CRDs",
     )
 
@@ -230,7 +240,6 @@ def cleanup_previous_run() -> None:
     cleanup_toolbox_run(
         namespace=namespace,
         inference_service_name=platform["inference_service"]["name"],
-        cleanup_timeout_seconds=platform["cluster"]["cleanup_timeout_seconds"],
         benchmark_name=benchmark["job_name"] if benchmark else None,
     )
 
@@ -263,10 +272,6 @@ def prepare_model_cache() -> None:
         ),
         "pvc_name_prefix": model_cache["pvc"]["name_prefix"],
         "model_directory_name": model_cache["pvc"]["model_directory_name"],
-        "marker_filename": model_cache["marker_filename"],
-        "wait_timeout_seconds": model_cache["download"]["wait_timeout_seconds"],
-        "poll_interval_seconds": model_cache["download"]["poll_interval_seconds"],
-        "pod_image_pull_policy": model_cache["download"]["pod_image_pull_policy"],
     }
 
     if model_uri.startswith("hf://"):
