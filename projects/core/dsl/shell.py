@@ -1,10 +1,11 @@
 import logging
+import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 import projects.core.library.env as env
-from projects.core.library.run import SignalError
+from projects.core.library.run import SignalInterrupt
 
 logger = logging.getLogger("DSL")
 logger.propagate = False  # Don't show logger prefix
@@ -25,7 +26,7 @@ class CommandResult:
 
 
 def run(
-    command: str,
+    command: str | list[str],
     check: bool = True,
     shell: bool = True,
     stdout_dest: str | Path | None = None,
@@ -36,7 +37,7 @@ def run(
     Execute a shell command
 
     Args:
-        command: Command to execute
+        command: Command to execute (string for shell=True, list for shell=False)
         check: Raise exception on non-zero exit code
         shell: Execute through shell
         stdout_dest: Optional file path to write stdout to
@@ -45,13 +46,21 @@ def run(
     Returns:
         CommandResult with execution details
     """
+    # Handle both string and list commands
+    if isinstance(command, list):
+        command_for_logging = " ".join(shlex.quote(str(arg)) for arg in command)
+        command_for_subprocess = command
+    else:
+        command_for_logging = command
+        command_for_subprocess = command
+
     # Print command in verbose format
     logger.info("== command == ")
-    logger.info(f"| <command> {command}")
+    logger.info(f"| <command> {command_for_logging}")
 
     try:
         result = subprocess.run(
-            command,
+            command_for_subprocess,
             shell=shell,
             check=False,  # We handle check ourselves
             capture_output=True,
@@ -120,7 +129,7 @@ def run(
 
         return cmd_result
 
-    except (KeyboardInterrupt, SignalError):
+    except (KeyboardInterrupt, SignalInterrupt):
         raise
     except Exception as e:
         logger.error(f"<{e.__class__.__name__}> {e}")

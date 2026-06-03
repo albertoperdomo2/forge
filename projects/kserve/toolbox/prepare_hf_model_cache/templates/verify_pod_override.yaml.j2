@@ -1,0 +1,12 @@
+restartPolicy: Never
+containers:
+  - name: verify
+    image: registry.access.redhat.com/ubi9/ubi-minimal:9.5
+    command: ['ls', '-la', '/cache/{{ model_path }}/']
+    volumeMounts:
+      - name: cache
+        mountPath: /cache
+volumes:
+  - name: cache
+    persistentVolumeClaim:
+      claimName: {{ pvc_name }}

@@ -1,0 +1,42 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ name }}-copy
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/managed-by: forge
+    forge.openshift.io/project: llm_d
+spec:
+  restartPolicy: Never
+{% if node_name %}
+  nodeName: {{ node_name }}
+{% endif %}
+  initContainers:
+    - name: permission-fixer
+      image: ghcr.io/vllm-project/guidellm:v0.6.0
+      command:
+        - /bin/sh
+        - -c
+        - "chmod 755 /results && chown -R 1001:1001 /results || true"
+      securityContext:
+        runAsUser: 0
+        allowPrivilegeEscalation: true
+      volumeMounts:
+        - name: results
+          mountPath: /results
+  containers:
+    - name: copy-helper
+      image: ghcr.io/vllm-project/guidellm:v0.6.0
+      command: ["/bin/sleep", "300"]
+      securityContext:
+        runAsUser: 1001
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+      volumeMounts:
+        - name: results
+          mountPath: /results
+  volumes:
+    - name: results
+      persistentVolumeClaim:
+        claimName: {{ name }}

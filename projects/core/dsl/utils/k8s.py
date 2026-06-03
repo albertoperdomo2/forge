@@ -2,7 +2,163 @@
 Kubernetes utilities for DSL tasks
 """
 
+import json
+import logging
 import re
+import subprocess
+from typing import Any
+
+import yaml
+
+from projects.core.dsl import shell
+
+logger = logging.getLogger(__name__)
+
+
+def oc(
+    *args: str,
+    check: bool = True,
+    input_text: str | None = None,
+    timeout_seconds: float | None = 300,
+    log_stdout: bool = True,
+    log_stderr: bool = True,
+) -> shell.CommandResult:
+    """Run an oc command.
+
+    Args:
+        *args: Arguments to pass to oc
+        check: Raise subprocess.CalledProcessError if command fails
+        input_text: Input to send to command (not supported)
+        timeout_seconds: Command timeout (not supported)
+        log_stdout: Log stdout to console (default True)
+        log_stderr: Log stderr to console (default True)
+
+    Returns:
+        CommandResult with execution details
+    """
+    cmd = ["oc", *args]
+
+    return shell.run(
+        cmd,
+        check=check,
+        shell=False,
+        log_stdout=log_stdout,
+        log_stderr=log_stderr,
+    )
+
+
+def oc_get_json(
+    kind: str,
+    *,
+    name: str | None = None,
+    namespace: str | None = None,
+    selector: str | None = None,
+    ignore_not_found: bool = False,
+) -> dict[str, Any] | None:
+    """Get a Kubernetes resource as JSON using oc.
+
+    Args:
+        kind: Resource kind (e.g., 'pod', 'deployment')
+        name: Resource name (optional)
+        namespace: Namespace (optional)
+        selector: Label selector (optional)
+        ignore_not_found: Return None instead of raising error if not found
+
+    Returns:
+        Resource data as dict, or None if not found and ignore_not_found=True
+
+    Raises:
+        subprocess.CalledProcessError: If oc command fails
+    """
+    args = ["get", kind]
+    if name:
+        args.append(name)
+    if namespace:
+        args.extend(["-n", namespace])
+    if selector:
+        args.extend(["-l", selector])
+    args.extend(["-o", "json"])
+
+    result = oc(
+        *args,
+        check=not ignore_not_found,
+        log_stdout=False,
+        log_stderr=not ignore_not_found,
+    )
+    if result.returncode != 0:
+        if ignore_not_found and _is_oc_not_found_error(result.stderr):
+            return None
+        raise subprocess.CalledProcessError(
+            result.returncode, f"oc {' '.join(args)}", result.stdout, result.stderr
+        )
+    if not result.stdout:
+        raise ValueError(f"oc {' '.join(args)} returned no output")
+    return json.loads(result.stdout)
+
+
+def oc_resource_exists(kind: str, name: str, *, namespace: str | None = None) -> bool:
+    """Check if a Kubernetes resource exists.
+
+    Args:
+        kind: Resource kind (e.g., 'pod', 'deployment')
+        name: Resource name
+        namespace: Namespace (optional)
+
+    Returns:
+        True if resource exists, False otherwise
+    """
+    args = ["get", kind, name]
+    if namespace is not None:
+        args.extend(["-n", namespace])
+    args.extend(["--ignore-not-found", "-oname"])
+
+    exists = oc(*args, check=False)
+
+    return bool(exists.stdout)
+
+
+def _is_oc_not_found_error(stderr: str | None) -> bool:
+    """Check if stderr contains a 'not found' error from oc."""
+    if not stderr:
+        return False
+
+    normalized = stderr.lower()
+    if "error from server (notfound)" in normalized:
+        return True
+    if "no resources found" in normalized:
+        return True
+
+    return bool(re.search(r"\bnot found\b", normalized))
+
+
+def oc_apply(artifact_path: Any, manifest: dict[str, Any]) -> None:
+    """Apply a Kubernetes manifest.
+
+    Args:
+        artifact_path: Path where to write the manifest YAML (for record keeping)
+        manifest: Manifest data as dict
+    """
+    # Write the manifest to the file
+    with open(artifact_path, "w") as f:
+        yaml.safe_dump(manifest, f, sort_keys=False)
+
+    oc("apply", "-f", str(artifact_path))
+
+
+def condition_status(resource: dict[str, Any], condition_type: str) -> str | None:
+    """Get the status of a specific condition from a Kubernetes resource.
+
+    Args:
+        resource: Resource data as dict
+        condition_type: Type of condition to look for
+
+    Returns:
+        Condition status (e.g., 'True', 'False', 'Unknown') or None if not found
+    """
+    for condition in resource.get("status", {}).get("conditions", []):
+        if condition.get("type") == condition_type:
+            return condition.get("status")
+    return None
 
 
 def sanitize_k8s_name(name: str) -> str:

@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import logging
 
-from projects.core.dsl import always, execute_tasks, retry, shell, task, template, toolbox
+from projects.core.dsl import always, entrypoint, execute_tasks, retry, shell, task, template
 
 logger = logging.getLogger("DSL")
 
 
+@entrypoint
 def run(
     package_name: str,
     target_namespace: str,
@@ -17,9 +18,9 @@ def run(
     channel: str,
     *,
     source_namespace: str = "openshift-marketplace",
-    wait_timeout_seconds: int = 900,
     installplan_approval: str = "Automatic",
     display_name: str = "",
+    install_mode: str = "auto",
 ) -> int:
     """
     Deploy an OLM operator and wait for its CSV to succeed.
@@ -30,9 +31,9 @@ def run(
         source_name: CatalogSource name providing the operator
         channel: Subscription channel to use
         source_namespace: CatalogSource namespace
-        wait_timeout_seconds: Maximum time to wait for readiness
         installplan_approval: InstallPlan approval mode
         display_name: Optional human-friendly name used in logs
+        install_mode: Install mode - "auto" (default), "namespace-scoped", or "cluster-wide"
     """
 
     execute_tasks(locals())
@@ -63,10 +64,20 @@ def validate_parameters(args, ctx):
         raise ValueError("channel is required")
     if args.installplan_approval not in {"Automatic", "Manual"}:
         raise ValueError("installplan_approval must be either 'Automatic' or 'Manual'")
+    if args.install_mode not in {"auto", "namespace-scoped", "cluster-wide"}:
+        raise ValueError("install_mode must be 'auto', 'namespace-scoped', or 'cluster-wide'")
+
+    # Convert install_mode to cluster_wide boolean and store in context
+    if args.install_mode == "cluster-wide":
+        ctx.cluster_wide = True
+    elif args.install_mode == "namespace-scoped":
+        ctx.cluster_wide = False
+    else:  # auto mode - will be determined in check_install_modes task
+        ctx.cluster_wide = None
 
     return (
         f"Validated deployment parameters for {ctx.display_name} "
-        f"from {args.source_name}/{args.source_namespace}"
+        f"from {args.source_name}/{args.source_namespace} (install_mode: {args.install_mode})"
     )
 
 
@@ -83,12 +94,17 @@ def wait_for_catalog_source_ready(args, ctx):
         log_stdout=False,
     )
     if not result.success:
-        return False
+        return (False, f"failed to query CatalogSource {args.source_name}")
 
     state = result.stdout.strip()
     if state == "READY":
         return f"CatalogSource {args.source_name} is READY"
-    return False
+
+    # Provide specific reason based on the current state
+    if state:
+        return (False, f"CatalogSource {args.source_name} is in {state} state")
+    else:
+        return (False, f"CatalogSource {args.source_name} status is empty")
 
 
 @retry(attempts=60, delay=15)
@@ -102,10 +118,153 @@ def wait_for_package_manifest(args, ctx):
         log_stdout=False,
     )
     if not result.success:
-        return False
+        return (False, f"PackageManifest {args.package_name} not found in {args.source_namespace}")
 
-    ctx.package_manifest = json.loads(result.stdout)
+    # Save the package manifest to a file instead of storing in context
+    try:
+        package_data = json.loads(result.stdout)
+        package_manifest_file = (
+            args.artifact_dir / "src" / f"{args.package_name}-packagemanifest.json"
+        )
+        with open(package_manifest_file, "w") as f:
+            json.dump(package_data, f, indent=2)
+        ctx.package_manifest_file = package_manifest_file
+    except json.JSONDecodeError:
+        logger.warning("Failed to parse PackageManifest JSON")
+        ctx.package_manifest_file = None
+
     return f"PackageManifest {args.package_name} is available"
+
+
+@task
+def check_install_modes(args, ctx):
+    """Check supported install modes and determine final cluster_wide setting"""
+
+    if not hasattr(ctx, "package_manifest_file") or ctx.package_manifest_file is None:
+        if ctx.cluster_wide is None:  # auto mode
+            logger.warning(
+                "PackageManifest file not available, defaulting to namespace-scoped mode"
+            )
+            ctx.cluster_wide = False
+        return f"Using install mode (cluster_wide={ctx.cluster_wide})"
+
+    try:
+        with open(ctx.package_manifest_file) as f:
+            package_manifest = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.warning(f"Failed to read PackageManifest file: {e}")
+        if ctx.cluster_wide is None:  # auto mode
+            logger.warning("Defaulting to namespace-scoped mode")
+            ctx.cluster_wide = False
+        return f"Using install mode (cluster_wide={ctx.cluster_wide})"
+
+    try:
+        # Navigate to install modes in the PackageManifest
+        default_channel = package_manifest.get("status", {}).get("defaultChannel", "")
+        channels = package_manifest.get("status", {}).get("channels", [])
+
+        # Find the channel we're using (or default channel)
+        target_channel = args.channel if args.channel else default_channel
+        channel_data = None
+
+        for channel in channels:
+            if channel.get("name") == target_channel:
+                channel_data = channel
+                break
+
+        if not channel_data:
+            logger.warning(f"Channel '{target_channel}' not found in PackageManifest")
+            if ctx.cluster_wide is None:  # auto mode
+                logger.warning("Defaulting to namespace-scoped mode")
+                ctx.cluster_wide = False
+            return f"Using install mode (cluster_wide={ctx.cluster_wide})"
+
+        # Get install modes from the current CSV entry
+        current_csv_desc = channel_data.get("currentCSVDesc", {})
+        install_modes = current_csv_desc.get("installModes", [])
+
+        if not install_modes:
+            logger.warning("No install modes found in PackageManifest")
+            if ctx.cluster_wide is None:  # auto mode
+                logger.warning("Defaulting to namespace-scoped mode")
+                ctx.cluster_wide = False
+            return f"Using install mode (cluster_wide={ctx.cluster_wide})"
+
+        # Check what install modes are supported
+        supported_modes = {}
+        for mode in install_modes:
+            mode_type = mode.get("type", "")
+            supported = mode.get("supported", False)
+            supported_modes[mode_type] = supported
+
+        logger.info(f"Operator {args.package_name} supported install modes: {supported_modes}")
+
+        owns_namespace_supported = supported_modes.get("OwnNamespace", False)
+        all_namespaces_supported = supported_modes.get("AllNamespaces", False)
+
+        original_install_mode = args.install_mode
+        original_cluster_wide = ctx.cluster_wide
+
+        # Handle auto mode - choose the best available mode
+        if ctx.cluster_wide is None:  # auto mode
+            if owns_namespace_supported and all_namespaces_supported:
+                # Both supported - prefer namespace-scoped (safer)
+                ctx.cluster_wide = False
+                logger.info("Auto mode: choosing namespace-scoped (both modes supported)")
+            elif owns_namespace_supported:
+                # Only namespace-scoped supported
+                ctx.cluster_wide = False
+                logger.info("Auto mode: choosing namespace-scoped (only mode supported)")
+            elif all_namespaces_supported:
+                # Only cluster-wide supported
+                ctx.cluster_wide = True
+                logger.info("Auto mode: choosing cluster-wide (only mode supported)")
+            else:
+                # Neither supported - error
+                logger.error(
+                    f"Operator {args.package_name} doesn't support OwnNamespace or AllNamespaces modes"
+                )
+                raise ValueError(
+                    f"Operator {args.package_name} doesn't support standard install modes"
+                )
+
+        # Handle explicit mode requests
+        elif not ctx.cluster_wide and not owns_namespace_supported:
+            if all_namespaces_supported:
+                logger.warning(
+                    f"Operator {args.package_name} doesn't support namespace-scoped mode, switching to cluster-wide"
+                )
+                ctx.cluster_wide = True
+            else:
+                logger.error(
+                    f"Operator {args.package_name} doesn't support namespace-scoped mode and no suitable alternative found"
+                )
+                raise ValueError(
+                    f"Operator {args.package_name} doesn't support the requested install mode"
+                )
+
+        elif ctx.cluster_wide and not all_namespaces_supported:
+            logger.error(f"Operator {args.package_name} doesn't support cluster-wide mode")
+            raise ValueError(
+                f"Operator {args.package_name} doesn't support cluster-wide installation"
+            )
+
+        # Build result message
+        mode_desc = "cluster-wide" if ctx.cluster_wide else "namespace-scoped"
+
+        if original_install_mode == "auto":
+            return f"Auto-selected install mode: {mode_desc}"
+        elif original_cluster_wide != ctx.cluster_wide:
+            return f"Adjusted install mode: {mode_desc} (requested: {original_install_mode})"
+        else:
+            return f"Validated install mode: {mode_desc}"
+
+    except Exception as e:
+        logger.warning(f"Failed to parse install modes from PackageManifest: {e}")
+        if ctx.cluster_wide is None:  # auto mode
+            logger.warning("Defaulting to namespace-scoped mode")
+            ctx.cluster_wide = False
+        return f"Using install mode (cluster_wide={ctx.cluster_wide})"
 
 
 @task
@@ -141,7 +300,19 @@ def render_operator_group_manifest(args, ctx):
         for operator_group in operator_groups:
             spec = operator_group.get("spec", {})
             target_namespaces = spec.get("targetNamespaces", [])
-            if not target_namespaces or args.target_namespace in target_namespaces:
+
+            # For cluster-wide mode, reuse OperatorGroup with no targetNamespaces
+            if ctx.cluster_wide and not target_namespaces:
+                ctx.operator_group_manifest_file = None
+                ctx.operator_group_name = operator_group["metadata"]["name"]
+                return (
+                    f"Reusing existing cluster-wide OperatorGroup {ctx.operator_group_name} "
+                    f"in {args.target_namespace}"
+                )
+            # For namespace-scoped mode, reuse if target namespace is included
+            elif ctx.cluster_wide is False and (
+                not target_namespaces or args.target_namespace in target_namespaces
+            ):
                 ctx.operator_group_manifest_file = None
                 ctx.operator_group_name = operator_group["metadata"]["name"]
                 return (
@@ -153,16 +324,21 @@ def render_operator_group_manifest(args, ctx):
             names = ", ".join(
                 operator_group["metadata"]["name"] for operator_group in operator_groups
             )
+            if ctx.cluster_wide is None:
+                mode_desc = "auto-detected"
+            else:
+                mode_desc = "cluster-wide" if ctx.cluster_wide else "namespace-scoped"
             raise RuntimeError(
                 f"Namespace {args.target_namespace} already has OperatorGroups "
-                f"that do not target it: {names}"
+                f"that are incompatible with {mode_desc} mode: {names}"
             )
 
     ctx.operator_group_manifest_file = (
         args.artifact_dir / "src" / f"{args.package_name}-operatorgroup.yaml"
     )
     template.render_template_to_file("operator_group.yaml.j2", ctx.operator_group_manifest_file)
-    return f"Rendered OperatorGroup manifest for {args.package_name}"
+    mode_desc = "cluster-wide" if ctx.cluster_wide else "namespace-scoped"
+    return f"Rendered {mode_desc} OperatorGroup manifest for {args.package_name}"
 
 
 @task
@@ -173,7 +349,8 @@ def apply_operator_group(args, ctx):
         return f"Using existing OperatorGroup {ctx.operator_group_name}"
 
     shell.run(f"oc apply -f {ctx.operator_group_manifest_file}")
-    return f"Ensured OperatorGroup in {args.target_namespace}"
+    mode_desc = "cluster-wide" if ctx.cluster_wide else "namespace-scoped"
+    return f"Ensured {mode_desc} OperatorGroup in {args.target_namespace}"
 
 
 @task
@@ -195,35 +372,62 @@ def apply_subscription(args, ctx):
     return f"Applied Subscription for {ctx.display_name}"
 
 
+@retry(attempts=6, delay=10)
+@task
+def wait_for_csv_to_appear(args, ctx):
+    """Wait for the CSV to appear after subscription creation"""
+
+    result = shell.run(
+        "oc get csv "
+        f"-n {args.target_namespace} "
+        f"-l operators.coreos.com/{args.package_name}.{args.target_namespace} "
+        "--no-headers",
+        check=False,
+        log_stdout=True,
+    )
+    if not result.success:
+        return (False, f"failed to query CSVs for package {args.package_name}")
+
+    # Parse CSV name from first column of output
+    lines = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+    if not lines:
+        return (False, f"no CSV found for package {args.package_name} in {args.target_namespace}")
+
+    # Extract CSV name (first column)
+    csv_name = lines[0].split()[0]
+    ctx.csv_name = csv_name
+    return f"CSV {ctx.csv_name} appeared"
+
+
 @retry(attempts=60, delay=15)
 @task
 def wait_for_csv_ready(args, ctx):
     """Wait for the installed CSV to reach Succeeded phase"""
 
     result = shell.run(
-        "oc get csv "
-        f"-n {args.target_namespace} "
-        f"-l operators.coreos.com/{args.package_name}.{args.target_namespace} "
-        "-o json",
+        f"oc get csv {ctx.csv_name} -n {args.target_namespace} -o jsonpath='{{.status.phase}}'",
         check=False,
-        log_stdout=False,
+        log_stdout=True,
     )
     if not result.success:
-        return False
+        return (False, f"failed to query CSV {ctx.csv_name}")
 
-    payload = json.loads(result.stdout)
-    items = payload.get("items", [])
-    if not items:
-        return False
+    if not result.stdout.strip():
+        return (False, f"CSV {ctx.csv_name} status is empty")
 
-    csv = items[0]
-    ctx.csv_name = csv["metadata"]["name"]
-    phase = csv.get("status", {}).get("phase")
+    # Get phase directly from stdout since we're querying .status.phase
+    phase = result.stdout.strip()
+
     if phase == "Succeeded":
         return f"CSV {ctx.csv_name} succeeded"
-    if phase in {"Failed", "Replacing"}:
+    if phase == "Failed":
+        raise RuntimeError(f"CSV {ctx.csv_name} failed - aborting installation")
+    if phase == "Replacing":
         logger.info("CSV %s currently in phase %s", ctx.csv_name, phase)
-    return False
+        return (False, f"CSV {ctx.csv_name} is in Replacing phase")
+
+    # Handle other phases (Pending, Installing, etc.)
+    return (False, f"CSV {ctx.csv_name} is in {phase} phase")
 
 
 @always
@@ -298,9 +502,12 @@ def capture_csv(args, ctx):
             check=False,
             log_stdout=False,
         )
+        if not result.success:
+            return "No CSV found to capture (command failed)"
+
         csv_name = result.stdout.strip()
-        if not csv_name:
-            return "No CSV found to capture"
+        if not csv_name or csv_name == "''":
+            return "No CSV found to capture (empty result)"
 
     shell.run(
         f"oc get csv {csv_name} -n {args.target_namespace} -o yaml",
@@ -328,8 +535,5 @@ def capture_target_namespace_pods(args, ctx):
     return "Captured target namespace pods"
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

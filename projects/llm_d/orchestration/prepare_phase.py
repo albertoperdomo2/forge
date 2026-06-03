@@ -2,34 +2,64 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
+from typing import Any
 
 from projects.cluster.toolbox.cluster_deploy_operator import main as cluster_deploy_operator
 from projects.cluster.toolbox.deploy_custom_catalog import main as deploy_custom_catalog
+from projects.cluster.toolbox.wait_for_crds import main as wait_for_crds_command
+from projects.core.dsl.utils.k8s import (
+    oc,
+    oc_get_json,
+)
+from projects.core.library import env, vault
+from projects.core.orchestration.utils.k8s import ensure_namespace
+from projects.gpu_operator.toolbox.bootstrap_gpu_clusterpolicy import (
+    main as bootstrap_gpu_clusterpolicy,
+)
+from projects.gpu_operator.toolbox.bootstrap_nfd_instance import main as bootstrap_nfd_instance
+from projects.kserve.toolbox.ensure_gateway import main as ensure_gateway_command
+from projects.kserve.toolbox.prepare_hf_model_cache.main import (
+    run as prepare_hf_model_cache_toolbox_run,
+)
+from projects.llm_d.orchestration import runtime_config
 from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_run
-from projects.llm_d.runtime import llmd_runtime
-from projects.llm_d.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_command
-from projects.llm_d.toolbox.bootstrap_gpu_clusterpolicy import main as bootstrap_gpu_clusterpolicy
-from projects.llm_d.toolbox.bootstrap_nfd_instance import main as bootstrap_nfd_instance
-from projects.llm_d.toolbox.ensure_gateway import main as ensure_gateway_command
-from projects.llm_d.toolbox.prepare_model_cache.main import run as prepare_model_cache_toolbox_run
-from projects.llm_d.toolbox.wait_datasciencecluster_ready import (
+from projects.llm_d.toolbox.capture_prepare_state.main import (
+    run as capture_prepare_state_toolbox_run,
+)
+from projects.rhoai.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_command
+from projects.rhoai.toolbox.wait_datasciencecluster_ready import (
     main as wait_datasciencecluster_ready_command,
 )
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+
+
+def operator_spec_by_package(platform: dict[str, Any], package: str) -> dict[str, Any]:
+    operators = platform["operators"]
+    if isinstance(operators, dict):
+        if package in operators:
+            return {"package": package, **operators[package]}
+        raise KeyError(f"Unknown operator package in llm_d platform config: {package}")
+
+    for operator_spec in operators:
+        if operator_spec["package"] == package:
+            return operator_spec
+    raise KeyError(f"Unknown operator package in llm_d platform config: {package}")
 
 
 def verify_oc_access() -> None:
-    llmd_runtime.oc("whoami", capture_output=True)
+    oc("whoami")
 
 
-def verify_cluster_version(*, platform: dict) -> None:
-    version_info = llmd_runtime.oc("version", "-o", "json", capture_output=True)
+def verify_cluster_version() -> None:
+    platform = runtime_config.get_platform_config()
+    version_info = oc("version", "-o", "json")
     payload = json.loads(version_info.stdout)
 
     openshift_version = (
         payload.get("openshiftVersion")
+        or payload.get("releaseClientVersion")
+        or payload.get("clientVersion", {}).get("gitVersion")
         or payload.get("serverVersion", {}).get("gitVersion")
         or payload.get("serverVersion", {}).get("platform")
     )
@@ -37,7 +67,7 @@ def verify_cluster_version(*, platform: dict) -> None:
         raise RuntimeError("Could not determine OpenShift version from `oc version -o json`")
 
     minimum = platform["cluster"]["minimum_openshift_version"]
-    if llmd_runtime.version_tuple(openshift_version) < llmd_runtime.version_tuple(minimum):
+    if runtime_config.version_tuple(openshift_version) < runtime_config.version_tuple(minimum):
         raise RuntimeError(
             f"Cluster version {openshift_version} is older than the llm_d minimum {minimum}"
         )
@@ -50,15 +80,15 @@ def ensure_operator_subscription(operator_spec: dict[str, str]) -> dict[str, obj
         source_name=operator_spec["source"],
         channel=operator_spec["channel"],
         source_namespace=operator_spec.get("source_namespace", "openshift-marketplace"),
-        wait_timeout_seconds=operator_spec["wait_timeout_seconds"],
         display_name=operator_spec.get("display_name", operator_spec["package"]),
+        artifact_dirname_suffix=f"_{operator_spec['package']}",
     )
 
 
 def deploy_rhoai_custom_catalog(*, rhoai: dict) -> int:
     custom_catalog = rhoai["custom_catalog"]
     if not custom_catalog["enabled"]:
-        LOGGER.info("RHOAI custom catalog disabled; using default catalog source")
+        logger.info("RHOAI custom catalog disabled; using default catalog source")
         return 0
 
     if not custom_catalog.get("image"):
@@ -69,7 +99,6 @@ def deploy_rhoai_custom_catalog(*, rhoai: dict) -> int:
         catalog_namespace=custom_catalog["namespace"],
         catalog_image=custom_catalog["image"],
         display_name=custom_catalog.get("display_name", custom_catalog["name"]),
-        wait_timeout_seconds=custom_catalog["wait_timeout_seconds"],
     )
 
 
@@ -88,132 +117,111 @@ def rhoai_operator_spec(
     return updated_spec
 
 
-def prepare_rhcl_operator(*, platform: dict) -> None:
-    operator_spec = llmd_runtime.operator_spec_by_package(platform, "rhcl-operator")
-    ensure_global_operator_subscription(operator_spec)
-
-
-def ensure_global_operator_subscription(operator_spec: dict[str, str]) -> None:
-    namespace = operator_spec["namespace"]
-    package = operator_spec["package"]
-
-    llmd_runtime.ensure_namespace(namespace)
-    operator_groups = llmd_runtime.oc_get_json(
-        "operatorgroup",
-        namespace=namespace,
-        ignore_not_found=True,
-    )
-    if not any(
-        not item.get("spec", {}).get("targetNamespaces")
-        for item in (operator_groups or {}).get("items", [])
-    ):
-        raise RuntimeError(
-            f"Operator {package} requires a global OperatorGroup in {namespace}, but none exists"
-        )
-
-    subscription = llmd_runtime.desired_subscription(operator_spec)
-    llmd_runtime.oc("apply", "-f", "-", input_text=json.dumps(subscription))
-
-    def _subscription_reconciled() -> dict[str, object] | None:
-        payload = llmd_runtime.oc_get_json(
-            "subscription.operators.coreos.com",
-            name=package,
-            namespace=namespace,
-        )
-        if llmd_runtime.subscription_spec_matches(payload.get("spec", {}), subscription["spec"]):
-            return payload
-        return None
-
-    llmd_runtime.wait_until(
-        f"subscription/{package} reconciliation in {namespace}",
-        timeout_seconds=60,
-        interval_seconds=5,
-        predicate=_subscription_reconciled,
-    )
-    llmd_runtime.wait_for_operator_csv(
-        package,
-        namespace,
-        timeout_seconds=operator_spec["wait_timeout_seconds"],
-    )
-
-
-def prepare_cert_manager(*, platform: dict) -> None:
-    operator_spec = llmd_runtime.operator_spec_by_package(
-        platform, "openshift-cert-manager-operator"
-    )
+def prepare_rhcl_operator() -> None:
+    platform = runtime_config.get_platform_config()
+    operator_spec = operator_spec_by_package(platform, "rhcl-operator")
     ensure_operator_subscription(operator_spec)
 
 
-def prepare_leader_worker_set(*, platform: dict) -> None:
-    operator_spec = llmd_runtime.operator_spec_by_package(platform, "leader-worker-set")
+def prepare_cert_manager() -> None:
+    platform = runtime_config.get_platform_config()
+    operator_spec = operator_spec_by_package(platform, "openshift-cert-manager-operator")
     ensure_operator_subscription(operator_spec)
 
 
-def prepare_nfd(*, platform: dict) -> None:
-    operator_spec = llmd_runtime.operator_spec_by_package(platform, "nfd")
+def prepare_leader_worker_set() -> None:
+    platform = runtime_config.get_platform_config()
+    operator_spec = operator_spec_by_package(platform, "leader-worker-set")
     ensure_operator_subscription(operator_spec)
-    llmd_runtime.wait_for_crd(
-        operator_spec["bootstrap_crd"],
-        timeout_seconds=operator_spec["wait_timeout_seconds"],
-    )
-    bootstrap_nfd_instance.run(
-        gpu_label_selectors=",".join(platform["cluster"]["nfd_gpu_detection_labels"]),
-        timeout_seconds=operator_spec["wait_timeout_seconds"],
-    )
 
 
-def prepare_gpu_operator(*, platform: dict) -> None:
-    operator_spec = llmd_runtime.operator_spec_by_package(platform, "gpu-operator-certified")
+def prepare_nfd() -> None:
+    platform = runtime_config.get_platform_config()
+    operator_spec = operator_spec_by_package(platform, "nfd")
     ensure_operator_subscription(operator_spec)
-    llmd_runtime.wait_for_crd(
-        operator_spec["bootstrap_crd"],
-        timeout_seconds=operator_spec["wait_timeout_seconds"],
+    wait_for_crds_command.run(
+        crd_names=[operator_spec["bootstrap_crd"]],
+        display_name="NFD bootstrap CRD",
     )
-    bootstrap_gpu_clusterpolicy.run(
-        timeout_seconds=operator_spec["wait_timeout_seconds"],
-    )
+    bootstrap_nfd_instance.run()
 
 
-def prepare_rhoai_operator(*, platform: dict) -> None:
-    prepare_rhcl_operator(platform=platform)
+def prepare_gpu_operator() -> None:
+    platform = runtime_config.get_platform_config()
+    operator_spec = operator_spec_by_package(platform, "gpu-operator-certified")
+    ensure_operator_subscription(operator_spec)
+    wait_for_crds_command.run(
+        crd_names=[operator_spec["bootstrap_crd"]],
+        display_name="GPU Operator bootstrap CRD",
+    )
+    bootstrap_gpu_clusterpolicy.run()
+
+
+def prepare_rhoai_operator() -> None:
+    platform = runtime_config.get_platform_config()
+    prepare_rhcl_operator()
     deploy_rhoai_custom_catalog(rhoai=platform["rhoai"])
-    operator_spec = llmd_runtime.operator_spec_by_package(platform, "rhods-operator")
+    operator_spec = operator_spec_by_package(platform, "rhods-operator")
     operator_spec = rhoai_operator_spec(rhoai=platform["rhoai"], operator_spec=operator_spec)
     ensure_operator_subscription(operator_spec)
-    ensure_required_crds(
-        crd_names=platform["rhoai"]["required_crds_before_dsc"],
-        rhoai=platform["rhoai"],
+    ensure_required_crds_before_dsc()
+
+
+def ensure_required_crds_before_dsc() -> None:
+    platform = runtime_config.get_platform_config()
+    rhoai = platform["rhoai"]
+    wait_for_crds_command.run(
+        crd_names=rhoai["required_crds_before_dsc"],
+        display_name="RHOAI pre-DSC CRDs",
     )
 
 
-def ensure_required_crds(*, crd_names: list[str], rhoai: dict) -> None:
-    for crd_name in crd_names:
-        llmd_runtime.wait_for_crd(
-            crd_name,
-            timeout_seconds=rhoai["wait_timeout_seconds"],
-        )
+def ensure_required_crds() -> None:
+    """Ensure CRDs required after DataScienceCluster deployment"""
+    platform = runtime_config.get_platform_config()
+    rhoai = platform["rhoai"]
+    wait_for_crds_command.run(
+        crd_names=rhoai["required_crds_after_dsc"],
+        display_name="RHOAI post-DSC CRDs",
+    )
 
 
-def apply_datasciencecluster(*, config_dir: str, rhoai: dict) -> None:
+def apply_datasciencecluster() -> None:
+    platform = runtime_config.get_platform_config()
+    rhoai = platform["rhoai"]
     apply_datasciencecluster_command.run(
-        config_dir=config_dir,
-        rhoai=rhoai,
+        datasciencecluster_name=rhoai["datasciencecluster_name"],
+        namespace=rhoai["namespace"],
+        components=rhoai.get("components", ["kserve"]),
     )
 
 
-def wait_for_datasciencecluster_ready(*, rhoai: dict) -> None:
-    wait_datasciencecluster_ready_command.run(rhoai=rhoai)
+def wait_for_datasciencecluster_ready() -> None:
+    platform = runtime_config.get_platform_config()
+    rhoai = platform["rhoai"]
+    wait_datasciencecluster_ready_command.run(
+        datasciencecluster_name=rhoai["datasciencecluster_name"],
+        namespace=rhoai["namespace"],
+    )
 
 
-def ensure_gateway(*, config_dir: str, gateway: dict) -> None:
+def ensure_gateway() -> None:
+    config_dir = str(runtime_config.get_config_dir())
+    platform = runtime_config.get_platform_config()
+    gateway = platform["gateway"]
     ensure_gateway_command.run(
         config_dir=config_dir,
-        gateway=gateway,
+        namespace=gateway["namespace"],
+        name=gateway["name"],
+        gateway_class_name=gateway["gateway_class_name"],
+        status_address_name=gateway["status_address_name"],
+        create_if_missing=gateway["create_if_missing"],
     )
 
 
-def ensure_test_namespace(*, namespace: str) -> None:
-    llmd_runtime.ensure_namespace(
+def ensure_test_namespace() -> None:
+    namespace = runtime_config.get_namespace()
+    ensure_namespace(
         namespace,
         labels={
             "app.kubernetes.io/managed-by": "forge",
@@ -222,41 +230,68 @@ def ensure_test_namespace(*, namespace: str) -> None:
     )
 
 
-def cleanup_previous_run(
-    *,
-    namespace: str,
-    inference_service_name: str,
-    cleanup_timeout_seconds: int,
-    benchmark_name: str | None,
-) -> None:
-    cleanup_toolbox_run(
-        namespace=namespace,
-        inference_service_name=inference_service_name,
-        cleanup_timeout_seconds=cleanup_timeout_seconds,
-        benchmark_name=benchmark_name,
-    )
+def cleanup_previous_run() -> None:
+    namespace = runtime_config.get_namespace()
+    cleanup_toolbox_run(namespace=namespace)
 
 
-def prepare_model_cache(
-    *,
-    namespace: str,
-    namespace_is_managed: bool,
-    model_key: str,
-    model: dict,
-    model_cache: dict,
-) -> None:
-    prepare_model_cache_toolbox_run(
-        namespace=namespace,
-        namespace_is_managed=namespace_is_managed,
-        model_key=model_key,
-        model=model,
-        model_cache=model_cache,
-    )
+def prepare_model_cache() -> None:
+    model = runtime_config.get_model()
+    model_cache = runtime_config.get_model_cache_config()
+    model_cache_overrides = model.get("cache", {})
+
+    if not model_cache.get("enabled", False):
+        logger.info("Model cache disabled")
+        return
+
+    model_uri = model["uri"]
+
+    # Skip caching for PVC-based models
+    if model_uri.startswith(("pvc://", "pvc+hf://")):
+        logger.info("Skipping cache for PVC-based model: %s", model_uri)
+        return
+
+    common_args = {
+        "namespace": runtime_config.get_namespace(),
+        "namespace_is_managed": runtime_config.get_namespace_is_managed(),
+        "model_key": runtime_config.get_model_key(),
+        "model_uri": model_uri,
+        "pvc_size": model_cache_overrides.get("pvc_size", model_cache["pvc"]["size"]),
+        "access_mode": model_cache_overrides.get("access_mode", model_cache["pvc"]["access_mode"]),
+        "storage_class_name": model_cache_overrides.get(
+            "storage_class_name", model_cache["pvc"].get("storage_class_name")
+        ),
+        "pvc_name_prefix": model_cache["pvc"]["name_prefix"],
+        "model_directory_name": model_cache["pvc"]["model_directory_name"],
+    }
+
+    if model_uri.startswith("hf://"):
+        # Get HF token file path from vault
+        hf_token_file_path = None
+        try:
+            hf_token_file_path = vault.get_vault_content_path("psap-forge-hf", "hf_token")
+            if hf_token_file_path:
+                logger.info(f"Using HF token file from vault: {hf_token_file_path}")
+            else:
+                logger.warning("No HF token file path returned from vault psap-forge-hf/hf_token")
+        except Exception as e:
+            logger.warning(
+                f"Failed to get HF token file path from vault psap-forge-hf/hf_token: {e}"
+            )
+
+        prepare_hf_model_cache_toolbox_run(
+            **common_args,
+            downloader_image=model_cache["hf"]["downloader_image"],
+            hf_token_file_path=hf_token_file_path,
+        )
+    else:
+        raise ValueError(f"Unsupported model URI scheme: {model_uri}")
 
 
-def verify_gpu_nodes(*, platform: dict) -> None:
+def verify_gpu_nodes() -> None:
+    platform = runtime_config.get_platform_config()
     selector = platform["cluster"]["gpu_node_label_selector"]
-    data = llmd_runtime.oc_get_json("nodes", selector=selector, ignore_not_found=True)
+    data = oc_get_json("nodes", selector=selector, ignore_not_found=True)
     items = data.get("items", []) if data else []
     if not items:
         raise RuntimeError(
@@ -264,72 +299,19 @@ def verify_gpu_nodes(*, platform: dict) -> None:
         )
 
 
-def capture_prepare_state(*, artifact_dir: Path, namespace: str, platform: dict) -> None:
-    artifacts_dir = artifact_dir / "artifacts"
+def capture_prepare_state() -> None:
+    artifact_dir = env.ARTIFACT_DIR
+    namespace = runtime_config.get_namespace()
+    platform = runtime_config.get_platform_config()
     rhoai = platform["rhoai"]
     gateway = platform["gateway"]
 
-    capture_resource_yaml(
-        "datasciencecluster",
-        rhoai["datasciencecluster_name"],
-        rhoai["namespace"],
-        artifacts_dir / "datasciencecluster.yaml",
+    capture_prepare_state_toolbox_run(
+        artifact_dir=artifact_dir,
+        namespace=namespace,
+        datasciencecluster_name=rhoai["datasciencecluster_name"],
+        datasciencecluster_namespace=rhoai["namespace"],
+        gateway_name=gateway["name"],
+        gateway_namespace=gateway["namespace"],
+        capture_namespace_events=platform["artifacts"]["capture_namespace_events"],
     )
-    capture_resource_yaml(
-        "gateway",
-        gateway["name"],
-        gateway["namespace"],
-        artifacts_dir / "gateway.yaml",
-    )
-    gateway_service = llmd_runtime.oc(
-        "get",
-        "service",
-        "-A",
-        "-l",
-        f"gateway.networking.k8s.io/gateway-name={gateway['name']}",
-        "-o",
-        "yaml",
-        check=False,
-        capture_output=True,
-    )
-    if gateway_service.returncode == 0 and gateway_service.stdout:
-        llmd_runtime.write_text(artifacts_dir / "gateway.service.yaml", gateway_service.stdout)
-    if platform["artifacts"]["capture_namespace_events"]:
-        capture_namespace_events(namespace, artifacts_dir / "namespace.events.txt")
-
-
-def capture_resource_yaml(
-    kind: str,
-    name: str,
-    namespace: str,
-    destination: Path,
-    *,
-    check: bool = True,
-) -> None:
-    result = llmd_runtime.oc(
-        "get",
-        kind,
-        name,
-        "-n",
-        namespace,
-        "-o",
-        "yaml",
-        check=check,
-        capture_output=True,
-    )
-    if result.returncode == 0 and result.stdout:
-        llmd_runtime.write_text(destination, result.stdout)
-
-
-def capture_namespace_events(namespace: str, destination: Path) -> None:
-    result = llmd_runtime.oc(
-        "get",
-        "events",
-        "-n",
-        namespace,
-        "--sort-by=.metadata.creationTimestamp",
-        check=False,
-        capture_output=True,
-    )
-    if result.returncode == 0 and result.stdout:
-        llmd_runtime.write_text(destination, result.stdout)

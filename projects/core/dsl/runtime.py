@@ -13,7 +13,7 @@ from pathlib import Path
 import yaml
 
 import projects.core.library.env as env
-from projects.core.library.run import SignalError
+from projects.core.library.run import SignalInterrupt
 
 from .context import create_task_parameters
 from .log import (
@@ -21,6 +21,7 @@ from .log import (
     _get_toolbox_function_name,
     log_completion_banner,
     log_execution_banner,
+    log_task_header,
     logger,
 )
 from .script_manager import get_script_manager
@@ -129,6 +130,9 @@ def execute_tasks(function_args: dict = None):
         # Create a shared context that persists across all tasks
         shared_context = types.SimpleNamespace()
 
+        # Store artifact dirname suffix for task logging
+        shared_context._artifact_dirname_suffix = suffix
+
         # Create _meta directory for metadata files
         meta_dir = env.ARTIFACT_DIR / "_meta"
         meta_dir.mkdir(exist_ok=True)
@@ -168,7 +172,7 @@ def execute_tasks(function_args: dict = None):
                     _execute_single_task(current_task_info, args, shared_context)
                     task_index += 1
 
-            except (KeyboardInterrupt, SignalError):
+            except (KeyboardInterrupt, SignalInterrupt):
                 logger.info("")
                 logger.fatal("==> INTERRUPTED: Received KeyboardInterrupt (Ctrl+C)")
                 logger.info("==> Exiting...")
@@ -255,6 +259,24 @@ def _execute_single_task(task_info, args, shared_context):
     condition = task_info["condition"]
     task_status = task_info["status"] = {}
 
+    # Log task header with suffix from shared context
+    suffix = getattr(shared_context, "_artifact_dirname_suffix", None)
+
+    # Get definition location from the original function
+    original_func = task_func.original_func
+    co_filename = original_func.__code__.co_filename
+    co_firstlineno = original_func.__code__.co_firstlineno
+
+    # Make filename relative to FORGE_HOME
+    try:
+        rel_definition_filename = str(Path(co_filename).relative_to(env.FORGE_HOME))
+    except ValueError:
+        rel_definition_filename = co_filename
+
+    log_task_header(
+        task_name, original_func.__doc__, rel_definition_filename, co_firstlineno, suffix
+    )
+
     # Check condition if present
     if condition is not None:
         try:
@@ -310,7 +332,7 @@ def _execute_single_task(task_info, args, shared_context):
             if not attr_name.startswith("_"):
                 setattr(shared_context, attr_name, attr_value)
 
-    except (KeyboardInterrupt, SignalError):
+    except (KeyboardInterrupt, SignalInterrupt):
         raise
     except Exception as e:
         co_filename = task_func.original_func.__code__.co_filename
@@ -361,11 +383,11 @@ def _generate_execution_metadata(function_args: dict, caller_frame, meta_dir):
 
     metadata = {
         "execution_metadata": {
+            "file": str(rel_filename),
             "timestamp": datetime.now().isoformat(),
-            "file": rel_filename,
-            "command": function_name,
             "artifact_dir": str(env.ARTIFACT_DIR),
             "working_directory": str(Path.cwd()),
+            "command": function_name,
             "arguments": {},
         }
     }
@@ -453,7 +475,7 @@ def _generate_restart_script(function_args: dict, caller_frame, meta_dir):
     script_content += f"# Original execution artifact dir: {env.ARTIFACT_DIR}\n\n"
 
     # Build command line with arguments on separate lines
-    script_content += f'python "{rel_filename}"'
+    script_content += f'exec python "{rel_filename}"'
 
     # Add arguments, each on a new line with proper indentation
     for key, value in function_args.items():

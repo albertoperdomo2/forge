@@ -4,5 +4,7 @@ metadata:
   name: {{ args.package_name }}
   namespace: {{ args.target_namespace }}
 spec:
+{% if not ctx.cluster_wide %}
   targetNamespaces:
     - {{ args.target_namespace }}
+{% endif %}

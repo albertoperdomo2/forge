@@ -1,0 +1,44 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ name }}
+  namespace: {{ namespace }}
+  labels:
+    app.kubernetes.io/managed-by: forge
+    forge.openshift.io/project: llm_d
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        forge.openshift.io/project: llm_d
+    spec:
+      serviceAccountName: default
+      restartPolicy: Never
+      containers:
+        - name: guidellm
+          image: {{ image }}
+          command: ["/opt/app-root/bin/guidellm"]
+          args:
+            - benchmark
+            - run
+            - --target={{ endpoint_url }}
+{% for arg in guidellm_args %}
+            - {{ arg }}
+{% endfor %}
+          env:
+            - name: USER
+              value: guidellm
+          volumeMounts:
+            - name: home
+              mountPath: /home/guidellm
+            - name: results
+              mountPath: /results
+      volumes:
+        - name: home
+          emptyDir: {}
+        - name: results
+          persistentVolumeClaim:
+            claimName: {{ name }}

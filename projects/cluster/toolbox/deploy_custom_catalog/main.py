@@ -5,18 +5,18 @@ from __future__ import annotations
 import json
 import logging
 
-from projects.core.dsl import always, execute_tasks, retry, shell, task, template, toolbox
+from projects.core.dsl import always, entrypoint, execute_tasks, retry, shell, task, template
 
 logger = logging.getLogger("DSL")
 
 
+@entrypoint
 def run(
     catalog_source_name: str,
     catalog_namespace: str,
     catalog_image: str,
     *,
     display_name: str = "",
-    wait_timeout_seconds: int = 900,
 ) -> int:
     """
     Deploy a CatalogSource from a custom index image and wait for it to become READY.
@@ -26,7 +26,6 @@ def run(
         catalog_namespace: Namespace where the CatalogSource will be deployed
         catalog_image: Index image backing the CatalogSource
         display_name: Optional human-friendly label for logs
-        wait_timeout_seconds: Maximum time to wait for READY state
     """
 
     execute_tasks(locals())
@@ -133,8 +132,5 @@ def capture_namespace_pods(args, ctx):
     return "Captured catalog namespace pods"
 
 
-main = toolbox.create_toolbox_main(run)
-
-
 if __name__ == "__main__":
-    main()
+    run.main()

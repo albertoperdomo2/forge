@@ -1,6 +1,14 @@
 vaults:
+  all: []
+  all-optional:
   - psap-forge-notifications
   - psap-forge-mlflow-export
+  prepare: []
+  prepare-optional:
+  - psap-forge-hf
+  test: []
+  test-optional:
+  - psap-forge-hf
 
 caliper:
   export:
