@@ -156,14 +156,6 @@ def run() -> int:
             logging.warning("Caught a SignalInterrupt, skipping the finalizers")
             do_finalizers = False
 
-        # Always run cleanup, even on signal interrupt
-        finalizer_exc = _run_finalizer(
-            primary_exc,
-            finalizer_exc,
-            "cleanup runtime resources",
-            cleanup_test_resources,
-        )
-
         if do_finalizers:
             finalizer_exc = _run_finalizer(
                 primary_exc,
@@ -187,6 +179,12 @@ def run() -> int:
                 artifact_dir=artifact_dir,
                 namespace=namespace,
                 capture_namespace_events=capture_namespace_events,
+            )
+            finalizer_exc = _run_finalizer(
+                primary_exc,
+                finalizer_exc,
+                "cleanup runtime resources",
+                cleanup_test_resources,
             )
 
     if primary_exc is not None:
