@@ -161,9 +161,7 @@ def run_postprocess_after_test(
 
         # Generate reports index if visualization was successful
         try:
-            index_path = generate_caliper_reports_index(status, workspace, "reports_index.html")
-            if index_path:
-                logger.info("Generated reports index at %s", index_path)
+            generate_caliper_reports_index(status, workspace, "reports_index.html")
         except Exception as e:
             logger.warning("Failed to generate reports index: %s", e)
 
@@ -280,13 +278,10 @@ def postprocess_command(_ctx, artifact_dir: Path, output_dir: Path):
     )
     logger.info("Caliper postprocess status:\n" + yaml.dump(status, indent=2))
 
-    # Generate reports index if output directory is specified
-    if output_dir:
-        try:
-            index_path = generate_caliper_reports_index(status, output_dir, "reports_index.html")
-            if index_path:
-                logger.info("Generated reports index at %s", index_path)
-        except Exception as e:
-            logger.warning("Failed to generate reports index: %s", e)
+    # Generate reports index
+    try:
+        generate_caliper_reports_index(status, output_dir, "reports_index.html")
+    except Exception as e:
+        logger.warning("Failed to generate reports index: %s", e)
 
     return 0
