@@ -12,7 +12,6 @@ import yaml
 from projects.caliper.engine.ai_eval import run_ai_eval_export
 from projects.caliper.engine.file_export.artifacts_export_run import run_artifacts_export
 from projects.caliper.engine.file_export.mlflow_config import load_mlflow_config_yaml
-from projects.caliper.engine.html_index import generate_html_index
 from projects.caliper.engine.kpi.analyze import run_analyze
 from projects.caliper.engine.kpi.generate import run_kpi_generate
 from projects.caliper.engine.kpi.import_export import (
@@ -24,6 +23,7 @@ from projects.caliper.engine.load_plugin import load_plugin
 from projects.caliper.engine.parse import run_parse
 from projects.caliper.engine.plugin_config import resolve_plugin_module_string
 from projects.caliper.engine.visualize import run_visualize
+from projects.caliper.postprocess.helpers.html_index import generate_html_index
 
 _ARTIFACTS_DIR_HELP = (
     "Root directory of the test artifact tree (directories containing "
@@ -196,6 +196,14 @@ def parse_cmd(
     postprocess_config: Path | None,
     plugin_module_override: str | None,
 ) -> None:
+    """
+    Parse test artifacts into a unified data model.
+
+    Discovers test directories marked with __test_labels__.yaml (or settings.yaml for
+    MatrixBenchmarking), parses artifacts using the specified plugin, and creates a
+    unified data model with caching for performance. Shows parameter matrix summary
+    of discovered test variations.
+    """
     _apply_workspace_cli_overrides(
         ctx,
         artifacts_dir=artifacts_dir,
@@ -251,6 +259,19 @@ def visualize_cmd(
     postprocess_config: Path | None,
     plugin_module_override: str | None,
 ) -> None:
+    """
+    Generate visual reports and charts from parsed test data.
+
+    Loads test data (runs parse if needed), applies label filters, and generates
+    visualization reports using plugin capabilities. Specify individual reports
+    via --reports, or use predefined groups via --report-group (from
+    visualize-groups.yaml). Creates HTML index by default.
+
+    Examples:
+      caliper visualize --reports performance_analysis --output-dir /tmp/reports
+      caliper visualize --report-group comprehensive --output-dir /tmp/reports
+      caliper visualize --include-label model=llama --output-dir /tmp/reports
+    """
     _apply_workspace_cli_overrides(
         ctx,
         artifacts_dir=artifacts_dir,
@@ -290,6 +311,62 @@ def visualize_cmd(
             click.echo(f"Warning: Failed to generate HTML index: {e}", err=True)
     else:
         click.echo("Wrote: " + ", ".join(paths))
+
+
+@main.command("list-reports")
+@_workspace_cli_options
+@click.pass_context
+def list_reports_cmd(
+    ctx: click.Context,
+    artifacts_dir: Path | None,
+    postprocess_config: Path | None,
+    plugin_module_override: str | None,
+):
+    """List available reports supported by the plugin."""
+    try:
+        _apply_workspace_cli_overrides(
+            ctx,
+            artifacts_dir=artifacts_dir,
+            postprocess_config=postprocess_config,
+            plugin_module_override=plugin_module_override,
+        )
+        mod, plugin = _plugin_tuple(ctx)
+
+        # Get plugin docstring to extract report information
+        plugin_doc = plugin.__class__.__doc__ or ""
+
+        # Extract available reports from docstring
+        reports = []
+        in_reports_section = False
+
+        for line in plugin_doc.split("\n"):
+            line = line.strip()
+            if "Available visual reports:" in line:
+                in_reports_section = True
+                continue
+            elif in_reports_section and line.startswith("*"):
+                # Extract report ID from lines like "* ``report_id`` — description"
+                if "``" in line:
+                    report_parts = line.split("``")
+                    if len(report_parts) >= 3:
+                        report_id = report_parts[1]
+                        description = "``".join(report_parts[2:]).strip(" —").strip()
+                        reports.append((report_id, description))
+            elif in_reports_section and line and not line.startswith("*"):
+                # End of reports section
+                break
+
+        if reports:
+            click.echo(f"📊 Available reports for plugin {plugin.__class__.__name__}:")
+            click.echo()
+            for report_id, description in reports:
+                click.echo(f"  {report_id:<35} {description}")
+        else:
+            click.echo(f"❌ No reports found in {plugin.__class__.__name__} plugin docstring")
+
+    except Exception as e:
+        click.echo(f"❌ Failed to list reports: {e}", err=True)
+        sys.exit(1)
 
 
 @main.command("index")
@@ -545,7 +622,7 @@ def artifacts_export(
         sys.exit(code)
 
 
-@main.command("ai-eval-export")
+@main.command("ai-eval-export", hidden=True)
 @_workspace_cli_options
 @click.option("--output", type=click.Path(path_type=Path), required=True)
 @click.pass_context
