@@ -11,12 +11,12 @@ import logging
 
 import click
 
-from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
+from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_entrypoint
 from projects.core.library import env
 from projects.core.library import config as forge_config
 from projects.core.library import ci as ci_lib
-from projects.core.library.export import caliper_export_command
-from projects.core.library.replot import caliper_replot_command
+from projects.core.library.export import caliper_export_entrypoint
+from projects.core.library.replot import caliper_replot_entrypoint
 from projects.legacy.library import config
 from projects.legacy.library import env as legacy_env
 from projects.caliper.orchestration.export import run_from_orchestration_config
@@ -87,8 +87,8 @@ def test(ctx):
     sys.exit(1 if failed else 0)
 
 
-main.add_command(caliper_export_command)
-main.add_command(caliper_replot_command)
+main.add_command(caliper_export_entrypoint)
+main.add_command(caliper_replot_entrypoint)
 
 def resolve_hardware_request(hardware_spec: dict):
     """
@@ -117,7 +117,7 @@ def list_vaults():
     return config.project.get_config("vaults")
 
 main.add_command(
-    create_fournos_resolve_command(
+    create_fournos_resolve_entrypoint(
         vault_list_func=list_vaults,
         hardware_resolver_func=resolve_hardware_request,
     )
