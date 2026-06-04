@@ -32,6 +32,41 @@ from projects.core.library.status_to_html import convert_status_yaml_to_html
 logger = logging.getLogger(__name__)
 
 
+def write_test_labels(directory: Path, labels: dict[str, str], *, version: str = "1") -> Path:
+    """Write a __test_labels__.yaml file to mark a directory as a Caliper test base.
+
+    Args:
+        directory: Directory to create the test labels file in
+        labels: Dictionary of label key-value pairs
+        version: Version string for the test labels format (default: "1")
+
+    Returns:
+        Path to the created __test_labels__.yaml file
+
+    Example:
+        write_test_labels(
+            test_dir,
+            {
+                "model": "llama-3",
+                "deployment": "single-zone",
+                "rate": "10"
+            }
+        )
+    """
+    test_labels_path = directory / "__test_labels__.yaml"
+    payload = {
+        "version": version,
+        "labels": labels,
+    }
+
+    # Create directory and write YAML
+    test_labels_path.parent.mkdir(parents=True, exist_ok=True)
+    with test_labels_path.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(payload, handle, sort_keys=False)
+
+    return test_labels_path
+
+
 def generate_postprocess_status_report(
     status: dict, output_dir: Path | str, filename: str = "postprocess_status.html"
 ) -> str:
