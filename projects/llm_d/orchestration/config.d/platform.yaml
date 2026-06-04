@@ -4,7 +4,6 @@ cluster:
     name: forge-llm-d
     prefix: llm-d
     max_length: 63
-  cleanup_timeout_seconds: 900
   gpu_node_label_selector: nvidia.com/gpu.present=true
   nfd_gpu_detection_labels:
     - feature.node.kubernetes.io/pci-10de.present

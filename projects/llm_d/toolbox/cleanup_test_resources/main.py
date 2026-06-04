@@ -18,7 +18,6 @@ def run(
     inference_service_name: str,
     smoke_pod_name: str | None = None,
     benchmark_job_name: str | None = None,
-    cleanup_timeout_seconds: int = 900,
     cleanup_all_llm_d_resources: bool = False,
 ) -> int:
     """
@@ -29,7 +28,6 @@ def run(
         inference_service_name: Name of the LLM inference service
         smoke_pod_name: Name of the smoke test pod (optional)
         benchmark_job_name: Name of the benchmark job (optional)
-        cleanup_timeout_seconds: Maximum time to wait for deletions
         cleanup_all_llm_d_resources: Clean up all llm_d labeled resources
     """
 
