@@ -7,6 +7,7 @@ from typing import Any
 
 from projects.core.dsl import shell
 from projects.core.library import env
+from projects.core.library.postprocess import run_and_postprocess
 from projects.core.library.run import SignalInterrupt
 from projects.core.orchestration.utils.k8s import ensure_namespace
 from projects.guidellm.toolbox.run_guidellm_benchmark import main as run_guidellm_benchmark_command
@@ -22,6 +23,11 @@ logger = logging.getLogger(__name__)
 
 
 def run() -> int:
+    """Main test function that wraps do_test() with outcome postprocessing."""
+    return run_and_postprocess(do_test)
+
+
+def do_test() -> int:
     artifact_dir = env.ARTIFACT_DIR
 
     # Load minimal config needed for orchestration flow
