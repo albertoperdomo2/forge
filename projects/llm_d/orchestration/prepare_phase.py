@@ -19,7 +19,6 @@ from projects.gpu_operator.toolbox.bootstrap_gpu_clusterpolicy import (
     main as bootstrap_gpu_clusterpolicy,
 )
 from projects.gpu_operator.toolbox.bootstrap_nfd_instance import main as bootstrap_nfd_instance
-from projects.kserve.toolbox.ensure_gateway import main as ensure_gateway_command
 from projects.kserve.toolbox.prepare_hf_model_cache.main import (
     run as prepare_hf_model_cache_toolbox_run,
 )
@@ -28,6 +27,7 @@ from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_ru
 from projects.llm_d.toolbox.capture_prepare_state.main import (
     run as capture_prepare_state_toolbox_run,
 )
+from projects.llm_d.toolbox.ensure_gateway import main as ensure_gateway_command
 from projects.rhoai.toolbox.apply_datasciencecluster import main as apply_datasciencecluster_command
 from projects.rhoai.toolbox.wait_datasciencecluster_ready import (
     main as wait_datasciencecluster_ready_command,
