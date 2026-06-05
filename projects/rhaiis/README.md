@@ -24,22 +24,9 @@ cleanup_isvc            Delete InferenceService + ServingRuntime
 On failure at any step, `capture_isvc_state` and `cleanup_isvc` still run
 (try/finally in the orchestration layer).
 
-Inside `run_guidellm_benchmark`, the task sequence is:
-
-```
-cleanup_previous_resources   Delete leftover job/PVC/copy-pod
-        |
-create_benchmark_resources   Create ephemeral PVC + render and apply Job
-        |
-wait_for_completion          Poll job status until succeeded or failed
-        |
-capture_benchmark_state      Save job YAML, pod YAML, job logs     (@always)
-        |
-copy_benchmark_results       Spawn copy pod on same node,           (@always)
-                             oc exec cat results to local artifacts
-        |
-cleanup_benchmark_resources  Delete job + PVC + copy pod             (@always)
-```
+The benchmark step uses the canonical `projects.guidellm.toolbox.run_guidellm_benchmark`
+(shared with llm_d). rhaiis builds `guidellm_args` from its config and passes them
+to the canonical runner.
 
 ## Configuration
 
@@ -89,13 +76,13 @@ Config overrides (e.g. `rhaiis.images.nvidia`) are applied as variable overrides
 
 ## Toolbox commands
 
-| Command | Purpose |
-|---------|---------|
-| [`deploy_kserve_isvc`](./toolbox/deploy_kserve_isvc/) | Render and apply KServe InferenceService + ServingRuntime |
-| [`wait_isvc_ready`](./toolbox/wait_isvc_ready/) | Poll InferenceService readiness with health check |
-| [`run_guidellm_benchmark`](./toolbox/run_guidellm_benchmark/) | Run GuideLLM benchmark with ephemeral PVC and copy-pod result extraction |
-| [`capture_isvc_state`](./toolbox/capture_isvc_state/) | Capture InferenceService YAML, pod logs, events, describe output |
-| [`cleanup_isvc`](./toolbox/cleanup_isvc/) | Delete InferenceService, ServingRuntime, wait for deletion |
+| Command | Source | Purpose |
+|---------|--------|---------|
+| `deploy_kserve_isvc` | [rhaiis](./toolbox/deploy_kserve_isvc/) | Render and apply KServe InferenceService + ServingRuntime |
+| `wait_isvc_ready` | [rhaiis](./toolbox/wait_isvc_ready/) | Poll InferenceService readiness with health check |
+| `run_guidellm_benchmark` | [canonical](../guidellm/toolbox/run_guidellm_benchmark/) | Run GuideLLM benchmark (shared with llm_d) |
+| `capture_isvc_state` | [rhaiis](./toolbox/capture_isvc_state/) | Capture InferenceService YAML, pod logs, events, describe output |
+| `cleanup_isvc` | [rhaiis](./toolbox/cleanup_isvc/) | Delete InferenceService, ServingRuntime, wait for deletion |
 
 ## Usage
 
@@ -118,14 +105,6 @@ python3 -m projects.rhaiis.orchestration.cli test \
   --namespace kserve-e2e-perf \
   --image-pull-secret npalaska-image-pull
 
-# Custom rates
-python3 -m projects.rhaiis.orchestration.cli test \
-  --model llama-3-1-8b-fp8 \
-  --workload profile1 \
-  --namespace kserve-e2e-perf \
-  --image-pull-secret npalaska-image-pull \
-  --rates 1,10,50 --max-seconds 60
-
 # Cleanup only
 python3 -m projects.rhaiis.orchestration.cli cleanup \
   --deployment-name qwen3-0-6b --namespace kserve-e2e-perf
@@ -134,6 +113,49 @@ python3 -m projects.rhaiis.orchestration.cli cleanup \
 PYTHONPATH=$PWD python3 projects/rhaiis/orchestration/ci.py \
   resolve-fournos-config --dry-run
 ```
+
+## CLI overrides
+
+The CLI accepts flags that override workload profile defaults. This is useful for
+quick validation runs without changing `config.yaml`.
+
+```bash
+# Override rates and max-seconds for a quick test (2 rates, 60s each)
+python3 -m projects.rhaiis.orchestration.cli test \
+  --model qwen3-0_6b \
+  --workload profile1 \
+  --namespace kserve-e2e-perf \
+  --image-pull-secret npalaska-image-pull \
+  --rates 1,5 --max-seconds 60
+
+# Override tensor-parallel size
+python3 -m projects.rhaiis.orchestration.cli test \
+  --model llama-3-1-8b-fp8 \
+  --tensor-parallel 2 \
+  --namespace kserve-e2e-perf
+
+# Override vLLM image
+python3 -m projects.rhaiis.orchestration.cli test \
+  --model qwen3-0_6b \
+  --vllm-image quay.io/custom/vllm:latest \
+  --namespace kserve-e2e-perf
+```
+
+Available overrides:
+
+| Flag | Default source | Description |
+|------|---------------|-------------|
+| `--rates` | `workloads.<key>.rates` | Comma-separated concurrency levels (e.g. `1,5,50`) |
+| `--max-seconds` | `workloads.<key>.max_seconds` | Max benchmark duration per rate |
+| `--tensor-parallel` | `rhaiis.vllm_args.tensor-parallel-size` | Tensor parallel size |
+| `--vllm-image` | `rhaiis.images.<accelerator>` | vLLM container image |
+| `--accelerator` | `rhaiis.accelerator` | `nvidia` or `amd` |
+| `--replicas` | `rhaiis.deploy.replicas` | Number of predictor replicas |
+| `--storage-source` | `rhaiis.deploy.storage_source` | `hf` (HuggingFace download) or `pvc` |
+| `--storage-pvc` | `rhaiis.deploy.storage_pvc` | PVC name for model storage |
+| `--image-pull-secret` | `rhaiis.deploy.image_pull_secret` | Image pull secret name |
+| `--service-account-name` | `rhaiis.deploy.service_account_name` | Service account for predictor |
+| `--deployment-name` | derived from model HF ID | InferenceService name |
 
 ## Result extraction
 
