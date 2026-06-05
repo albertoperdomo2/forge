@@ -209,6 +209,19 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 • No reports generated...
 """
 
+    # Include fournos_launcher generated notification content
+    fournos_notification_html = artifact_dir / "NOTIFICATION.html"
+    if fournos_notification_html.exists():
+        try:
+            with open(fournos_notification_html, encoding="utf-8") as f:
+                fournos_content = f.read().strip()
+            if fournos_content:
+                message += f"""
+{fournos_content}
+"""
+        except Exception as e:
+            logger.warning("Failed to read NOTIFICATION.html: %s", e)
+
     if (
         var_over := pathlib.Path(os.environ.get("ARTIFACT_DIR", ""))
         / "000__ci_metadata"
@@ -283,6 +296,22 @@ def get_slack_thread_message(finish_reason, status):
 
     status_icon = ":done-circle-check:" if finish_reason == "success" else ":no-red-circle:"
 
+    # Check for fournos_launcher generated Slack notification content
+    artifact_dir = pathlib.Path(os.environ.get("ARTIFACT_DIR", ""))
+    fournos_notification_md = artifact_dir / "NOTIFICATION.md"
+
+    if fournos_notification_md.exists():
+        try:
+            with open(fournos_notification_md, encoding="utf-8") as f:
+                fournos_content = f.read().strip()
+            if fournos_content:
+                # Return custom notification content with status icon
+                return f"{status_icon} {get_bold(status)}\n\n{fournos_content}"
+        except (OSError, UnicodeDecodeError) as e:
+            logger.warning(f"Failed to read {fournos_notification_md}: {e}")
+            # Fall through to default message
+
+    # Fallback to standard message if no custom notification
     return get_common_message(
         finish_reason, f"{status_icon} {status}", get_link, get_italics, get_bold
     )
