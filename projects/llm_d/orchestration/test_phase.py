@@ -253,21 +253,7 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
     if not benchmark:
         return  # Skip if benchmark is disabled
 
-    # Build guidellm args from benchmark.args dictionary
-    guidellm_args = []
-    if "args" in benchmark:
-        for key, value in benchmark["args"].items():
-            # Convert snake_case to kebab-case for CLI args
-            cli_key = key.replace("_", "-")
-            guidellm_args.append(f"--{cli_key}={value}")
-
-    # Add rate if specified at top level (and not already in args)
-    if "rate" in benchmark and "rate" not in benchmark.get("args", {}):
-        guidellm_args.append(f"--rate={benchmark['rate']}")
-
-    # Add outputs if not in args
-    if not any(arg.startswith("--outputs=") for arg in guidellm_args):
-        guidellm_args.append(f"--outputs={benchmark.get('outputs', 'json')}")
+    guidellm_args = build_guidellm_args(benchmark)
 
     run_guidellm_benchmark_command.run(
         endpoint_url=endpoint_url,
@@ -279,6 +265,27 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
         pvc_size=benchmark.get("pvc_size"),
         guidellm_args=guidellm_args,
     )
+
+
+def build_guidellm_args(benchmark: dict[str, object]) -> list[str]:
+    guidellm_args: list[str] = []
+    benchmark_args = benchmark.get("args", {})
+    if benchmark_args:
+        for key, value in benchmark_args.items():
+            cli_key = key.replace("_", "-")
+            if isinstance(value, list):
+                rendered_value = ",".join(str(item) for item in value)
+            else:
+                rendered_value = str(value)
+            guidellm_args.append(f"--{cli_key}={rendered_value}")
+
+    if "rate" in benchmark and "rate" not in benchmark_args:
+        guidellm_args.append(f"--rate={benchmark['rate']}")
+
+    if not any(arg.startswith("--outputs=") for arg in guidellm_args):
+        guidellm_args.append(f"--outputs={benchmark.get('outputs', 'json')}")
+
+    return guidellm_args
 
 
 def capture_inference_service_state() -> None:

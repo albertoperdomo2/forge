@@ -14,6 +14,7 @@ from projects.core.dsl.utils.k8s import (
     oc_get_json,
 )
 from projects.guidellm.toolbox.run_guidellm_benchmark.utils import (
+    expand_guidellm_runs,
     render_guidellm_copy_pod_from_parts,
     render_guidellm_job_from_parts,
     render_guidellm_pvc_from_parts,
@@ -58,6 +59,7 @@ def validate_parameters(args, ctx):
 
     # Ensure guidellm_args is a list
     ctx.guidellm_args = args.guidellm_args or []
+    ctx.guidellm_runs = expand_guidellm_runs(ctx.guidellm_args)
 
     # Auto-detect namespace if empty
     if not args.namespace:
@@ -287,24 +289,48 @@ def wait_copy_pod_ready(args, ctx):
 def extract_results(args, ctx):
     """Extract GuideLLM results from copy pod"""
 
-    result = oc(
-        "exec",
-        "-n",
-        ctx.target_namespace,
-        f"{ctx.benchmark_name}-copy",
-        "--",
-        "cat",
-        "/results/benchmarks.json",
-        check=False,
-        log_stdout=False,
-    )
-    if result.returncode != 0 or not result.stdout:
+    results_dir = args.artifact_dir / "artifacts" / "results"
+    if len(ctx.guidellm_runs) == 1 and ctx.guidellm_runs[0].rate is None:
+        result = oc(
+            "exec",
+            "-n",
+            ctx.target_namespace,
+            f"{ctx.benchmark_name}-copy",
+            "--",
+            "cat",
+            "/results/benchmarks.json",
+            check=False,
+            log_stdout=False,
+        )
+        if result.returncode != 0 or not result.stdout:
+            raise RuntimeError(f"No results found for {ctx.benchmark_name}")
+
+        write_text(results_dir / "benchmarks.json", result.stdout)
+        return f"Extracted results for {ctx.benchmark_name}"
+
+    found_results = 0
+    for run in ctx.guidellm_runs:
+        remote_path = f"/results/benchmarks-{run.label}.json"
+        result = oc(
+            "exec",
+            "-n",
+            ctx.target_namespace,
+            f"{ctx.benchmark_name}-copy",
+            "--",
+            "cat",
+            remote_path,
+            check=False,
+            log_stdout=False,
+        )
+        if result.returncode != 0 or not result.stdout:
+            raise RuntimeError(f"No results found for {ctx.benchmark_name} run {run.label}")
+
+        write_text(results_dir / f"benchmarks-{run.label}.json", result.stdout)
+        found_results += 1
+
+    if not found_results:
         raise RuntimeError(f"No results found for {ctx.benchmark_name}")
 
-    write_text(
-        args.artifact_dir / "artifacts" / "results" / "benchmarks.json",
-        result.stdout,
-    )
     return f"Extracted results for {ctx.benchmark_name}"
 
 

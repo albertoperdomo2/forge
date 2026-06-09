@@ -19,7 +19,45 @@ Main entrypoints:
 
 - CI phase wrapper: [`orchestration/ci.py`](./orchestration/ci.py)
 - CLI wrapper: [`orchestration/cli.py`](./orchestration/cli.py)
-- Shared runtime/config loader: [`orchestration/llmd_runtime.py`](./orchestration/llmd_runtime.py)
-- Toolbox prepare command: [`toolbox/prepare/main.py`](./toolbox/prepare/main.py)
-- Toolbox test command: [`toolbox/test/main.py`](./toolbox/test/main.py)
-- Toolbox cleanup command: [`toolbox/cleanup/main.py`](./toolbox/cleanup/main.py)
+- Shared runtime/config loader: [`orchestration/runtime_config.py`](./orchestration/runtime_config.py)
+- Prepare flow: [`orchestration/prepare_sequence.py`](./orchestration/prepare_sequence.py)
+- Test flow: [`orchestration/test_phase.py`](./orchestration/test_phase.py)
+- Cleanup flow: [`orchestration/cleanup_phase.py`](./orchestration/cleanup_phase.py)
+
+Profile model:
+
+- deployment profiles are represented as presets that primarily select the scheduler mode
+- benchmark profiles are represented as named entries under
+  [`orchestration/config.d/workloads.yaml`](./orchestration/config.d/workloads.yaml)
+
+Current deployment presets:
+
+- `deployment-approximate-prefix-cache`
+- `deployment-precise-prefix-cache`
+- `deployment-distributed-default`
+
+Existing smoke presets extend those deployment presets and keep the model and smoke request
+selection.
+
+Benchmark usage:
+
+- select a deployment preset on the `/test` line
+- select a benchmark workload with `/var runtime.benchmark_key: ...`
+- select the model explicitly with `/var runtime.model_key: ...` when needed
+
+Example:
+
+```text
+/test fournos llm_d deployment-precise-prefix-cache
+/cluster athena-fire
+/var runtime.model_key: llama-3-1-8b-instruct-fp8
+/var runtime.benchmark_key: heavy-heterogeneous
+```
+
+Benchmark adaptation notes:
+
+- deployment profiles are intentionally reduced to scheduler selection in the current Forge shape
+- benchmark workloads are adapted to the existing GuideLLM execution model
+- multi-rate benchmarks expand into one GuideLLM run per rate
+- expressions such as `{2*rate}` and `{10*rate}` are resolved per run
+- Benchflow-specific features such as pre-warmup and env passthrough are not modeled yet

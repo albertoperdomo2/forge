@@ -1,6 +1,10 @@
 apiVersion: inference.networking.x-k8s.io/v1alpha1
 kind: EndpointPickerConfig
 plugins:
+  # TODO: Align this profile with the upstream precise-prefix-cache-routing guide.
+  # Upstream now uses precise-prefix-cache-producer + prefix-cache-scorer, with
+  # vLLM KV events published over ZMQ (KV_EVENTS_ENDPOINT=tcp://*:5556), instead
+  # of the older precise-prefix-cache-scorer-only configuration kept here.
   - type: single-profile-handler
   - type: precise-prefix-cache-scorer
     parameters:
