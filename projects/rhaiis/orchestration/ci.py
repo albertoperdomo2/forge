@@ -8,24 +8,25 @@ import test_rhaiis
 
 from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_command
 from projects.core.library import ci as ci_lib
-from projects.core.library import config, vault
+from projects.core.library import vault
 from projects.core.library.export import caliper_export_command
+from projects.rhaiis.orchestration import runtime_config
 
 
 def list_vaults() -> list[str]:
     test_rhaiis.init()
-    return config.project.get_config("vaults")
+    return runtime_config.get_vaults()
 
 
 def resolve_hardware_request(hardware_spec: dict) -> dict:
     test_rhaiis.init()
 
-    model_key = config.project.get_config("tests.rhaiis.model_key")
-    model = config.project.get_config(f"models.{model_key}")
+    model_key = runtime_config.get_test_model_key()
+    model = runtime_config.get_model(model_key)
     vllm_args = model.get("vllm_args", {})
     tp_size = int(vllm_args.get("tensor-parallel-size", 1))
 
-    accelerator = config.project.get_config("rhaiis.accelerator")
+    accelerator = runtime_config.get_accelerator()
     gpu_type = "mi300x" if accelerator == "amd" else "h200"
 
     hardware_spec["gpuCount"] = tp_size
@@ -43,7 +44,7 @@ def main(ctx):
     test_rhaiis.init()
 
     if ctx.invoked_subcommand != "resolve-fournos-config":
-        vault.init(config.project.get_config("vaults"))
+        vault.init(runtime_config.get_vaults())
 
 
 @main.command()

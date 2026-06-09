@@ -24,57 +24,14 @@ Examples:
 """
 
 import logging
-import pathlib
 import types
 
 import click
 
-from projects.core.library import config, env, run
+from projects.core.library import config
+from projects.rhaiis.orchestration import runtime_config
 
 logger = logging.getLogger(__name__)
-
-
-def _init():
-    env.init()
-    run.init()
-    config.init(pathlib.Path(__file__).parent)
-
-
-def _merge_vllm_args(defaults: dict, model: dict, workload: dict) -> dict:
-    merged = dict(defaults)
-    merged.update(model.get("vllm_args", {}))
-    merged.update(workload.get("vllm_args", {}))
-    return merged
-
-
-def _merge_env_vars(accelerator: str, model: dict) -> dict:
-    base = dict(config.project.get_config("rhaiis.env_vars") or {})
-    base.update(model.get("env_vars", {}))
-    accel_vars = config.project.get_config(f"rhaiis.accelerator_env_vars.{accelerator}") or {}
-    base.update(accel_vars)
-    return base
-
-
-def _build_guidellm_args(
-    *, model_id: str, data: str, rates_str: str, max_seconds: int, backend_type: str, rate_type: str
-) -> list[str]:
-    return [
-        f"--model={model_id}",
-        f"--data={data}",
-        f"--rate={rates_str}",
-        f"--max-seconds={max_seconds}",
-        f"--backend={backend_type}",
-        f"--profile={rate_type}",
-        "--output-dir=/results",
-        "--outputs=json",
-    ]
-
-
-def _split_image_tag(full_image: str) -> tuple[str, str]:
-    if ":" in full_image:
-        parts = full_image.rsplit(":", 1)
-        return parts[0], parts[1]
-    return full_image, "latest"
 
 
 @click.group()
@@ -82,12 +39,15 @@ def _split_image_tag(full_image: str) -> tuple[str, str]:
 def cli(ctx):
     """RHAIIS CLI - KServe InferenceService benchmarking."""
     ctx.ensure_object(types.SimpleNamespace)
-    _init()
+    runtime_config.init()
 
 
 @cli.command()
-@click.option("--model", "-m", default="qwen3-0_6b", help="Model key from config.yaml")
-@click.option("--workload", "-w", default="profile1", help="Workload profile name")
+@click.option(
+    "--preset", "-p", multiple=True, help="Preset name(s) from presets.d/ (e.g. llama-8b profile1)"
+)
+@click.option("--model", "-m", default=None, help="Model key from config.yaml")
+@click.option("--workload", "-w", default=None, help="Workload profile name")
 @click.option("--namespace", "-n", default=None, help="Kubernetes namespace")
 @click.option("--deployment-name", default=None, help="Deployment name (defaults to model name)")
 @click.option("--accelerator", type=click.Choice(["nvidia", "amd"]), default=None)
@@ -104,8 +64,9 @@ def cli(ctx):
 @click.pass_context
 def test(
     ctx,
-    model: str,
-    workload: str,
+    preset: tuple[str, ...],
+    model: str | None,
+    workload: str | None,
     namespace: str | None,
     deployment_name: str | None,
     accelerator: str | None,
@@ -121,28 +82,39 @@ def test(
     dry_run: bool,
 ):
     """Run KServe InferenceService benchmark."""
-    model_cfg = config.project.get_config(f"models.{model}")
-    workload_cfg = config.project.get_config(f"workloads.{workload}")
-    deploy_cfg = config.project.get_config("rhaiis.deploy")
-    benchmark_cfg = config.project.get_config("benchmarks.guidellm")
+    for name in preset:
+        config.project.apply_preset(name)
+
+    model_key = model or runtime_config.get_test_model_key()
+    workload_key = workload or runtime_config.get_test_workload_key()
+
+    model_cfg = runtime_config.get_model(model_key)
+    workload_cfg = runtime_config.get_workload(workload_key)
+    deploy_cfg = runtime_config.get_deploy_config()
+    benchmark_cfg = runtime_config.get_benchmark_config()
 
     if not deployment_name:
-        hf_id = model_cfg["hf_model_id"]
-        parts = hf_id.split("/")
-        deployment_name = (parts[1] if len(parts) > 1 else hf_id).lower().replace(".", "-")
+        deployment_name = runtime_config.derive_deployment_name(model_cfg["hf_model_id"])
 
-    accelerator = accelerator or config.project.get_config("rhaiis.accelerator")
-    namespace = namespace or config.project.get_config("rhaiis.namespace")
-    vllm_image = vllm_image or config.project.get_config(f"rhaiis.images.{accelerator}")
-    replicas = replicas if replicas is not None else deploy_cfg.get("replicas", 1)
-    storage_source = storage_source or deploy_cfg.get("storage_source", "hf")
-    storage_pvc = storage_pvc or deploy_cfg.get("storage_pvc", "")
-    image_pull_secret = image_pull_secret or deploy_cfg.get("image_pull_secret", "")
-    service_account_name = service_account_name or deploy_cfg.get("service_account_name", "")
+    accelerator = accelerator or runtime_config.get_accelerator()
+    namespace = namespace or runtime_config.get_namespace()
+    vllm_image = vllm_image or runtime_config.get_vllm_image(accelerator)
 
-    vllm_defaults = config.project.get_config("rhaiis.vllm_args")
-    vllm_args = _merge_vllm_args(vllm_defaults, model_cfg, workload_cfg)
-    env_vars = _merge_env_vars(accelerator, model_cfg)
+    # Apply CLI overrides to deploy_cfg
+    if replicas is not None:
+        deploy_cfg["replicas"] = replicas
+    if storage_source:
+        deploy_cfg["storage_source"] = storage_source
+    if storage_pvc:
+        deploy_cfg["storage_pvc"] = storage_pvc
+    if image_pull_secret:
+        deploy_cfg["image_pull_secret"] = image_pull_secret
+    if service_account_name:
+        deploy_cfg["service_account_name"] = service_account_name
+
+    vllm_defaults = runtime_config.get_vllm_defaults()
+    vllm_args = runtime_config.merge_vllm_args(vllm_defaults, model_cfg, workload_cfg)
+    env_vars = runtime_config.merge_env_vars(accelerator, model_cfg)
 
     if tensor_parallel is not None:
         vllm_args["tensor-parallel-size"] = tensor_parallel
@@ -152,111 +124,44 @@ def test(
 
     if dry_run:
         click.echo("[DRY-RUN] RHAIIS Benchmark Test")
-        click.echo(f"  Model: {model} ({model_cfg['hf_model_id']})")
-        click.echo(f"  Workload: {workload}")
+        click.echo(f"  Model: {model_key} ({model_cfg['hf_model_id']})")
+        click.echo(f"  Workload: {workload_key}")
         click.echo(f"  Namespace: {namespace}")
         click.echo(f"  Deployment: {deployment_name}")
         click.echo(f"  Accelerator: {accelerator}")
         click.echo(f"  Image: {vllm_image}")
         click.echo(f"  vLLM args: {vllm_args}")
         click.echo(f"  Env vars: {env_vars}")
-        click.echo(f"  Replicas: {replicas}")
-        click.echo(f"  Storage: {storage_source} (pvc={storage_pvc})")
-        click.echo(f"  Image pull secret: {image_pull_secret or '(none)'}")
-        click.echo(f"  Service account: {service_account_name or '(none)'}")
+        click.echo(f"  Replicas: {deploy_cfg.get('replicas', 1)}")
+        click.echo(
+            f"  Storage: {deploy_cfg.get('storage_source', 'hf')} (pvc={deploy_cfg.get('storage_pvc', '')})"
+        )
+        click.echo(f"  Image pull secret: {deploy_cfg.get('image_pull_secret') or '(none)'}")
+        click.echo(f"  Service account: {deploy_cfg.get('service_account_name') or '(none)'}")
         click.echo(f"  Rates: {rate_list}")
         click.echo(f"  Max seconds: {max_seconds_val}")
         return
 
-    from projects.guidellm.toolbox.run_guidellm_benchmark.main import (
-        run as run_guidellm_benchmark,
-    )
-    from projects.guidellm.toolbox.run_guidellm_benchmark.main import (
-        wait_guidellm_benchmark_task,
-    )
-    from projects.rhaiis.toolbox.deploy_kserve_isvc.main import run as deploy_kserve_isvc
-    from projects.rhaiis.toolbox.wait_isvc_ready.main import run as wait_isvc_ready
+    from projects.rhaiis.orchestration import test_phase
 
-    benchmark_timeout = benchmark_cfg.get("timeout", 14400)
-    wait_guidellm_benchmark_task._retry_config["attempts"] = max(1, benchmark_timeout // 10)
-
-    run_error = None
     try:
-        click.echo(f"Deploying {model_cfg['hf_model_id']} to {namespace}/{deployment_name}")
-        deploy_kserve_isvc(
+        test_phase.run(
             deployment_name=deployment_name,
             namespace=namespace,
-            model_id=model_cfg["hf_model_id"],
+            model_cfg=model_cfg,
             vllm_image=vllm_image,
             accelerator=accelerator,
             vllm_args=vllm_args,
             env_vars=env_vars,
-            replicas=replicas,
-            cpu_request=deploy_cfg.get("cpu_request", "4"),
-            memory_request=deploy_cfg.get("memory_request", "16Gi"),
-            storage_source=storage_source,
-            storage_pvc=storage_pvc,
-            image_pull_secret=image_pull_secret,
-            service_account_name=service_account_name,
-        )
-
-        click.echo("Waiting for InferenceService to be ready...")
-        wait_isvc_ready(
-            name=deployment_name,
-            namespace=namespace,
-            timeout_seconds=deploy_cfg.get("ready_timeout", 3600),
-            health_check_timeout=deploy_cfg.get("health_check_timeout", 120),
-        )
-
-        endpoint_url = f"http://{deployment_name}-predictor.{namespace}.svc.cluster.local:8080"
-
-        rates_str = ",".join(str(r) for r in rate_list)
-        click.echo(f"Running benchmark at rates={rates_str}...")
-
-        benchmark_image = benchmark_cfg.get("image", "ghcr.io/vllm-project/guidellm:v0.6.0")
-        image, version = _split_image_tag(benchmark_image)
-
-        guidellm_args = _build_guidellm_args(
-            model_id=model_cfg["hf_model_id"],
-            data=workload_cfg["data"],
-            rates_str=rates_str,
+            deploy_cfg=deploy_cfg,
+            benchmark_cfg=benchmark_cfg,
+            workload_data=workload_cfg["data"],
+            rates=rate_list,
             max_seconds=max_seconds_val,
-            backend_type=benchmark_cfg.get("backend_type", "openai_http"),
-            rate_type=benchmark_cfg.get("rate_type", "concurrent"),
-        )
-
-        run_guidellm_benchmark(
-            endpoint_url=f"{endpoint_url}/v1",
-            name=f"guidellm-{deployment_name}",
-            namespace=namespace,
-            image=image,
-            version=version,
-            timeout=benchmark_timeout,
-            pvc_size=benchmark_cfg.get("pvc_size", "5Gi"),
-            guidellm_args=guidellm_args,
         )
     except Exception as exc:
-        run_error = exc
         click.echo(f"Run failed: {exc}")
-    finally:
-        from projects.rhaiis.toolbox.capture_isvc_state.main import run as capture_isvc_state
-
-        click.echo("Capturing state...")
-        try:
-            capture_isvc_state(name=deployment_name, namespace=namespace)
-        except Exception as exc:
-            click.echo(f"Warning: capture failed: {exc}")
-
-        from projects.rhaiis.toolbox.cleanup_isvc.main import run as cleanup_isvc
-
-        click.echo("Cleaning up...")
-        try:
-            cleanup_isvc(name=deployment_name, namespace=namespace)
-        except Exception as exc:
-            click.echo(f"Warning: cleanup failed: {exc}")
-
-    if run_error:
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
 
     click.echo("Benchmark completed successfully.")
 

@@ -1,39 +1,40 @@
 import logging
 
-from projects.core.library import config, run
+from projects.core.dsl.utils.k8s import oc
+from projects.rhaiis.orchestration import runtime_config
 
 logger = logging.getLogger(__name__)
 
 
 def prepare():
-    ns = config.project.get_config("rhaiis.namespace")
-    deploy_cfg = config.project.get_config("rhaiis.deploy")
+    ns = runtime_config.get_namespace()
+    deploy_cfg = runtime_config.get_deploy_config()
     logger.info(f"Preparing namespace {ns} for rhaiis benchmarks")
 
-    result = run.run("oc whoami", capture_stdout=True, check=False)
+    result = oc("whoami", check=False)
     if result.returncode != 0:
         raise RuntimeError("Cannot connect to cluster")
     logger.info(f"Connected to cluster as {result.stdout.strip()}")
 
-    result = run.run(f"oc get namespace {ns}", check=False)
+    result = oc("get", "namespace", ns, check=False)
     if result.returncode != 0:
-        run.run(f"oc create namespace {ns}")
+        oc("create", "namespace", ns)
         logger.info(f"Created namespace {ns}")
     else:
         logger.info(f"Namespace {ns} already exists")
 
     sa_name = deploy_cfg.get("service_account_name", "")
     if sa_name:
-        result = run.run(f"oc get serviceaccount {sa_name} -n {ns}", check=False)
+        result = oc("get", "serviceaccount", sa_name, "-n", ns, check=False)
         if result.returncode != 0:
-            run.run(f"oc create serviceaccount {sa_name} -n {ns}")
+            oc("create", "serviceaccount", sa_name, "-n", ns)
             logger.info(f"Created service account {sa_name}")
         else:
             logger.info(f"Service account {sa_name} already exists")
 
     secret_name = deploy_cfg.get("image_pull_secret", "")
     if secret_name:
-        result = run.run(f"oc get secret {secret_name} -n {ns}", check=False)
+        result = oc("get", "secret", secret_name, "-n", ns, check=False)
         if result.returncode == 0:
             logger.info(f"Image pull secret {secret_name} exists")
         else:
@@ -44,15 +45,9 @@ def prepare():
 
 
 def cleanup():
-    ns = config.project.get_config("rhaiis.namespace")
+    ns = runtime_config.get_namespace()
     logger.info(f"Cleaning up rhaiis benchmark resources in {ns}")
 
-    run.run(
-        f"oc delete job --all -n {ns} --ignore-not-found",
-        check=False,
-    )
-    run.run(
-        f"oc delete pod --all -n {ns} --ignore-not-found",
-        check=False,
-    )
+    oc("delete", "job", "--all", "-n", ns, "--ignore-not-found", check=False)
+    oc("delete", "pod", "--all", "-n", ns, "--ignore-not-found", check=False)
     logger.info("Cleanup complete")
