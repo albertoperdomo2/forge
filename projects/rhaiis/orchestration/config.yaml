@@ -10,9 +10,9 @@ benchmarks:
     timeout: 14400
     pvc_size: 10Gi
     args:
-      backend: openai_http
-      profile: concurrent
-      output-dir: /results
+      backend_type: openai_http
+      rate_type: concurrent
+      output_dir: /results
       outputs: json
 
 tests:
