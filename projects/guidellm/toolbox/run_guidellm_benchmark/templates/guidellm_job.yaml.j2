@@ -20,6 +20,9 @@ spec:
       containers:
         - name: guidellm
           image: {{ image }}
+          # command and args are set by render_guidellm_job_from_parts() in
+          # utils.py — single-run jobs invoke guidellm directly, multi-run
+          # jobs use a generated shell script.
           env:
             - name: USER
               value: guidellm

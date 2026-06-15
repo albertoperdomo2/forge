@@ -36,9 +36,10 @@ smoke-default-scheduler:
   runtime.selected_preset: smoke-default-scheduler
 
 benchmark-short:
+  extends:
+    - deployment-approximate-prefix-cache
   runtime.selected_preset: benchmark-short
   runtime.model_key: llama-3-1-8b-instruct-fp8
-  runtime.scheduler_profile_key: approximate
   runtime.smoke_request_key: default
   runtime.benchmark_key: short
 
