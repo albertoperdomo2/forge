@@ -37,21 +37,22 @@ def test_deployment_presets_resolve_scheduler_profiles() -> None:
     assert runtime_config.get_scheduler_profile_key() == "default"
 
 
-def test_smoke_presets_inherit_deployment_scheduler_modes() -> None:
+@pytest.mark.parametrize(
+    ("preset", "expected_scheduler"),
+    [
+        ("smoke", "approximate"),
+        ("smoke-precise", "precise"),
+        ("smoke-default-scheduler", "default"),
+    ],
+)
+def test_smoke_presets_inherit_deployment_scheduler_modes(
+    preset: str, expected_scheduler: str
+) -> None:
     _init_project_config()
-
-    core_config.project.apply_preset("smoke")
-    assert runtime_config.get_scheduler_profile_key() == "approximate"
+    core_config.project.apply_preset(preset)
+    assert runtime_config.get_scheduler_profile_key() == expected_scheduler
     assert runtime_config.get_model_key() == "qwen3-0-6b"
     assert runtime_config.get_benchmark_config() is None
-
-    core_config.project.apply_preset("smoke-precise")
-    assert runtime_config.get_scheduler_profile_key() == "precise"
-    assert runtime_config.get_model_key() == "qwen3-0-6b"
-
-    core_config.project.apply_preset("smoke-default-scheduler")
-    assert runtime_config.get_scheduler_profile_key() == "default"
-    assert runtime_config.get_model_key() == "qwen3-0-6b"
 
 
 def test_benchmark_workloads_are_available() -> None:

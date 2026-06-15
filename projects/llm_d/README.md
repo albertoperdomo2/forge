@@ -58,6 +58,7 @@ Benchmark adaptation notes:
 
 - deployment profiles are intentionally reduced to scheduler selection in the current Forge shape
 - benchmark workloads are adapted to the existing GuideLLM execution model
-- multi-rate benchmarks expand into one GuideLLM run per rate
-- expressions such as `{2*rate}` and `{10*rate}` are resolved per run
+- rate-dependent benchmarks (args containing `{rate}` / `{N*rate}` / `{rate*N}`) expand into one GuideLLM run per rate
+- plain multi-rate benchmarks (no `{rate}` expressions) stay a single GuideLLM invocation
+- expressions such as `{2*rate}` and `{10*rate}` are resolved in those expanded runs
 - Benchflow-specific features such as pre-warmup and env passthrough are not modeled yet

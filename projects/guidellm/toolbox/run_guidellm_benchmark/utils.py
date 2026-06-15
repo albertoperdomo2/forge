@@ -75,6 +75,12 @@ def expand_guidellm_runs(guidellm_args: list[str]) -> list[GuideLLMRun]:
     rate_values = [
         value.strip() for value in rates_arg.split("=", 1)[1].split(",") if value.strip()
     ]
+    if not rate_values:
+        raise ValueError(
+            "Argument '--rates' must include at least one non-empty value "
+            "when rate-based expressions are used."
+        )
+
     runs: list[GuideLLMRun] = []
     for rate in rate_values:
         run_args: list[str] = []
