@@ -122,22 +122,27 @@ def do_test(
     finally:
         _capture_and_cleanup(deployment_name, namespace)
 
-    _generate_psap_payload(model_cfg, accelerator, vllm_image, vllm_args, workload_key)
-    _set_mlflow_metadata(
-        model_key,
-        workload_key,
-        model_cfg,
-        accelerator,
-        vllm_image,
-        vllm_args,
-        benchmark_cfg,
-        rates,
-        max_seconds,
-        namespace,
-        deployment_name,
-    )
+    try:
+        _generate_psap_payload(model_cfg, accelerator, vllm_image, vllm_args, workload_key)
+    except Exception:
+        logger.warning("PSAP payload generation failed; continuing", exc_info=True)
 
-    return 0
+    try:
+        _set_mlflow_metadata(
+            model_key,
+            workload_key,
+            model_cfg,
+            accelerator,
+            vllm_image,
+            vllm_args,
+            benchmark_cfg,
+            rates,
+            max_seconds,
+            namespace,
+            deployment_name,
+        )
+    except Exception:
+        logger.warning("Setting MLflow metadata failed; continuing", exc_info=True)
 
 
 def _create_test_labels(
@@ -203,7 +208,7 @@ def _generate_psap_payload(
 ) -> None:
     from pathlib import Path
 
-    from projects.rhaiis.postprocess.psap_payload import generate_psap_payload, write_psap_payload
+    from projects.rhaiis.postprocess.parser import generate_psap_payload, write_psap_payload
 
     matches = list(
         Path(env.ARTIFACT_DIR).glob("*__run_guidellm_benchmark/artifacts/results/benchmarks.json")

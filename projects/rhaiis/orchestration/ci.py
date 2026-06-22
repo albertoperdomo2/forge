@@ -6,12 +6,7 @@ import click
 import prepare_rhaiis
 import test_rhaiis
 
-try:
-    from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_entrypoint
-except ImportError:
-    from projects.core.ci_entrypoint.fournos_resolve import (
-        create_fournos_resolve_command as create_fournos_resolve_entrypoint,
-    )
+from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_entrypoint
 from projects.core.library import ci as ci_lib
 from projects.core.library import vault
 from projects.core.library.export import caliper_export_entrypoint
