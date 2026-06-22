@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from projects.guidellm.toolbox.run_guidellm_benchmark import build_guidellm_args
 from projects.guidellm.toolbox.run_guidellm_benchmark.utils import (
-    build_guidellm_args,
     expand_guidellm_runs,
     render_guidellm_job_from_parts,
 )
