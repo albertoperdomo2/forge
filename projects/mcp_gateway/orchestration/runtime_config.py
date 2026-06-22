@@ -48,27 +48,29 @@ class MCPGatewayConfig(BaseRuntimeConfig):
     # --- Infrastructure accessors ---
 
     def get_deployed_version(self) -> str:
-        """Detect the deployed MCP Gateway version from the Helm release on the cluster."""
-        import subprocess
+        """Detect the deployed MCP Gateway version from the container image tag."""
+        import re
 
-        result = subprocess.run(
-            ["helm", "list", "-n", "mcp-system", "-o", "json", "-f", "mcp-gateway"],
-            capture_output=True,
-            text=True,
+        from projects.core.dsl.utils.k8s import oc as run_oc
+
+        result = run_oc(
+            "get",
+            "deployment",
+            "mcp-gateway",
+            "-n",
+            "mcp-system",
+            "-o",
+            "jsonpath={.spec.template.spec.containers[0].image}",
             check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
-            import json
-
-            releases = json.loads(result.stdout)
-            if releases:
-                version = releases[0].get("chart", "").removeprefix("mcp-gateway-")
-                if version:
-                    return version
+            match = re.search(r":v?(.+)$", result.stdout.strip())
+            if match:
+                return match.group(1)
 
         raise RuntimeError(
-            "Could not detect MCP Gateway version from cluster. "
-            "Is the Helm release 'mcp-gateway' deployed in mcp-system?"
+            "Could not detect MCP Gateway version from deployment mcp-gateway in mcp-system. "
+            "Is the platform installed?"
         )
 
     def get_gateway_url(self) -> str:
