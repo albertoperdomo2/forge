@@ -19,6 +19,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+VALID_PRESETS = {"smoke", "baseline", "scale-out", "demo"}
+
 
 def get_supported_mcp_gateway_directives() -> dict[str, str]:
     """Supported mcp_gateway-specific PR trigger directives."""
@@ -83,6 +85,11 @@ def parse_project_directives(comment_text: str) -> tuple[dict[str, Any], list[st
                         "'/test fournos mcp_gateway PRESET'"
                     )
                 preset = args[0]
+                if preset not in VALID_PRESETS:
+                    raise ValueError(
+                        f"Unknown mcp_gateway preset '{preset}'. "
+                        f"Valid presets: {', '.join(sorted(VALID_PRESETS))}"
+                    )
                 config_overrides.update(
                     {
                         "runtime.default_preset": preset,
@@ -94,14 +101,20 @@ def parse_project_directives(comment_text: str) -> tuple[dict[str, Any], list[st
             continue
 
         # Parse /version directive
-        if line.startswith("/version"):
+        if line == "/version" or line.startswith("/version "):
             version = line.removeprefix("/version").strip()
             if not version:
                 raise ValueError(
                     "Invalid /version directive: version cannot be empty. Example: /version 0.7.0"
                 )
-            config_overrides["infrastructure.mcp_gateway_version"] = version
+            parts = version.split()
+            if len(parts) > 1:
+                raise ValueError(
+                    f"Invalid /version directive: expected a single version, "
+                    f"got '{version}'. Example: /version 0.7.0"
+                )
+            config_overrides["infrastructure.mcp_gateway_version"] = parts[0]
             parsed_directives.append(line)
-            logger.info("Parsed mcp_gateway version: %s", version)
+            logger.info("Parsed mcp_gateway version: %s", parts[0])
 
     return config_overrides, parsed_directives

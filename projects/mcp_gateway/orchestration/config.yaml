@@ -2,7 +2,7 @@ vaults:
   all: []
   all-optional:
   - psap-forge-notifications
-  - psap-forge-mlflow-export
+  - psap-forge-mcp-gw-mlflow
   prepare: []
   test: []
 
