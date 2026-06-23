@@ -7,6 +7,7 @@ import pytest
 from projects.core.library import config as core_config
 from projects.core.library import env
 from projects.kserve.toolbox.deploy_llmisvc.utils import render_inference_service_from_parts
+from projects.llm_d.orchestration import ci as llmd_ci
 from projects.llm_d.orchestration import runtime_config
 
 PROJECT_ORCHESTRATION_DIR = Path(__file__).resolve().parents[1] / "orchestration"
@@ -141,6 +142,26 @@ def test_release_preset_expands_benchmark_list_and_merges_workload_args() -> Non
     assert benchmark_configs["concurrent-1k-1k"]["args"]["request_type"] == "text_completions"
     assert benchmark_configs["heavy-heterogeneous"]["args"]["request_type"] == "text_completions"
     assert benchmark_configs["multi-turn"]["args"]["request_type"] == "text_completions"
+
+
+def test_ci_init_applies_default_preset_before_runtime_resolution() -> None:
+    _init_project_config()
+
+    core_config.project.config["overrides"] = {
+        "runtime.benchmark_key": "multi-turn",
+        "runtime.default_preset": "gpt-oss-120b-inference-scheduling-release",
+    }
+    core_config.project.set_config(
+        "runtime.default_preset",
+        "gpt-oss-120b-inference-scheduling-release",
+    )
+    core_config.project.set_config("runtime.benchmark_key", "multi-turn")
+
+    llmd_ci.init()
+
+    assert runtime_config.get_model_name() == "openai/gpt-oss-120b"
+    assert runtime_config.get_deployment_profile_name() == "distributed-default"
+    assert runtime_config.get_benchmark_keys() == ["multi-turn"]
 
 
 def test_model_and_deployment_profile_accept_yaml_list_strings() -> None:
