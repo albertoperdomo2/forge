@@ -184,6 +184,18 @@ def read_failure_and_log(failure_file: Path) -> dict:
         log_file = task_log
         log_type = "task"
 
+    # Check for AGENT.md file for post-mortem analysis guidance
+    agent_md_file = failure_dir / "AGENT.md"
+    agent_md_content = ""
+    if agent_md_file.exists():
+        try:
+            with open(agent_md_file) as f:
+                agent_md_content = f.read().strip()
+                logger.debug(f"Found AGENT.md file: {len(agent_md_content)} characters")
+        except Exception as e:
+            logger.warning(f"Failed to read AGENT.md file {agent_md_file}: {e}")
+            agent_md_content = f"Error reading AGENT.md file: {e}"
+
     result = {
         "failure_file": str(failure_file),
         "failure_dir": str(failure_dir),
@@ -191,6 +203,8 @@ def read_failure_and_log(failure_file: Path) -> dict:
         "log_file": str(log_file) if log_file else "No log file found",
         "log_type": log_type,
         "log_content": "",  # Renamed from ansible_content
+        "agent_md_file": str(agent_md_file) if agent_md_content else "No AGENT.md file found",
+        "agent_md_content": agent_md_content,
     }
 
     # Read FAILURE file

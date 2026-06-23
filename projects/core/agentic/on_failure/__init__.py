@@ -472,6 +472,12 @@ def process_failure_analysis(base_artifact_dir: Path, llm, verbose: bool = False
         # Read failure and corresponding log file (task.log or _ansible.log)
         failure_data = read_failure_and_log(failure_file)
 
+        # Log if AGENT.md file was found for enhanced analysis
+        if failure_data.get("agent_md_content"):
+            logger.info(
+                f"🤖 Found AGENT.md file for enhanced failure analysis: {failure_data['agent_md_file']}"
+            )
+
         # Analyze with LLM using multi-query approach
         analysis = analyze_single_failure_multi_query(
             failure_data, llm, base_artifact_dir, verbose, generate_html=True, failure_index=index

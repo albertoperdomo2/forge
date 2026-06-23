@@ -29,6 +29,7 @@ class FailureAnalysisQueries:
         self.log_content = failure_data.get("log_content") or failure_data.get(
             "ansible_content", ""
         )
+        self.agent_md_content = failure_data.get("agent_md_content", "")
         self.failed_tasks_section = ""
         if failure_data.get("failed_tasks_summary"):
             self.failed_tasks_section = f"""
@@ -43,7 +44,7 @@ class FailureAnalysisQueries:
         if log_excerpt_length:
             log_excerpt = f"{self.log_content[:log_excerpt_length]}..."
 
-        return f"""
+        context = f"""
 ## FAILURE:
 ```
 {self.failure_content}
@@ -53,18 +54,38 @@ class FailureAnalysisQueries:
 ## EXECUTION LOG:
 ```
 {log_excerpt}
+```"""
+
+        # Add AGENT.md content if available
+        if self.agent_md_content:
+            context += f"""
+
+## POST-MORTEM ANALYSIS GUIDANCE:
 ```
-"""
+{self.agent_md_content}
+```"""
+
+        return context
 
     def build_failure_context(self) -> str:
         """Build just the failure context without execution log"""
-        return f"""
+        context = f"""
 ## FAILURE:
 ```
 {self.failure_content}
 {self.failed_tasks_section}
+```"""
+
+        # Add AGENT.md content if available
+        if self.agent_md_content:
+            context += f"""
+
+## POST-MORTEM ANALYSIS GUIDANCE:
 ```
-"""
+{self.agent_md_content}
+```"""
+
+        return context
 
     def query_categorization(self) -> dict[str, str]:
         """Initial categorization and identification"""
