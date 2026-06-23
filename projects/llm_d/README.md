@@ -26,7 +26,9 @@ Main entrypoints:
 
 Profile model:
 
-- deployment profiles are represented as presets that primarily select the scheduler mode
+- deployments are defined in
+  [`orchestration/config.d/deployments.yml`](./orchestration/config.d/deployments.yml)
+  and own deployment shape directly
 - benchmark profiles are represented as named entries under
   [`orchestration/config.d/workloads.yaml`](./orchestration/config.d/workloads.yaml)
 
@@ -39,26 +41,38 @@ Current deployment presets:
 Existing smoke presets extend those deployment presets and keep the model and smoke request
 selection.
 
-Benchmark usage:
+Model and deployment selection:
 
-- select a deployment preset on the `/test` line
+- select a deployment preset on the `/test` line when you want preset defaults
+- select one or more literal Hugging Face model names with `/var runtime.model_name: ...`
+- select one or more deployment profiles with `/var runtime.deployment_profile: ...`
 - select a benchmark workload with `/var runtime.benchmark_key: ...`
-- select the model explicitly with `/var runtime.model_key: ...` when needed
 
 Example:
 
 ```text
 /test fournos llm_d deployment-precise-prefix-cache
 /cluster athena-fire
-/var runtime.model_key: llama-3-1-8b-instruct-fp8
+/var runtime.model_name: meta-llama/Llama-3.1-8B-Instruct
 /var runtime.benchmark_key: heavy-heterogeneous
+```
+
+Matrix example:
+
+```text
+/test fournos llm_d smoke
+/cluster athena-fire
+/var runtime.model_name: [openai/gpt-oss-120b, Qwen/Qwen3-0.6B]
+/var runtime.deployment_profile: [distributed-default, precise-prefix-cache]
+/var runtime.benchmark_key: multi-turn
 ```
 
 Benchmark adaptation notes:
 
-- deployment profiles are intentionally reduced to scheduler selection in the current Forge shape
+- deployments now own deployment shape, including scheduler behavior, replicas,
+  tensor parallelism, optional image overrides, and optional CPU/memory resources
 - benchmark workloads are adapted to the existing GuideLLM execution model
 - rate-dependent benchmarks (args containing `{rate}` / `{N*rate}` / `{rate*N}`) expand into one GuideLLM run per rate
 - plain multi-rate benchmarks (no `{rate}` expressions) stay a single GuideLLM invocation
 - expressions such as `{2*rate}` and `{10*rate}` are resolved in those expanded runs
-- Benchflow-specific features such as pre-warmup and env passthrough are not modeled yet
+- Features such as pre-warmup and env passthrough are not modeled yet

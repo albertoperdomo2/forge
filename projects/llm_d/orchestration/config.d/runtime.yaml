@@ -1,9 +1,8 @@
 default_preset: smoke
 selected_preset: smoke
-model_key: qwen3-0-6b
-scheduler_profile_key: approximate
+model_name: Qwen/Qwen3-0.6B
+deployment_profile: approximate-prefix-cache
 smoke_request_key: default
-benchmark_key: short
+benchmark_key: null
 job_name: null
 namespace_override: null
-gpu_count: null

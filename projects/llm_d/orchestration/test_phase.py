@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from projects.core.dsl import shell
-from projects.core.library import config, env
+from projects.core.dsl.utils import slugify_identifier
+from projects.core.library import env
 from projects.core.library.postprocess import run_and_postprocess, write_test_labels
 from projects.core.library.run import SignalInterrupt
 from projects.core.orchestration.utils.k8s import ensure_namespace
@@ -27,20 +28,20 @@ def create_test_labels() -> None:
     """Create __test_labels__.yaml with model name and guidellm configuration."""
     from projects.llm_d.orchestration import runtime_config
 
-    # Get model information
-    model_key = runtime_config.get_model_key()
-
-    # Get benchmark/guidellm configuration
-    benchmark = runtime_config.get_benchmark_config()
+    model_name = runtime_config.get_model_name()
+    deployment_profile = runtime_config.get_deployment_profile_name()
+    benchmark_keys = runtime_config.get_benchmark_keys()
 
     labels = {
-        "model_key": model_key,
+        "model_name": model_name,
+        "deployment_profile": deployment_profile,
     }
 
     # Add guidellm configuration information
-    if benchmark:
-        # Add rate if configured
-        labels["guidellm_loadshape"] = config.project.get_config("runtime.benchmark_key")
+    if benchmark_keys:
+        labels["guidellm_loadshape"] = (
+            benchmark_keys[0] if len(benchmark_keys) == 1 else benchmark_keys
+        )
 
     write_test_labels(env.ARTIFACT_DIR, labels)
     logger.info("Created test labels: %s", labels)
@@ -52,16 +53,24 @@ def run() -> int:
 
 
 def do_test() -> int:
-    artifact_dir = env.ARTIFACT_DIR
+    from projects.llm_d.orchestration import runtime_config
 
-    # Load minimal config needed for orchestration flow
+    for run_spec in runtime_config.get_run_specs():
+        with runtime_config.activate_run_spec(run_spec):
+            with env.NextArtifactDir(run_spec.artifact_dirname):
+                _do_single_test()
+
+    return 0
+
+
+def _do_single_test() -> None:
+    artifact_dir = env.ARTIFACT_DIR
     from projects.llm_d.orchestration import runtime_config
 
     namespace = runtime_config.get_namespace()
     platform = runtime_config.get_platform_config()
     capture_namespace_events = platform["artifacts"]["capture_namespace_events"]
 
-    # Ensure namespace exists before starting any deployments
     ensure_namespace(
         namespace,
         labels={
@@ -75,17 +84,15 @@ def do_test() -> int:
     finalizer_exc: tuple[type[BaseException], BaseException, Any] | None = None
 
     try:
-        with env.NextArtifactDir("llmd_test"):
-            # Create test labels with actual model and profile information
-            create_test_labels()
+        create_test_labels()
 
-            endpoint_url = deploy_inference_service()
+        endpoint_url = deploy_inference_service()
 
-            if not endpoint_url:
-                raise ValueError("Failed to extract the endpoint_url from the LLMISVC deployment")
-            run_smoke_request(endpoint_url=endpoint_url)
+        if not endpoint_url:
+            raise ValueError("Failed to extract the endpoint_url from the LLMISVC deployment")
+        run_smoke_request(endpoint_url=endpoint_url)
 
-            run_guidellm_benchmark(endpoint_url=endpoint_url)
+        run_guidellm_benchmark(endpoint_url=endpoint_url)
     except Exception:
         primary_exc = sys.exc_info()
     except SignalInterrupt:
@@ -132,8 +139,6 @@ def do_test() -> int:
     if finalizer_exc is not None:
         raise finalizer_exc[1].with_traceback(finalizer_exc[2])
 
-    return 0
-
 
 def deploy_inference_service() -> str:
     """Deploy LLMInferenceService and return endpoint URL.
@@ -172,8 +177,8 @@ def _prepare_model_cache() -> None:
     """Ensure model cache PVC is ready for deployment."""
     from projects.llm_d.orchestration import runtime_config
 
-    model_key = runtime_config.get_model_key()
-    logger.info("Preparing model cache for model: %s", model_key)
+    model_name = runtime_config.get_model_name()
+    logger.info("Preparing model cache for model: %s", model_name)
 
     # Use the same prepare_model_cache function as the prepare phase
     # This includes vault token handling and PVC existence checks
@@ -188,25 +193,19 @@ def _build_inference_service_manifest() -> Path:
     namespace = runtime_config.get_namespace()
     platform = runtime_config.get_platform_config()
     inference_service = platform["inference_service"]
-    model_key = runtime_config.get_model_key()
-    model = runtime_config.get_model()
-    scheduler_profile_key = runtime_config.get_scheduler_profile_key()
-    scheduler_profile = runtime_config.get_scheduler_profile()
+    model_name = runtime_config.get_model_name()
+    model_slug = runtime_config.get_model_slug(model_name)
+    deployment_profile = runtime_config.get_deployment_profile()
     model_cache = runtime_config.get_model_cache_config()
-
-    # Convert from old key+dict format to direct path format
-    scheduler_profile_config_path = None
-    if scheduler_profile_key != "default" and scheduler_profile is not None:
-        scheduler_profile_config_path = scheduler_profile["config_path"]
 
     # Build the InferenceService manifest
     manifest = render_inference_service_from_parts(
         config_dir=config_dir,
         namespace=namespace,
         inference_service=inference_service,
-        model_key=model_key,
-        model=model,
-        scheduler_profile_config_path=scheduler_profile_config_path,
+        model_name=model_name,
+        model_slug=model_slug,
+        deployment_profile=deployment_profile,
         model_cache=model_cache,
     )
 
@@ -227,7 +226,6 @@ def run_smoke_request(*, endpoint_url: str) -> dict[str, object]:
     namespace = runtime_config.get_namespace()
     platform = runtime_config.get_platform_config()
     smoke = platform["smoke"]
-    model = runtime_config.get_model()
     smoke_request = runtime_config.get_smoke_request()
 
     return run_smoke_request_command.run(
@@ -237,7 +235,7 @@ def run_smoke_request(*, endpoint_url: str) -> dict[str, object]:
         client_image=smoke["client_image"],
         endpoint_path=smoke["endpoint_path"],
         request_timeout_seconds=smoke["request_timeout_seconds"],
-        served_model_name=model["served_model_name"],
+        served_model_name=runtime_config.get_served_model_name(),
         prompt=smoke_request["prompt"],
         max_tokens=smoke_request["max_tokens"],
         temperature=smoke_request["temperature"],
@@ -249,22 +247,24 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
     from projects.llm_d.orchestration import runtime_config
 
     namespace = runtime_config.get_namespace()
-    benchmark = runtime_config.get_benchmark_config()
+    benchmark_configs = runtime_config.get_benchmark_configs()
 
-    if not benchmark:
+    if not benchmark_configs:
         return  # Skip if benchmark is disabled
 
-    guidellm_args = build_guidellm_args(benchmark)
-
-    run_guidellm_benchmark_command.run(
-        endpoint_url=endpoint_url,
-        name=benchmark.get("job_name"),
-        namespace=namespace,
-        image=benchmark.get("image"),
-        timeout=benchmark.get("timeout_seconds"),
-        pvc_size=benchmark.get("pvc_size"),
-        guidellm_args=guidellm_args,
-    )
+    for benchmark_key, benchmark in benchmark_configs:
+        guidellm_args = build_guidellm_args(benchmark)
+        artifact_name = f"benchmark_{slugify_identifier(benchmark_key, max_length=48)}"
+        with env.NextArtifactDir(artifact_name):
+            run_guidellm_benchmark_command.run(
+                endpoint_url=endpoint_url,
+                name=benchmark.get("job_name"),
+                namespace=namespace,
+                image=benchmark.get("image"),
+                timeout=benchmark.get("timeout_seconds"),
+                pvc_size=benchmark.get("pvc_size"),
+                guidellm_args=guidellm_args,
+            )
 
 
 def capture_inference_service_state() -> None:
@@ -299,16 +299,19 @@ def cleanup_test_resources() -> None:
     platform = runtime_config.get_platform_config()
     inference_service = platform["inference_service"]
     smoke = platform["smoke"]
-    benchmark = runtime_config.get_benchmark_config()
 
-    benchmark_job_name = benchmark["job_name"] if benchmark else None
-
-    cleanup_test_resources_command.run(
-        namespace=namespace,
-        inference_service_name=inference_service["name"],
-        smoke_pod_name=smoke["pod_name"],
-        benchmark_job_name=benchmark_job_name,
-    )
+    # Narrow cleanup (no broad sweep): cover every benchmark job name. Benchmarks
+    # typically share a single job_name, so this dedupes to one call; when
+    # benchmarking is disabled, run once with None so the IS/smoke cleanup still
+    # runs. oc delete is idempotent across iterations.
+    benchmark_job_names = runtime_config.get_benchmark_job_names() or [None]
+    for benchmark_job_name in benchmark_job_names:
+        cleanup_test_resources_command.run(
+            namespace=namespace,
+            inference_service_name=inference_service["name"],
+            smoke_pod_name=smoke["pod_name"],
+            benchmark_job_name=benchmark_job_name,
+        )
 
 
 def capture_namespace_events_after_test(

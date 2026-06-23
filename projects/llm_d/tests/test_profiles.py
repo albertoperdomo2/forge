@@ -6,6 +6,7 @@ import pytest
 
 from projects.core.library import config as core_config
 from projects.core.library import env
+from projects.kserve.toolbox.deploy_llmisvc.utils import render_inference_service_from_parts
 from projects.llm_d.orchestration import runtime_config
 
 PROJECT_ORCHESTRATION_DIR = Path(__file__).resolve().parents[1] / "orchestration"
@@ -24,34 +25,64 @@ def _init_project_config() -> None:
     core_config.init(PROJECT_ORCHESTRATION_DIR)
 
 
-def test_deployment_presets_resolve_scheduler_profiles() -> None:
+def test_deployment_presets_resolve_deployments() -> None:
     _init_project_config()
 
     core_config.project.apply_preset("deployment-approximate-prefix-cache")
-    assert runtime_config.get_scheduler_profile_key() == "approximate"
+    assert runtime_config.get_deployment_profile_name() == "approximate-prefix-cache"
 
     core_config.project.apply_preset("deployment-precise-prefix-cache")
-    assert runtime_config.get_scheduler_profile_key() == "precise"
+    assert runtime_config.get_deployment_profile_name() == "precise-prefix-cache"
 
     core_config.project.apply_preset("deployment-distributed-default")
-    assert runtime_config.get_scheduler_profile_key() == "default"
+    assert runtime_config.get_deployment_profile_name() == "distributed-default"
+
+
+def test_release_deployment_profiles_have_expected_shape() -> None:
+    _init_project_config()
+
+    approximate = core_config.project.get_config(
+        "deployments['approximate-prefix-cache']",
+        print=False,
+    )
+    precise = core_config.project.get_config(
+        "deployments['precise-prefix-cache']",
+        print=False,
+    )
+    distributed = core_config.project.get_config(
+        "deployments['distributed-default']",
+        print=False,
+    )
+
+    for profile in (approximate, precise, distributed):
+        assert profile["replicas"] == 4
+        assert profile["tensor_parallelism"] == 2
+        assert profile["vllm_args"] == [
+            "--max-model-len=8192",
+            "--gpu-memory-utilization=0.92",
+            "--trust-remote-code",
+            "--no-enable-log-requests",
+            "--enable-prefix-caching",
+        ]
+
+    assert isinstance(approximate["scheduler"], dict)
+    assert isinstance(precise["scheduler"], dict)
+    assert distributed["scheduler"] == {}
 
 
 @pytest.mark.parametrize(
-    ("preset", "expected_scheduler"),
+    ("preset", "expected_deployment"),
     [
-        ("smoke", "approximate"),
-        ("smoke-precise", "precise"),
-        ("smoke-default-scheduler", "default"),
+        ("smoke", "approximate-prefix-cache"),
+        ("smoke-precise", "precise-prefix-cache"),
+        ("smoke-default-scheduler", "distributed-default"),
     ],
 )
-def test_smoke_presets_inherit_deployment_scheduler_modes(
-    preset: str, expected_scheduler: str
-) -> None:
+def test_smoke_presets_inherit_deployment_modes(preset: str, expected_deployment: str) -> None:
     _init_project_config()
     core_config.project.apply_preset(preset)
-    assert runtime_config.get_scheduler_profile_key() == expected_scheduler
-    assert runtime_config.get_model_key() == "qwen3-0-6b"
+    assert runtime_config.get_deployment_profile_name() == expected_deployment
+    assert runtime_config.get_model_name() == "Qwen/Qwen3-0.6B"
     assert runtime_config.get_benchmark_config() is None
 
 
@@ -92,3 +123,251 @@ def test_benchmark_resolution_applies_workload_defaults_and_per_benchmark_overri
     assert multi_turn["image"] == "ghcr.io/vllm-project/guidellm:v0.5.4"
     assert multi_turn["pvc_size"] == "1Gi"
     assert multi_turn["timeout_seconds"] == 3600
+
+
+def test_release_preset_expands_benchmark_list_and_merges_workload_args() -> None:
+    _init_project_config()
+
+    core_config.project.apply_preset("gpt-oss-120b-inference-scheduling-release")
+
+    assert runtime_config.get_deployment_profile_name() == "distributed-default"
+    assert runtime_config.get_benchmark_keys() == [
+        "concurrent-1k-1k",
+        "heavy-heterogeneous",
+        "multi-turn",
+    ]
+
+    benchmark_configs = dict(runtime_config.get_benchmark_configs())
+    assert benchmark_configs["concurrent-1k-1k"]["args"]["request_type"] == "text_completions"
+    assert benchmark_configs["heavy-heterogeneous"]["args"]["request_type"] == "text_completions"
+    assert benchmark_configs["multi-turn"]["args"]["request_type"] == "text_completions"
+
+
+def test_model_and_deployment_profile_accept_yaml_list_strings() -> None:
+    _init_project_config()
+
+    core_config.project.set_config(
+        "runtime.model_name",
+        "[openai/gpt-oss-120b, Qwen/Qwen3-0.6B]",
+    )
+    core_config.project.set_config(
+        "runtime.deployment_profile",
+        "[distributed-default, precise-prefix-cache]",
+    )
+
+    run_specs = runtime_config.get_run_specs()
+
+    assert [(spec.model_name, spec.deployment_profile_name) for spec in run_specs] == [
+        ("openai/gpt-oss-120b", "distributed-default"),
+        ("openai/gpt-oss-120b", "precise-prefix-cache"),
+        ("Qwen/Qwen3-0.6B", "distributed-default"),
+        ("Qwen/Qwen3-0.6B", "precise-prefix-cache"),
+    ]
+    assert run_specs[0].model_slug == "openai-gpt-oss-120b"
+    assert run_specs[2].model_slug == "qwen-qwen3-0-6b"
+
+
+def test_runtime_rejects_legacy_model_key_path() -> None:
+    _init_project_config()
+
+    core_config.project.config.setdefault("runtime", {})["model_key"] = "qwen3-0-6b"
+    with pytest.raises(ValueError, match="runtime.model_key"):
+        runtime_config.get_run_specs()
+
+
+def test_render_uses_sanitized_model_name_and_profile_resources() -> None:
+    _init_project_config()
+    core_config.project.set_config("model_cache.enabled", False)
+    core_config.project.set_config("runtime.model_name", "openai/gpt-oss-120b")
+    core_config.project.set_config("runtime.deployment_profile", "distributed-default")
+
+    manifest = render_inference_service_from_parts(
+        config_dir=str(PROJECT_ORCHESTRATION_DIR),
+        namespace="forge-llm-d",
+        inference_service=runtime_config.get_platform_config()["inference_service"],
+        model_name=runtime_config.get_model_name(),
+        model_slug=runtime_config.get_model_slug(),
+        deployment_profile=runtime_config.get_deployment_profile(),
+        model_cache=runtime_config.get_model_cache_config(),
+    )
+
+    assert manifest["spec"]["replicas"] == 4
+    assert manifest["spec"]["model"]["uri"] == "hf://openai/gpt-oss-120b"
+    assert manifest["spec"]["model"]["name"] == "openai-gpt-oss-120b"
+    assert manifest["spec"]["template"]["containers"][0]["resources"] == {
+        "requests": {"nvidia.com/gpu": "2"},
+        "limits": {"nvidia.com/gpu": "2"},
+    }
+    assert manifest["spec"]["template"]["containers"][0]["args"] == [
+        "--max-model-len=8192",
+        "--gpu-memory-utilization=0.92",
+        "--trust-remote-code",
+        "--no-enable-log-requests",
+        "--enable-prefix-caching",
+    ]
+    assert manifest["spec"]["router"]["scheduler"] == {}
+
+
+def test_render_uses_embedded_scheduler_config() -> None:
+    _init_project_config()
+    core_config.project.set_config("model_cache.enabled", False)
+    core_config.project.set_config("runtime.model_name", "Qwen/Qwen3-0.6B")
+    core_config.project.set_config("runtime.deployment_profile", "approximate-prefix-cache")
+
+    manifest = render_inference_service_from_parts(
+        config_dir=str(PROJECT_ORCHESTRATION_DIR),
+        namespace="forge-llm-d",
+        inference_service=runtime_config.get_platform_config()["inference_service"],
+        model_name=runtime_config.get_model_name(),
+        model_slug=runtime_config.get_model_slug(),
+        deployment_profile=runtime_config.get_deployment_profile(),
+        model_cache=runtime_config.get_model_cache_config(),
+    )
+
+    scheduler = manifest["spec"]["router"]["scheduler"]
+    assert scheduler["template"]["containers"][0]["args"][-2] == "--config-text"
+    assert "EndpointPickerConfig" in scheduler["template"]["containers"][0]["args"][-1]
+
+
+def test_render_removes_scheduler_when_deployment_requests_null_scheduler() -> None:
+    _init_project_config()
+    core_config.project.set_config("model_cache.enabled", False)
+    core_config.project.config["deployments"]["no-scheduler"] = {
+        "replicas": 1,
+        "tensor_parallelism": 1,
+        "scheduler": None,
+        "vllm_args": [],
+    }
+    core_config.project.set_config("runtime.model_name", "Qwen/Qwen3-0.6B")
+    core_config.project.set_config("runtime.deployment_profile", "no-scheduler")
+
+    manifest = render_inference_service_from_parts(
+        config_dir=str(PROJECT_ORCHESTRATION_DIR),
+        namespace="forge-llm-d",
+        inference_service=runtime_config.get_platform_config()["inference_service"],
+        model_name=runtime_config.get_model_name(),
+        model_slug=runtime_config.get_model_slug(),
+        deployment_profile=runtime_config.get_deployment_profile(),
+        model_cache=runtime_config.get_model_cache_config(),
+    )
+
+    assert "scheduler" not in manifest["spec"]["router"]
+
+
+def test_benchmark_job_names_collapse_shared_default() -> None:
+    _init_project_config()
+
+    core_config.project.apply_preset("gpt-oss-120b-inference-scheduling-release")
+    # Three benchmark_keys, all sharing the workload default job_name -> one entry.
+    assert runtime_config.get_benchmark_job_names() == ["guidellm-benchmark"]
+
+
+def test_benchmark_job_names_empty_when_benchmarking_disabled() -> None:
+    _init_project_config()
+
+    core_config.project.apply_preset("smoke")
+    assert runtime_config.get_benchmark_keys() == []
+    assert runtime_config.get_benchmark_job_names() == []
+
+
+def test_run_spec_preserves_namespace_managed_flag() -> None:
+    _init_project_config()
+
+    core_config.project.apply_preset("smoke")
+    base_managed = runtime_config.get_namespace_is_managed()
+
+    run_spec = runtime_config.get_run_specs()[0]
+    assert run_spec.namespace_is_managed == base_managed
+
+    with runtime_config.activate_run_spec(run_spec):
+        # Inside the active spec the override is applied, but managed-ness must
+        # still reflect the base value, not flip to False.
+        assert runtime_config.get_namespace_is_managed() == base_managed
+    # And it is restored on exit.
+    assert runtime_config.get_namespace_is_managed() == base_managed
+
+
+def test_run_spec_preserves_managed_flag_when_namespace_is_auto_derived() -> None:
+    """Verify managed flag stays True even when activate_run_spec sets namespace_override."""
+    _init_project_config()
+
+    # Force auto-derived namespace by clearing the hardcoded name
+    core_config.project.config["platform"]["cluster"]["namespace"]["name"] = None
+
+    core_config.project.apply_preset("smoke")
+    assert runtime_config.get_namespace_is_managed() is True
+
+    run_spec = runtime_config.get_run_specs()[0]
+    assert run_spec.namespace_is_managed is True
+
+    with runtime_config.activate_run_spec(run_spec):
+        # activate_run_spec sets namespace_override, but managed flag must stay True
+        assert runtime_config.get_namespace_is_managed() is True
+    assert runtime_config.get_namespace_is_managed() is True
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("no", ["no"]),
+        ("yes", ["yes"]),
+        ("null", ["null"]),
+        ("123", ["123"]),
+        ("1.5", ["1.5"]),
+        ("meta-llama/Llama-3.1-8B-Instruct", ["meta-llama/Llama-3.1-8B-Instruct"]),
+        # Properly quoted list strings (valid Python literals):
+        (
+            "['openai/gpt-oss-120b', \"Qwen/Qwen3-0.6B\"]",
+            ["openai/gpt-oss-120b", "Qwen/Qwen3-0.6B"],
+        ),
+        # Edge cases now handled by ast.literal_eval:
+        ("['a', 'b,c']", ["a", "b,c"]),  # Comma inside quotes
+        ("[1, 2, 3]", ["1", "2", "3"]),  # Numbers in brackets
+        # Actual Python lists (from YAML parsing):
+        (["a", "b"], ["a", "b"]),
+        ([1, 2, 3], ["1", "2", "3"]),
+    ],
+)
+def test_normalize_string_or_list_treats_scalars_as_literals(raw: str, expected: list[str]) -> None:
+    assert runtime_config._normalize_string_or_list(raw, "runtime.test") == expected
+
+
+def test_render_supports_oci_model_uri() -> None:
+    _init_project_config()
+    core_config.project.set_config("model_cache.enabled", True)
+    core_config.project.set_config(
+        "runtime.model_name",
+        "oci://registry.redhat.io/rhelai1/modelcar-llama-3-1-8b-instruct-fp8-dynamic:1.5",
+    )
+    core_config.project.set_config("runtime.deployment_profile", "distributed-default")
+
+    manifest = render_inference_service_from_parts(
+        config_dir=str(PROJECT_ORCHESTRATION_DIR),
+        namespace="forge-llm-d",
+        inference_service=runtime_config.get_platform_config()["inference_service"],
+        model_name=runtime_config.get_model_name(),
+        model_slug=runtime_config.get_model_slug(),
+        deployment_profile=runtime_config.get_deployment_profile(),
+        model_cache=runtime_config.get_model_cache_config(),
+    )
+
+    # Should use PVC-cached URI when model cache is enabled
+    assert manifest["spec"]["model"]["uri"].startswith("pvc://")
+    # Model slug should sanitize the full OCI path (truncated to 32 chars)
+    assert manifest["spec"]["model"]["name"] == "oci-registry-redhat-io-rhelai1-m"
+
+
+def test_get_model_uri_detects_scheme() -> None:
+    _init_project_config()
+
+    # Plain name → hf:// prefix
+    core_config.project.set_config("runtime.model_name", "meta-llama/Llama-3.1-8B")
+    assert runtime_config.get_model_uri() == "hf://meta-llama/Llama-3.1-8B"
+
+    # OCI URI → passed through
+    core_config.project.set_config("runtime.model_name", "oci://registry.example.com/model:tag")
+    assert runtime_config.get_model_uri() == "oci://registry.example.com/model:tag"
+
+    # HF URI → passed through
+    core_config.project.set_config("runtime.model_name", "hf://Qwen/Qwen3-0.6B")
+    assert runtime_config.get_model_uri() == "hf://Qwen/Qwen3-0.6B"

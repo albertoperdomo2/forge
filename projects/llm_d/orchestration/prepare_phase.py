@@ -238,25 +238,25 @@ def cleanup_previous_run() -> None:
 
 
 def validate_model_cache(
-    namespace: str, model_key: str, model_uri: str, pvc_name_prefix: str
+    namespace: str, model_slug: str, model_uri: str, pvc_name_prefix: str
 ) -> bool:
     """Validate if model cache PVC already exists and is populated.
 
     Args:
         namespace: Namespace where the PVC should exist
-        model_key: Model key for cache naming
+        model_slug: Sanitized model identifier for cache naming
         model_uri: Model URI for cache key generation
         pvc_name_prefix: PVC name prefix from config
 
     Returns:
         True if cache is ready, False if toolbox should run
     """
-    logger.info("Validating model cache for model: %s", model_key)
+    logger.info("Validating model cache for model: %s", model_slug)
 
     # Build expected PVC name (matching toolbox logic)
     cache_key = hashlib.sha256(model_uri.encode("utf-8")).hexdigest()[:10]
     pvc_name = truncate_k8s_name(
-        f"{pvc_name_prefix}-{slugify_identifier(model_key, max_length=32)}-{cache_key}"
+        f"{pvc_name_prefix}-{slugify_identifier(model_slug, max_length=32)}-{cache_key}"
     )
 
     # Check if PVC exists
@@ -300,15 +300,13 @@ def validate_model_cache(
 
 
 def prepare_model_cache() -> None:
-    model = runtime_config.get_model()
     model_cache = runtime_config.get_model_cache_config()
-    model_cache_overrides = model.get("cache", {})
 
     if not model_cache.get("enabled", False):
         logger.info("Model cache disabled")
         return
 
-    model_uri = model["uri"]
+    model_uri = runtime_config.get_model_uri()
 
     # Skip caching for PVC-based models
     if model_uri.startswith(("pvc://", "pvc+hf://")):
@@ -316,11 +314,11 @@ def prepare_model_cache() -> None:
         return
 
     namespace = runtime_config.get_namespace()
-    model_key = runtime_config.get_model_key()
+    model_slug = runtime_config.get_model_slug()
     pvc_name_prefix = model_cache["pvc"]["name_prefix"]
 
     # Quick validation: check if cache is already ready
-    if validate_model_cache(namespace, model_key, model_uri, pvc_name_prefix):
+    if validate_model_cache(namespace, model_slug, model_uri, pvc_name_prefix):
         logger.info("Model cache validation passed - cache is ready")
         return
 
@@ -330,13 +328,11 @@ def prepare_model_cache() -> None:
     common_args = {
         "namespace": namespace,
         "namespace_is_managed": runtime_config.get_namespace_is_managed(),
-        "model_key": model_key,
+        "model_key": model_slug,
         "model_uri": model_uri,
-        "pvc_size": model_cache_overrides.get("pvc_size", model_cache["pvc"]["size"]),
-        "access_mode": model_cache_overrides.get("access_mode", model_cache["pvc"]["access_mode"]),
-        "storage_class_name": model_cache_overrides.get(
-            "storage_class_name", model_cache["pvc"].get("storage_class_name")
-        ),
+        "pvc_size": model_cache["pvc"]["size"],
+        "access_mode": model_cache["pvc"]["access_mode"],
+        "storage_class_name": model_cache["pvc"].get("storage_class_name"),
         "pvc_name_prefix": pvc_name_prefix,
         "model_directory_name": model_cache["pvc"]["model_directory_name"],
     }

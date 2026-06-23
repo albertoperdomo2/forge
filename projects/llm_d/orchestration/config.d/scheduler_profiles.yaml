@@ -1,9 +1,0 @@
-approximate:
-  config_path: scheduler_profiles/approximate.yaml
-
-precise:
-  config_path: scheduler_profiles/precise.yaml
-
-# Compatibility alias for earlier llm_d presets.
-approximate-prefix-cache:
-  config_path: scheduler_profiles/approximate.yaml
