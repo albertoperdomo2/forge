@@ -225,8 +225,40 @@ def test_render_uses_sanitized_model_name_and_profile_resources() -> None:
         "--trust-remote-code",
         "--no-enable-log-requests",
         "--enable-prefix-caching",
+        "--tensor-parallel-size=2",
     ]
     assert manifest["spec"]["router"]["scheduler"] == {}
+
+
+def test_render_preserves_explicit_tensor_parallel_arg() -> None:
+    _init_project_config()
+    core_config.project.set_config("model_cache.enabled", False)
+    core_config.project.config["deployments"]["explicit-tp"] = {
+        "replicas": 1,
+        "tensor_parallelism": 2,
+        "scheduler": {},
+        "vllm_args": [
+            "--tensor-parallel-size=4",
+            "--gpu-memory-utilization=0.85",
+        ],
+    }
+    core_config.project.set_config("runtime.model_name", "openai/gpt-oss-120b")
+    core_config.project.set_config("runtime.deployment_profile", "explicit-tp")
+
+    manifest = render_inference_service_from_parts(
+        config_dir=str(PROJECT_ORCHESTRATION_DIR),
+        namespace="forge-llm-d",
+        inference_service=runtime_config.get_platform_config()["inference_service"],
+        model_name=runtime_config.get_model_name(),
+        model_slug=runtime_config.get_model_slug(),
+        deployment_profile=runtime_config.get_deployment_profile(),
+        model_cache=runtime_config.get_model_cache_config(),
+    )
+
+    assert manifest["spec"]["template"]["containers"][0]["args"] == [
+        "--tensor-parallel-size=4",
+        "--gpu-memory-utilization=0.85",
+    ]
 
 
 def test_render_uses_embedded_scheduler_config() -> None:

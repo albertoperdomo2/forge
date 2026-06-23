@@ -109,6 +109,9 @@ def render_inference_service_from_parts(
     if deployment_profile.get("serving_image"):
         serving_container["image"] = deployment_profile["serving_image"]
     vllm_args = _build_vllm_args(deployment_profile.get("vllm_args", {}))
+    tensor_parallelism = str(deployment_profile["tensor_parallelism"])
+    if not _has_cli_arg(vllm_args, "tensor-parallel-size"):
+        vllm_args.append(f"--tensor-parallel-size={tensor_parallelism}")
     if vllm_args:
         serving_container["args"] = vllm_args
 
@@ -159,3 +162,9 @@ def _build_vllm_args(vllm_args: dict[str, Any] | list[str]) -> list[str]:
             continue
         rendered_args.append(f"--{cli_key}={value}")
     return rendered_args
+
+
+def _has_cli_arg(args: list[str], option_name: str) -> bool:
+    prefix = f"--{option_name}="
+    bare = f"--{option_name}"
+    return any(arg == bare or arg.startswith(prefix) for arg in args)
