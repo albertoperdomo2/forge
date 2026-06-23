@@ -155,6 +155,136 @@ def get_github_notification_message(finish_reason: str, status: str, pr_number: 
     )
 
 
+def _get_notification_content(artifact_dir: pathlib.Path, get_link, get_bold) -> str:
+    """
+    Extract notification content from 000__ci_metadata/notifications/ directory
+
+    Args:
+        artifact_dir: Path to the artifact directory
+        get_link: Function to format links
+        get_bold: Function to format bold text
+
+    Returns:
+        Formatted notification content string
+    """
+    notifications_dir = artifact_dir / "000__ci_metadata" / "notifications"
+    failures_file = artifact_dir / "FAILURES"
+
+    # Guard: Check if notifications directory exists
+    if not notifications_dir.exists():
+        return _get_fallback_failure_content(failures_file, get_link, get_bold)
+
+    # Guard: Check if there are any notification files
+    notification_files = sorted(notifications_dir.glob("*.txt"))
+    if not notification_files:
+        return _get_fallback_failure_content(failures_file, get_link, get_bold)
+
+    content = ""
+
+    # Process each notification file
+    for notification_file in notification_files:
+        try:
+            with open(notification_file, encoding="utf-8") as f:
+                notification_content = f.read().strip()
+
+            # Guard: Skip empty files
+            if not notification_content:
+                continue
+
+            # Extract title from filename (strip prefix until __ and .txt extension)
+            filename = notification_file.name
+            if "__" in filename:
+                title = filename.split("__", 1)[1].rsplit(".txt", 1)[0]
+            else:
+                title = filename.rsplit(".txt", 1)[0]
+
+            # Replace underscores with spaces for better readability
+            title = title.replace("_", " ")
+
+            content += f"""
+{get_bold(title)}:
+"""
+            # Format as quote blocks for better text wrapping
+            quoted_content = "\n".join(
+                f"> {line}" if line.strip() else ">" for line in notification_content.split("\n")
+            )
+            content += f"""
+{quoted_content}
+"""
+        except Exception as e:
+            logger.warning(f"Failed to read {notification_file}: {e}")
+            content += f"""
+• Error reading {notification_file.name}
+"""
+
+    # Add links to HTML reports
+    html_report_file = artifact_dir / "failure_analysis_report.html"
+    if html_report_file.exists():
+        content += f"""
+• {get_link("Detailed failure analysis report", "failure_analysis_report.html")}
+"""
+
+    config_review_file = artifact_dir / "config_review.html"
+    if config_review_file.exists():
+        content += f"""
+• {get_link("Config review report", "config_review.html")}
+"""
+
+    # Add link to FAILURES file if it exists (but don't include content)
+    if failures_file.exists():
+        content += f"""
+• {get_link("Raw failure details", "FAILURES", is_raw_file=True)}
+"""
+
+    return content
+
+
+def _get_fallback_failure_content(failures_file: pathlib.Path, get_link, get_bold) -> str:
+    """
+    Fallback to legacy FAILURES file processing when no notifications exist
+
+    Args:
+        failures_file: Path to the FAILURES file
+        get_link: Function to format links
+        get_bold: Function to format bold text
+
+    Returns:
+        Formatted failure content string or empty string
+    """
+    # Guard: Return early if FAILURES file doesn't exist
+    if not failures_file.exists():
+        return ""
+
+    try:
+        with open(failures_file) as f:
+            lines = f.readlines()
+
+        # Guard: Return early for empty files
+        if not lines:
+            return """
+• Failure indicator: Empty.
+"""
+
+        DEFAULT_HEAD = 10
+        try:
+            head = lines.index("---\n")
+        except ValueError:
+            head = DEFAULT_HEAD
+
+        return f"""
+• {get_link("Failure indicator", "FAILURES", is_raw_file=True)}:
+```
+{"".join(lines[:head])}
+{"[...]" if len(lines) > head else ""}
+```
+"""
+    except Exception as e:
+        logger.warning(f"Failed to read FAILURES file: {e}")
+        return f"""
+• Error reading FAILURES file: {e}
+"""
+
+
 def get_common_message(finish_reason: str, status: str, get_link, get_italics, get_bold):
     message = ""
 
@@ -247,70 +377,10 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 • No test configuration (`variable_overrides.yaml/pr_config.txt`) available.
 """
 
-    # Check for FAILURE_REVIEW files first
+    # Get notification content from dedicated function
     artifact_dir = pathlib.Path(os.environ.get("ARTIFACT_DIR", ""))
-    failure_review_files = list(artifact_dir.glob("FAILURE_REVIEW_*"))
-    failures_file = artifact_dir / "FAILURES"
-
-    if failure_review_files:
-        # FAILURE_REVIEW files found - include their content and link to FAILURES
-        message += f"""
-{get_bold("Failure Analysis")}:
-"""
-        for review_file in failure_review_files:
-            try:
-                with open(review_file, encoding="utf-8") as f:
-                    review_content = f.read().strip()
-                if review_content:
-                    # Format as quote blocks for better text wrapping
-                    quoted_content = "\n".join(
-                        f"> {line}" if line.strip() else ">" for line in review_content.split("\n")
-                    )
-                    message += f"""
-{quoted_content}
-"""
-            except Exception as e:
-                logger.warning(f"Failed to read {review_file}: {e}")
-                message += f"""
-• Error reading {review_file.name}
-"""
-
-        # Add link to HTML report if it exists
-        html_report_file = artifact_dir / "failure_analysis_report.html"
-        if html_report_file.exists():
-            message += f"""
-• {get_link("Detailed failure analysis report", "failure_analysis_report.html")}
-"""
-
-        # Add link to FAILURES file if it exists (but don't include content)
-        if failures_file.exists():
-            message += f"""
-• {get_link("Raw failure details", "FAILURES", is_raw_file=True)}
-"""
-
-    elif failures_file.exists():
-        # No FAILURE_REVIEW files - fallback to current FAILURES behavior
-        with open(failures_file) as f:
-            DEFAULT_HEAD = 10
-            lines = f.readlines()
-            try:
-                head = lines.index("---\n")
-            except ValueError:
-                head = DEFAULT_HEAD
-
-            message += (
-                f"""
-• {get_link("Failure indicator", "FAILURES", is_raw_file=True)}:
-```
-{"".join(lines[:head])}
-{"[...]" if len(lines) > head else ""}
-```
-"""
-                if lines
-                else """
-• Failure indicator: Empty.
-"""
-            )
+    notification_content = _get_notification_content(artifact_dir, get_link, get_bold)
+    message += notification_content
 
     message += "• " + get_link("Execution logs", "run.log", is_raw_file=True)
 
