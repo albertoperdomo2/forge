@@ -32,6 +32,22 @@ def do_test(
     namespace: str,
     deployment_name: str | None = None,
 ) -> int:
+    with env.NextArtifactDir("testing"):
+        return _run_test(
+            model_key=model_key,
+            workload_key=workload_key,
+            namespace=namespace,
+            deployment_name=deployment_name,
+        )
+
+
+def _run_test(
+    *,
+    model_key: str,
+    workload_key: str,
+    namespace: str,
+    deployment_name: str | None = None,
+) -> int:
     model_cfg = runtime_config.get_model(model_key)
     workload = runtime_config.get_workload(workload_key)
     accelerator = runtime_config.get_accelerator()
@@ -143,6 +159,8 @@ def do_test(
         )
     except Exception:
         logger.warning("Setting MLflow metadata failed; continuing", exc_info=True)
+
+    return 0
 
 
 def _create_test_labels(
