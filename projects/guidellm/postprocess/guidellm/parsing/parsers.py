@@ -30,6 +30,12 @@ def _labels_from_node(node: TestBaseNode) -> dict[str, Any]:
 class GuideLLMParser:
     """Parser for GuideLLM benchmark JSON artifacts."""
 
+    @staticmethod
+    def _is_benchmarks_artifact(path: Path) -> bool:
+        return path.name == "benchmarks.json" or (
+            path.name.startswith("benchmarks-rate-") and path.suffix == ".json"
+        )
+
     def parse_benchmarks_json(
         self, file_path: Path
     ) -> tuple[list[GuideLLMBenchmark], GuideLLMConfiguration | None, list[str]]:
@@ -245,11 +251,12 @@ class GuideLLMParser:
         warnings: list[str] = []
 
         for node in nodes:
-            # Look for benchmarks.json files
-            benchmarks_files = [p for p in node.artifact_paths if p.name == "benchmarks.json"]
+            # Look for the legacy single-file artifact and the newer per-rate artifacts.
+            benchmarks_files = [p for p in node.artifact_paths if self._is_benchmarks_artifact(p)]
+            benchmarks_files.sort(key=lambda path: path.name)
 
             if not benchmarks_files:
-                # No benchmarks.json found, create empty record
+                # No benchmark result JSON found, create empty record
                 labels = _labels_from_node(node)
                 records.append(
                     UnifiedResultRecord(
@@ -257,7 +264,7 @@ class GuideLLMParser:
                         distinguishing_labels=labels,
                         metrics={"no_benchmarks_found": True},
                         run_identity={"guidellm": True},
-                        parse_notes=["No benchmarks.json file found"],
+                        parse_notes=["No benchmark result JSON file found"],
                     )
                 )
                 continue

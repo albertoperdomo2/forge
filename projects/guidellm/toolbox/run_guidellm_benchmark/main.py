@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 from projects.core.dsl import entrypoint, execute_tasks, retry, task
-from projects.core.dsl.utils import write_text
+from projects.core.dsl.utils import write_json, write_text
 from projects.core.dsl.utils.k8s import (
     oc,
     oc_apply,
@@ -288,6 +288,7 @@ def extract_results(args, ctx):
     """Extract GuideLLM results from copy pod"""
 
     results_dir = args.artifact_dir / "artifacts" / "results"
+    extracted_files: list[dict[str, str | None]] = []
     for run in ctx.guidellm_runs:
         if run.rate is None:
             remote_path = "/results/benchmarks.json"
@@ -311,6 +312,22 @@ def extract_results(args, ctx):
             raise RuntimeError(f"No results found for {ctx.benchmark_name} run {run.label}")
 
         write_text(local_path, result.stdout)
+        extracted_files.append(
+            {
+                "label": run.label,
+                "rate": run.rate,
+                "remote_path": remote_path,
+                "local_path": str(local_path.relative_to(args.artifact_dir)),
+            }
+        )
+
+    write_json(
+        results_dir / "index.json",
+        {
+            "benchmark_name": ctx.benchmark_name,
+            "runs": extracted_files,
+        },
+    )
 
     return f"Extracted results for {ctx.benchmark_name}"
 
