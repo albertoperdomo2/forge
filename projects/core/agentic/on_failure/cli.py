@@ -34,8 +34,8 @@ def cli(base_artifact_dir: Path, output_format: str, verbose: bool):
     On Failure Agent CLI - Analyze failure artifacts using LangChain LLM
 
     This tool processes FAILURE files and execution logs in the specified directory,
-    provides AI-powered analysis of the failures, and supports both DSL toolbox
-    logs (task.log) and legacy execution logs (_ansible.log).
+    provides AI-powered analysis of the failures, and supports DSL toolbox
+    logs (task.log).
     """
     # Import functions from main module (only works when run from forge home directory)
     from projects.core.agentic.on_failure import run_on_failure_agent

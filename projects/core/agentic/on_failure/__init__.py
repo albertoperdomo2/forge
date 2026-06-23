@@ -4,7 +4,7 @@
 On Failure Agent - An agent that handles failure scenarios using LangChain
 
 This agent analyzes FORGE test failures by processing FAILURE files and execution logs.
-It supports both DSL toolbox logs (task.log) and legacy execution logs (_ansible.log).
+It supports DSL toolbox logs (task.log).
 
 This agent provides:
 - LangChain-based model interaction
@@ -205,6 +205,71 @@ def _try_run_agent_on_exception():
         logger.error(f"🤖 Exception while running failure agent: {agent_error}")
 
 
+def _read_requested_files(
+    failure_dir: Path, base_artifact_dir: Path, requested_files: list[str]
+) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Read content of requested files from failure directory or base artifact directory
+
+    Args:
+        failure_dir: Specific failure directory path (where FAILURE and task.log are)
+        base_artifact_dir: Base artifact directory path
+        requested_files: List of relative file paths to read
+
+    Returns:
+        Tuple of (file_contents_dict, full_paths_dict) where:
+        - file_contents_dict: maps relative paths to their content
+        - full_paths_dict: maps relative paths to their absolute paths where found
+    """
+    file_contents = {}
+    full_paths = {}
+
+    for file_path in requested_files:
+        try:
+            found = False
+
+            # Try relative to failure directory first
+            failure_path = failure_dir / file_path
+            if failure_path.exists() and failure_path.is_file():
+                with open(failure_path, encoding="utf-8", errors="replace") as f:
+                    content = f.read()
+                    file_contents[file_path] = content
+                    full_paths[file_path] = str(failure_path.resolve())
+                    logger.info(
+                        f"📄 Read requested file: {file_path} ({len(content)} chars) from failure dir"
+                    )
+                    found = True
+
+            # If not found in failure dir, try base artifact directory
+            if not found:
+                base_path = base_artifact_dir / file_path
+                if base_path.exists() and base_path.is_file():
+                    with open(base_path, encoding="utf-8", errors="replace") as f:
+                        content = f.read()
+                        file_contents[file_path] = content
+                        full_paths[file_path] = str(base_path.resolve())
+                        logger.info(
+                            f"📄 Read requested file: {file_path} ({len(content)} chars) from base dir"
+                        )
+                        found = True
+
+            if not found:
+                file_contents[file_path] = (
+                    f"FILE NOT FOUND: {file_path} (searched in {failure_dir.name}/ and base artifact dir)"
+                )
+                full_paths[file_path] = f"NOT FOUND: {file_path}"
+                logger.warning(
+                    f"📄 Requested file not found: {file_path} in either {failure_dir.name}/ or base dir"
+                )
+
+        except Exception as e:
+            file_contents[file_path] = f"ERROR READING FILE: {e}"
+            full_paths[file_path] = f"ERROR: {file_path}"
+            logger.error(f"📄 Error reading requested file {file_path}: {e}")
+
+    return file_contents, full_paths
+
+
 def _generate_unique_failure_review_path(base_artifact_dir: Path, failure_dir_name: str) -> Path:
     """
     Generate a unique path for FAILURE_REVIEW file in notifications directory, adding suffix if file already exists
@@ -265,52 +330,156 @@ def analyze_single_failure_multi_query(
     """
     logger.info(f"Multi-query analysis for: {failure_data['failure_dir']}")
 
-    # Get list of available files
-    all_files = list_all_files_in_artifact_dir(base_artifact_dir)
+    # Get list of available files from both failure directory and base artifact directory
+    failure_dir = Path(failure_data["failure_dir"])
+    failure_files = list_all_files_in_artifact_dir(failure_dir)
+    base_files = list_all_files_in_artifact_dir(base_artifact_dir)
+
+    # Combine files, prioritizing failure dir files and avoiding duplicates
+    all_files = failure_files.copy()
+    for base_file in base_files:
+        if base_file not in all_files:
+            all_files.append(base_file)
+
+    logger.info(
+        f"📂 Found {len(failure_files)} files in failure dir, {len(base_files)} in base dir"
+    )
     relevant_files = []
+
+    # Prioritize files likely to be useful for failure analysis
+    high_priority_patterns = [
+        "_description.txt",
+        "description.txt",
+        ".yaml",
+        ".yml",
+        "endpoint.url",
+        ".log",
+        "AGENT.md",
+    ]
+    medium_priority_patterns = [".json", ".conf", ".cfg", ".sh", ".py"]
+    low_priority_patterns = [".txt"]
+
+    # Sort files by priority for failure analysis
+    high_priority = []
+    medium_priority = []
+    low_priority = []
 
     for file_path in all_files:
         file_lower = file_path.lower()
-        if any(
-            ext in file_lower
-            for ext in [".yaml", ".yml", ".log", ".json", ".conf", ".cfg", ".txt", ".sh", ".py"]
-        ):
-            relevant_files.append(file_path)
 
-    available_files = relevant_files[:20]
+        # Skip the main failure file and task.log as they're already included
+        if file_path.endswith("FAILURE") or file_path.endswith("task.log"):
+            continue
+
+        if any(pattern in file_lower for pattern in high_priority_patterns):
+            high_priority.append(file_path)
+        elif any(pattern in file_lower for pattern in medium_priority_patterns):
+            medium_priority.append(file_path)
+        elif any(pattern in file_lower for pattern in low_priority_patterns):
+            low_priority.append(file_path)
+
+    # Combine with priority order, limit to avoid overwhelming the prompt
+    available_files = (high_priority[:10] + medium_priority[:5] + low_priority[:5])[:15]
+    logger.info(f"📋 Prioritized {len(available_files)} files for LLM analysis")
+    if available_files:
+        logger.info(
+            f"📋 Available files: {', '.join(available_files[:5])}{'...' if len(available_files) > 5 else ''}"
+        )
 
     try:
         # Track files being consumed
         investigated_files = []
 
-        # Add initially consumed files
+        # Add initially consumed files (convert to paths relative to base_artifact_dir)
         if failure_data.get("failure_file"):
-            investigated_files.append(failure_data["failure_file"])
+            failure_file_path = Path(failure_data["failure_file"])
+            try:
+                relative_path = failure_file_path.relative_to(base_artifact_dir)
+                investigated_files.append(str(relative_path))
+            except ValueError:
+                # If file is not under base_artifact_dir, use absolute path
+                investigated_files.append(str(failure_file_path))
+
         if failure_data.get("log_file") and failure_data["log_file"] != "No log file found":
-            investigated_files.append(failure_data["log_file"])
+            log_file_path = Path(failure_data["log_file"])
+            try:
+                relative_path = log_file_path.relative_to(base_artifact_dir)
+                investigated_files.append(str(relative_path))
+            except ValueError:
+                investigated_files.append(str(log_file_path))
+
+        if (
+            failure_data.get("agent_md_content")
+            and failure_data.get("agent_md_file") != "No AGENT.md file found"
+        ):
+            agent_md_path = Path(failure_data["agent_md_file"])
+            try:
+                relative_path = agent_md_path.relative_to(base_artifact_dir)
+                investigated_files.append(str(relative_path))
+                logger.info(f"📋 Including AGENT.md file in analysis: {relative_path}")
+            except ValueError:
+                investigated_files.append(str(agent_md_path))
+                logger.info(f"📋 Including AGENT.md file in analysis: {agent_md_path}")
 
         # Initialize query handler with failure data and available files
         queries_handler = FailureAnalysisQueries(failure_data, available_files)
 
-        # Execute the full sequence of queries
-        execution_result = execute_query_sequence(queries_handler, llm, verbose)
+        # Create file reader callback for the query executor
+        def file_reader_callback(requested_file_list):
+            # Search in both failure directory and base artifact directory
+            failure_dir = Path(failure_data["failure_dir"])
+            file_contents, full_paths = _read_requested_files(
+                failure_dir, base_artifact_dir, requested_file_list
+            )
+
+            # Store full paths for later use in tracking
+            if not hasattr(queries_handler, "file_full_paths"):
+                queries_handler.file_full_paths = {}
+            queries_handler.file_full_paths.update(full_paths)
+
+            return file_contents
+
+        # Execute the full sequence of queries with file reading capability
+        execution_result = execute_query_sequence(
+            queries_handler, llm, verbose, file_reader_callback
+        )
 
         analysis_results = execution_result["analysis_results"]
         queries_and_responses = execution_result["queries_and_responses"]
-
-        # Check if any query requested additional files
-        requested_files = []
-        for resp in queries_and_responses:
-            if "NEED_MORE_FILES:" in resp["response"]:
-                # Extract requested files from response
-                lines = resp["response"].split("\n")
-                for line in lines:
-                    if line.strip().startswith("NEED_MORE_FILES:"):
-                        file_request = line.split(":", 1)[1].strip()
-                        requested_files.append(file_request)
+        requested_files = execution_result.get("files_requested", [])
 
         if requested_files:
-            logger.info(f"Queries requested additional files: {requested_files}")
+            # Remove duplicates while preserving order
+            unique_files = list(dict.fromkeys(requested_files))
+            logger.info(f"📋 Queries requested and processed files: {unique_files}")
+
+            # Update investigated files list with successfully read files (using full paths relative to base_artifact_dir)
+            if hasattr(queries_handler, "requested_file_contents") and hasattr(
+                queries_handler, "file_full_paths"
+            ):
+                file_contents = queries_handler.requested_file_contents
+                full_paths = queries_handler.file_full_paths
+
+                for f in unique_files:
+                    if (
+                        f in file_contents
+                        and not file_contents[f].startswith("FILE NOT FOUND")
+                        and not file_contents[f].startswith("ERROR READING")
+                    ):
+                        # Use the full path and make it relative to base_artifact_dir
+                        full_path = full_paths.get(f, f)
+                        if full_path.startswith(("NOT FOUND:", "ERROR:")):
+                            continue
+
+                        try:
+                            full_path_obj = Path(full_path)
+                            relative_path = full_path_obj.relative_to(base_artifact_dir)
+                            investigated_files.append(str(relative_path))
+                        except ValueError:
+                            # If file is not under base_artifact_dir, add as-is
+                            investigated_files.append(f)
+        else:
+            logger.info("📋 No additional files were requested by the analysis queries")
 
         # Add file tracking information to each query response
         for resp in queries_and_responses:
@@ -319,12 +488,18 @@ def analyze_single_failure_multi_query(
             resp["files_requested"] = requested_files.copy()
 
         # Create structured analysis in the expected format
+        # Use final synthetic summary if available, otherwise fallback to regular synthetic summary
+        final_summary = analysis_results.get("synthetic_summary_final") or analysis_results.get(
+            "synthetic_summary", ""
+        )
+
         structured_analysis = {
             "root_cause": analysis_results.get("root_cause", ""),
             "failed_step": analysis_results.get("failed_step", ""),
             "trigger": analysis_results.get("categorization", ""),
-            "synthetic_summary": analysis_results.get("synthetic_summary", ""),
+            "synthetic_summary": final_summary,
             "full_analysis": analysis_results.get("full_analysis", ""),
+            "detailed_file_analysis": analysis_results.get("detailed_file_analysis", ""),
             "raw_analysis": "\n\n".join(
                 [f"## {resp['query_type']}\n{resp['response']}" for resp in queries_and_responses]
             ),
@@ -342,9 +517,9 @@ def analyze_single_failure_multi_query(
             "files_requested": requested_files,
         }
 
-        # Generate FAILURE_REVIEW file from synthetic summary
+        # Generate FAILURE_REVIEW file from final synthetic summary
         try:
-            failure_review_content = structured_analysis.get("synthetic_summary", "")
+            failure_review_content = final_summary
             if failure_review_content:
                 # Generate unique path for FAILURE_REVIEW file
                 failure_dir_name = Path(failure_data["failure_dir"]).name
@@ -353,7 +528,7 @@ def analyze_single_failure_multi_query(
                 )
 
                 with open(failure_review_path, "w", encoding="utf-8") as f:
-                    f.write(failure_review_content.strip())
+                    f.write(failure_review_content.strip() + "\n")
 
                 logger.info(f"📝 FAILURE_REVIEW generated: {failure_review_path}")
                 result["failure_review_file"] = str(failure_review_path)
@@ -403,7 +578,10 @@ def analyze_single_failure_multi_query(
 
         # Try to generate FAILURE_REVIEW from partial results if available
         partial_analysis_results = locals().get("analysis_results", {})
-        if partial_analysis_results.get("synthetic_summary"):
+        partial_summary = partial_analysis_results.get(
+            "synthetic_summary_final"
+        ) or partial_analysis_results.get("synthetic_summary", "")
+        if partial_summary:
             try:
                 failure_dir_name = Path(failure_data["failure_dir"]).name
                 failure_review_path = _generate_unique_failure_review_path(
@@ -411,7 +589,7 @@ def analyze_single_failure_multi_query(
                 )
 
                 with open(failure_review_path, "w", encoding="utf-8") as f:
-                    f.write(partial_analysis_results["synthetic_summary"].strip())
+                    f.write(partial_summary.strip() + "\n")
 
                 logger.info(
                     f"📝 Partial FAILURE_REVIEW generated despite failure: {failure_review_path}"
@@ -469,7 +647,7 @@ def process_failure_analysis(base_artifact_dir: Path, llm, verbose: bool = False
     # Analyze each failure
     failure_analyses = []
     for index, failure_file in enumerate(failure_files):
-        # Read failure and corresponding log file (task.log or _ansible.log)
+        # Read failure and corresponding log file (task.log)
         failure_data = read_failure_and_log(failure_file)
 
         # Log if AGENT.md file was found for enhanced analysis
