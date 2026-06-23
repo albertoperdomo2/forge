@@ -96,11 +96,11 @@ def test_benchmark_workloads_are_available() -> None:
     heavy = core_config.project.get_config("workloads.benchmarks.heavy-heterogeneous", print=False)
     multi_turn = core_config.project.get_config("workloads.benchmarks.multi-turn", print=False)
 
-    assert concurrent["args"]["rates"] == [300, 200, 100, 50, 1]
+    assert concurrent["args"]["rate"] == [300, 200, 100, 50, 1]
     assert heavy["args"]["max_seconds"] == 600
     assert "prompt_tokens_stdev=8500" in heavy["args"]["data"]
     assert "output_tokens_max=8000" in heavy["args"]["data"]
-    assert multi_turn["args"]["rates"] == [32, 64, 128, 256, 512]
+    assert multi_turn["args"]["rate"] == [32, 64, 128, 256, 512]
     assert "turns=5" in multi_turn["args"]["data"]
     assert "prefix_count={2*rate}" in multi_turn["args"]["data"]
     assert multi_turn["args"]["max_requests"] == "{10*rate}"

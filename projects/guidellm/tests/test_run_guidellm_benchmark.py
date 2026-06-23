@@ -12,7 +12,7 @@ def test_expand_guidellm_runs_converts_rates_to_individual_runs() -> None:
         [
             "--backend-type=openai_http",
             "--rate-type=concurrent",
-            "--rates=32,64",
+            "--rate=32,64",
             "--data=prompt_tokens=128,prefix_count={2*rate}",
             "--max-requests={10*rate}",
         ]
@@ -40,7 +40,7 @@ def test_expand_guidellm_runs_expands_plain_rate_reference() -> None:
         [
             "--backend-type=openai_http",
             "--rate-type=concurrent",
-            "--rates=32,64",
+            "--rate=32,64",
             "--max-requests={rate}",
         ]
     )
@@ -65,7 +65,7 @@ def test_expand_guidellm_runs_keeps_plain_multi_rate_benchmark_as_single_run() -
         [
             "--backend-type=openai_http",
             "--rate-type=concurrent",
-            "--rates=300,200,100",
+            "--rate=300,200,100",
             "--data=prompt_tokens=1000,output_tokens=1000",
             "--max-seconds=600",
         ]
@@ -76,7 +76,7 @@ def test_expand_guidellm_runs_keeps_plain_multi_rate_benchmark_as_single_run() -
     assert runs[0].args == [
         "--backend-type=openai_http",
         "--rate-type=concurrent",
-        "--rates=300,200,100",
+        "--rate=300,200,100",
         "--data=prompt_tokens=1000,output_tokens=1000",
         "--max-seconds=600",
     ]
@@ -91,7 +91,7 @@ def test_render_guidellm_job_from_parts_uses_shell_for_multi_run_benchmarks() ->
         guidellm_args=[
             "--backend-type=openai_http",
             "--rate-type=concurrent",
-            "--rates=32,64",
+            "--rate=32,64",
             "--data=prompt_tokens=128,prefix_count={2*rate}",
             "--max-requests={10*rate}",
         ],
@@ -119,7 +119,7 @@ def test_render_guidellm_job_from_parts_keeps_plain_rates_as_single_guidellm_run
         guidellm_args=[
             "--backend-type=openai_http",
             "--rate-type=concurrent",
-            "--rates=300,200,100",
+            "--rate=300,200,100",
             "--data=prompt_tokens=1000,output_tokens=1000",
             "--max-seconds=600",
         ],
@@ -133,7 +133,7 @@ def test_render_guidellm_job_from_parts_keeps_plain_rates_as_single_guidellm_run
         "--target=https://example.test/llm-d",
         "--backend-type=openai_http",
         "--rate-type=concurrent",
-        "--rates=300,200,100",
+        "--rate=300,200,100",
         "--data=prompt_tokens=1000,output_tokens=1000",
         "--max-seconds=600",
     ]
@@ -145,7 +145,7 @@ def test_build_guidellm_args_renders_list_values() -> None:
         "args": {
             "backend_type": "openai_http",
             "rate_type": "concurrent",
-            "rates": [300, 200, 100, 50, 1],
+            "rate": [300, 200, 100, 50, 1],
             "max_seconds": 600,
         },
     }
@@ -153,7 +153,7 @@ def test_build_guidellm_args_renders_list_values() -> None:
     assert build_guidellm_args(benchmark) == [
         "--backend-type=openai_http",
         "--rate-type=concurrent",
-        "--rates=300,200,100,50,1",
+        "--rate=300,200,100,50,1",
         "--max-seconds=600",
         "--outputs=json",
     ]
