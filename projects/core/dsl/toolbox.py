@@ -113,11 +113,6 @@ def get_task_execution_error(e):
         clean_args(e.task_args), default_flow_style=False, sort_keys=False
     ).splitlines():
         yield f"~~     {line}"
-    yield "~~ CONTEXT:"
-    for line in yaml.dump(
-        clean_args(e.task_context), default_flow_style=False, sort_keys=False
-    ).splitlines():
-        yield f"~~     {line}"
     yield "~~"
     yield f"~~ EXCEPTION: {e.original_exception.__class__.__name__}"
 

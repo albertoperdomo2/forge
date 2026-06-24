@@ -240,6 +240,9 @@ def execute_tasks(function_args: dict = None):
             # executed
             shared_context.__dict__["artifact_dir"] = args.artifact_dir
 
+            # Generate context file on successful completion
+            _generate_context_file(shared_context, meta_dir)
+
             return shared_context
 
         finally:
@@ -423,6 +426,31 @@ def _generate_env_file(meta_dir):
             f.write(f"{key}={value}\n")
 
     logger.debug(f"Generated environment file: {env_file}")
+
+
+def _generate_context_file(shared_context, meta_dir):
+    """Generate a YAML file with the final shared context"""
+    context_file = meta_dir / "context.yaml"
+
+    # Convert SimpleNamespace to dict, filtering out private attributes
+    context_dict = {}
+    for key, value in vars(shared_context).items():
+        if not key.startswith("_"):
+            # Convert Path objects to strings for YAML serialization
+            if hasattr(value, "__fspath__"):  # Path-like objects
+                context_dict[key] = str(value)
+            else:
+                context_dict[key] = value
+
+    context_data = {
+        "final_context": context_dict,
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    with open(context_file, "w") as f:
+        yaml.dump(context_data, f, default_flow_style=False, sort_keys=False)
+
+    logger.debug(f"Generated context file: {context_file}")
 
 
 # Thread-local storage for DSL logger handlers
