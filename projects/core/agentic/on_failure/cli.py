@@ -14,6 +14,8 @@ import click
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MODEL_KEY = "qwen-3-6-35b"
+
 
 @click.command()
 @click.option(
@@ -29,7 +31,8 @@ logger = logging.getLogger(__name__)
     help="Output format for results",
 )
 @click.option("--verbose", is_flag=True, help="Show all AI queries and responses")
-def cli(base_artifact_dir: Path, output_format: str, verbose: bool):
+@click.option("--model-key", default=DEFAULT_MODEL_KEY, help="Model key to use for analysis")
+def cli(base_artifact_dir: Path, output_format: str, verbose: bool, model_key: str):
     """
     On Failure Agent CLI - Analyze failure artifacts using LangChain LLM
 
@@ -46,7 +49,7 @@ def cli(base_artifact_dir: Path, output_format: str, verbose: bool):
         logger.info("Initializing vault manager...")
         vault.init(vaults=["psap-models-corp-rh"])
 
-        result = run_on_failure_agent(base_artifact_dir, verbose)
+        result = run_on_failure_agent(base_artifact_dir, verbose, model_key)
 
         if output_format == "json":
             click.echo(json.dumps(result, indent=2))

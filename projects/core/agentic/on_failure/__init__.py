@@ -61,13 +61,24 @@ from projects.core.agentic.artifact_processing import (
 from projects.core.agentic.models import create_llm_client, load_model_config
 from projects.core.agentic.on_failure.cli import cli
 from projects.core.agentic.on_failure.report import generate_html_report, text_to_code_block
+from projects.core.library import config
 
 from .queries import (
     FailureAnalysisQueries,
     execute_query_sequence,
 )
 
-MODEL_KEY = "qwen-3-6-35b"
+
+# only actived when config.project has been initialized
+@config.requires(
+    agentic_enabled="agentic.enabled",
+    on_failure_enabled="agentic.on_failure.enabled",
+    model_key="agentic.model_key",
+)
+def _get_agentic_config(_cfg):
+    """Get agentic configuration using @config.requires decorator"""
+    return _cfg
+
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -95,6 +106,21 @@ def agent_review_on_failure(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         function_name = func.__name__
+
+        # Check if agentic processing is enabled
+        if config.project is not None:
+            agentic_config = _get_agentic_config()
+            if not agentic_config.agentic_enabled:
+                logger.info(
+                    f"🤖 Agentic processing disabled - skipping agent review for '{function_name}'"
+                )
+                return func(*args, **kwargs)
+            if not agentic_config.on_failure_enabled:
+                logger.info(
+                    f"🤖 On-failure agent disabled - skipping agent review for '{function_name}'"
+                )
+                return func(*args, **kwargs)
+
         logger.info(f"🤖 Agent review enabled for CI command: {function_name}")
 
         try:
@@ -562,7 +588,7 @@ def analyze_single_failure_multi_query(
         return result
 
     except Exception as e:
-        logger.error(f"❌ Multi-query analysis failed: {e}")
+        logger.exception(f"❌ Multi-query analysis failed: {e}")
 
         # Try to generate HTML report even on failure if verbose mode and we have some data
         error_result = {
@@ -707,7 +733,9 @@ def get_failure_explanations(base_artifact_dir: Path) -> list[dict]:
     return explanations
 
 
-def run_on_failure_agent(base_artifact_dir: Path, verbose: bool = False) -> dict:
+def run_on_failure_agent(
+    base_artifact_dir: Path, verbose: bool = False, model_key: str = None
+) -> dict:
     """
     Main programmatic interface for the On Failure Agent
 
@@ -720,6 +748,28 @@ def run_on_failure_agent(base_artifact_dir: Path, verbose: bool = False) -> dict
         Dictionary containing analysis results
     """
     try:
+        # Check if agentic processing is enabled
+        if config.project is not None:
+            agentic_config = _get_agentic_config()
+            if not agentic_config.agentic_enabled:
+                logger.info("🤖 Agentic processing disabled - skipping failure analysis")
+                return {
+                    "status": "disabled",
+                    "reason": "agentic processing disabled",
+                    "analyses": [],
+                }
+
+            if not agentic_config.on_failure_enabled:
+                logger.info("🤖 On-failure agent disabled - skipping failure analysis")
+                return {"status": "disabled", "reason": "on_failure agent disabled", "analyses": []}
+
+            if model_key is None:
+                model_key_to_use = agentic_config.model_key
+        else:
+            if model_key is None:
+                raise ValueError("Configuration not available and no model_key received ...")
+            model_key_to_use = model_key
+
         logger.info("🤖 On Failure Agent starting...")
 
         # Load model configuration from vault
@@ -728,9 +778,9 @@ def run_on_failure_agent(base_artifact_dir: Path, verbose: bool = False) -> dict
             vault_name="psap-models-corp-rh", content_name="agent-models.yaml"
         )
 
-        model_config = models_config.get(MODEL_KEY)
+        model_config = models_config.get(model_key_to_use)
         if not model_config:
-            raise ValueError(f"Model key '{MODEL_KEY}' not found in the vault ...")
+            raise ValueError(f"Model key '{model_key_to_use}' not found in the vault ...")
 
         logger.info(f"Loaded configuration for model: {model_config.get('model_id')}")
 
@@ -744,5 +794,5 @@ def run_on_failure_agent(base_artifact_dir: Path, verbose: bool = False) -> dict
         return result
 
     except Exception as e:
-        logger.error(f"❌ Agent failed: {e}")
+        logger.exception(f"❌ Agent failed: {e}")
         return {"status": "error", "error": str(e)}
