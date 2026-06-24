@@ -78,6 +78,11 @@ matrix_benchmarking = [
     "boto3",
     "pandas",
 ]
+agentic_review = [
+    "httpx", 
+    "langchain-openai", 
+    "langchain-core",
+]
 
 [project.scripts]
 caliper = "projects.caliper.cli.main:run_cli"
