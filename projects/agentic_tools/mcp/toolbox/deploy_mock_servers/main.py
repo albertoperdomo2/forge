@@ -19,7 +19,7 @@ from typing import Any
 
 import yaml
 
-from projects.core.dsl import entrypoint, execute_tasks, retry, task
+from projects.core.dsl import always, entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils.k8s import oc
 
 logger = logging.getLogger(__name__)
@@ -67,8 +67,14 @@ def generate_and_apply_manifests(args, ctx):
         )
         all_manifests.append(manifest)
 
+    combined_yaml = "---\n".join(all_manifests)
+
+    src_dir = args.artifact_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    (src_dir / "mock-servers.yaml").write_text(combined_yaml, encoding="utf-8")
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
-        tmp.write("---\n".join(all_manifests))
+        tmp.write(combined_yaml)
         tmp_path = tmp.name
     oc("apply", "-f", tmp_path)
     Path(tmp_path).unlink(missing_ok=True)
@@ -98,6 +104,47 @@ def wait_for_rollout(args, ctx):
         return f"All {args.count} server(s) ready"
 
     return (False, f"Servers ready: {ready_count}/{args.count}")
+
+
+@always
+@task
+def capture_artifacts(args, ctx):
+    """Capture deployment state for post-mortem diagnostics."""
+    artifacts_dir = args.artifact_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    _capture_to_file(
+        artifacts_dir / "deployments.yaml",
+        "get",
+        "deployment",
+        "-n",
+        args.namespace,
+        "-l",
+        SCALE_OUT_LABEL,
+        "-o",
+        "yaml",
+    )
+    _capture_to_file(
+        artifacts_dir / "pods.txt",
+        "get",
+        "pods",
+        "-n",
+        args.namespace,
+        "-l",
+        SCALE_OUT_LABEL,
+        "-o",
+        "wide",
+    )
+    _capture_to_file(
+        artifacts_dir / "events.txt",
+        "get",
+        "events",
+        "-n",
+        args.namespace,
+        "--sort-by=.lastTimestamp",
+    )
+
+    return "Captured mock server state"
 
 
 def cleanup_servers(*, namespace: str) -> None:
@@ -242,3 +289,10 @@ def _generate_server_manifest(
     }
 
     return yaml.safe_dump_all([deployment, service], sort_keys=False)
+
+
+def _capture_to_file(path: Path, *oc_args: str) -> None:
+    """Best-effort capture of oc output to a file."""
+    result = oc(*oc_args, check=False, log_stdout=False)
+    if result.returncode == 0 and result.stdout:
+        path.write_text(result.stdout, encoding="utf-8")

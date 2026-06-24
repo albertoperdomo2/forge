@@ -10,15 +10,6 @@ from projects.core.library import config
 
 logger = logging.getLogger(__name__)
 
-_FALSY_STRINGS = frozenset({"false", "0", "no", "off", ""})
-
-
-def _as_bool(value: Any) -> bool:
-    """Coerce a config value to bool, handling string representations."""
-    if isinstance(value, str):
-        return value.strip().lower() not in _FALSY_STRINGS
-    return bool(value)
-
 
 class MCPGatewayConfig(BaseRuntimeConfig):
     """Runtime configuration for MCP Gateway performance tests."""
@@ -39,20 +30,19 @@ class MCPGatewayConfig(BaseRuntimeConfig):
         return copy.deepcopy(config.project.get_config(f"mock_servers.{key}"))
 
     def get_duration_seconds(self) -> int:
-        return int(config.project.get_config("experiment.duration_seconds"))
+        return config.project.get_config("experiment.duration_seconds")
 
     def get_warmup_seconds(self) -> int:
-        return int(config.project.get_config("experiment.warmup_seconds"))
+        return config.project.get_config("experiment.warmup_seconds")
 
     def get_calls_per_session(self) -> int:
-        return int(config.project.get_config("runtime.calls_per_session"))
+        return config.project.get_config("runtime.calls_per_session")
 
     def get_spawn_rate(self) -> int | None:
-        raw = config.project.get_config("runtime.spawn_rate", None)
-        return int(raw) if raw else None
+        return config.project.get_config("runtime.spawn_rate", None)
 
     def get_users_per_worker(self) -> int:
-        return int(config.project.get_config("runtime.users_per_worker"))
+        return config.project.get_config("runtime.users_per_worker")
 
     # --- Infrastructure accessors ---
 
@@ -133,10 +123,10 @@ class MCPGatewayConfig(BaseRuntimeConfig):
         return config.project.get_config("infrastructure.api_group", "mcp.kuadrant.io")
 
     def get_install_platform(self) -> bool:
-        return _as_bool(config.project.get_config("infrastructure.install_platform", False))
+        return bool(config.project.get_config("infrastructure.install_platform", False))
 
     def get_cleanup_platform(self) -> bool:
-        return _as_bool(config.project.get_config("infrastructure.cleanup_platform", False))
+        return bool(config.project.get_config("infrastructure.cleanup_platform", False))
 
     def get_platform_config(self) -> dict[str, Any]:
         import os
@@ -160,24 +150,18 @@ class MCPGatewayConfig(BaseRuntimeConfig):
 
     def get_experiment_servers(self) -> list[int]:
         raw = config.project.get_config("experiment.servers")
-        if isinstance(raw, list):
-            return [int(x) for x in raw]
-        return [int(raw)]
+        return raw if isinstance(raw, list) else [raw]
 
     def get_experiment_concurrency(self) -> list[int]:
         raw = config.project.get_config("experiment.concurrency")
-        if isinstance(raw, list):
-            return [int(x) for x in raw]
-        return [int(raw)]
+        return raw if isinstance(raw, list) else [raw]
 
     def get_experiment_targets(self) -> list[str]:
         raw = config.project.get_config("experiment.target")
-        if isinstance(raw, list):
-            return [str(x) for x in raw]
-        return [str(raw)]
+        return raw if isinstance(raw, list) else [raw]
 
     def get_tools_per_server(self) -> int:
-        return int(config.project.get_config("experiment.tools_per_server", 10))
+        return config.project.get_config("experiment.tools_per_server", 10)
 
     # --- Path helpers ---
 

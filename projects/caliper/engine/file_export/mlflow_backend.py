@@ -400,6 +400,9 @@ def log_artifacts(
             rid = mlflow.active_run().info.run_id
             _apply_run_metadata(effective_meta)
             _apply_log_model(artifact_root, effective_meta, verbose=verbose)
+
+            _log_metrics_and_params_from_tree(artifact_root)
+
             _upload_mlflow_files_parallel(
                 client=client,
                 run_id=rid,
@@ -431,6 +434,27 @@ def _load_json_file(path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError) as e:
         logger.warning("Failed to read %s: %s", path, e)
         return {}
+
+
+def _log_metrics_and_params_from_tree(artifact_root: Path) -> None:
+    """Find metrics.json/parameters.json under __test_labels__.yaml-marked dirs and log them."""
+    import mlflow
+
+    for marker in sorted(artifact_root.rglob("__test_labels__.yaml")):
+        if not marker.is_file():
+            continue
+        run_dir = marker.parent
+
+        mf = run_dir / "metrics.json"
+        if mf.is_file():
+            for k, v in _load_json_file(mf).items():
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    mlflow.log_metric(str(k), float(v))
+
+        pf = run_dir / "parameters.json"
+        if pf.is_file():
+            for k, v in _load_json_file(pf).items():
+                mlflow.log_param(str(k), "" if v is None else str(v))
 
 
 def log_multi_run_artifacts(

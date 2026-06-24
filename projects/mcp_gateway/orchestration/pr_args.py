@@ -7,8 +7,6 @@ Parses mcp_gateway-specific directives from PR trigger comments.
 Supported syntax::
 
     /test fournos mcp_gateway smoke
-    /cluster agentic-cpt-8xa100
-    /pipeline forge-full
     /version 0.7.0
 """
 
@@ -18,27 +16,6 @@ import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
-
-VALID_PRESETS = {"smoke", "baseline", "scale-out", "demo", "matrix-demo-1"}
-
-
-def get_supported_mcp_gateway_directives() -> dict[str, str]:
-    """Supported mcp_gateway-specific PR trigger directives."""
-    return {
-        "/test fournos mcp_gateway PRESET": (
-            "Select a preset from the /test line.\n"
-            "Format: /test fournos mcp_gateway PRESET\n"
-            "Example: /test fournos mcp_gateway smoke\n"
-            "Available presets: smoke, baseline, scale-out, demo\n"
-            "Effect: Sets runtime.default_preset and clears ci_job.args."
-        ),
-        "/version": (
-            "Set the MCP Gateway version to install.\n"
-            "Format: /version VERSION\n"
-            "Example: /version 0.7.0\n"
-            "Effect: Sets infrastructure.mcp_gateway_version in configuration."
-        ),
-    }
 
 
 def _parse_test_line(line: str) -> list[str] | None:
@@ -75,7 +52,6 @@ def parse_project_directives(comment_text: str) -> tuple[dict[str, Any], list[st
         if not line:
             continue
 
-        # Parse preset from /test line
         args = _parse_test_line(line)
         if args is not None:
             if args:
@@ -85,15 +61,10 @@ def parse_project_directives(comment_text: str) -> tuple[dict[str, Any], list[st
                         "'/test fournos mcp_gateway PRESET'"
                     )
                 preset = args[0]
-                if preset not in VALID_PRESETS:
-                    raise ValueError(
-                        f"Unknown mcp_gateway preset '{preset}'. "
-                        f"Valid presets: {', '.join(sorted(VALID_PRESETS))}"
-                    )
                 config_overrides.update(
                     {
                         "runtime.default_preset": preset,
-                        "project.args": [preset],
+                        "ci_job.args": [],
                     }
                 )
                 parsed_directives.append(line)

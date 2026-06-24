@@ -17,7 +17,7 @@ from pathlib import Path
 import yaml
 
 from projects.agentic_tools.mcp.toolbox.deploy_mock_servers.main import SCALE_OUT_LABEL
-from projects.core.dsl import entrypoint, execute_tasks, retry, task
+from projects.core.dsl import always, entrypoint, execute_tasks, retry, task
 from projects.core.dsl.utils.k8s import oc
 
 logger = logging.getLogger(__name__)
@@ -66,8 +66,14 @@ def apply_manifests(args, ctx):
         )
         all_manifests.append(manifest)
 
+    combined_yaml = "---\n".join(all_manifests)
+
+    src_dir = args.artifact_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    (src_dir / "infrastructure.yaml").write_text(combined_yaml, encoding="utf-8")
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
-        tmp.write("---\n".join(all_manifests))
+        tmp.write(combined_yaml)
         tmp_path = tmp.name
     oc("apply", "-f", tmp_path)
     Path(tmp_path).unlink(missing_ok=True)
@@ -85,6 +91,58 @@ def wait_for_registrations(args, ctx):
         return f"All {args.count} registrations are Ready"
 
     return (False, f"registrations ready: {ready_count}/{args.count}")
+
+
+@always
+@task
+def capture_artifacts(args, ctx):
+    """Capture infrastructure resource state for post-mortem diagnostics."""
+    artifacts_dir = args.artifact_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    _capture_to_file(
+        artifacts_dir / "mcpserverregistrations.yaml",
+        "get",
+        f"mcpserverregistrations.{args.api_group}",
+        "-n",
+        args.namespace,
+        "-l",
+        SCALE_OUT_LABEL,
+        "-o",
+        "yaml",
+    )
+    _capture_to_file(
+        artifacts_dir / "httproutes.yaml",
+        "get",
+        "httproute",
+        "-n",
+        args.namespace,
+        "-l",
+        SCALE_OUT_LABEL,
+        "-o",
+        "yaml",
+    )
+    _capture_to_file(
+        artifacts_dir / "destinationrules.yaml",
+        "get",
+        "destinationrule",
+        "-n",
+        "istio-system",
+        "-l",
+        SCALE_OUT_LABEL,
+        "-o",
+        "yaml",
+    )
+    _capture_to_file(
+        artifacts_dir / "events.txt",
+        "get",
+        "events",
+        "-n",
+        args.namespace,
+        "--sort-by=.lastTimestamp",
+    )
+
+    return "Captured infrastructure state"
 
 
 # ---------------------------------------------------------------------------
@@ -191,3 +249,10 @@ def _generate_infrastructure_manifest(
         [httproute, destination_rule, mcp_registration],
         sort_keys=False,
     )
+
+
+def _capture_to_file(path: Path, *oc_args: str) -> None:
+    """Best-effort capture of oc output to a file."""
+    result = oc(*oc_args, check=False, log_stdout=False)
+    if result.returncode == 0 and result.stdout:
+        path.write_text(result.stdout, encoding="utf-8")
