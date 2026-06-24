@@ -42,10 +42,7 @@ from datetime import datetime
 from pathlib import Path
 
 import click
-import httpx
-import urllib3
 import yaml
-from langchain_core.messages import HumanMessage
 
 from projects.core.agentic.analysis_utils import extract_structured_analysis
 from projects.core.agentic.artifact_processing import (
@@ -68,8 +65,39 @@ from .queries import (
     execute_query_sequence,
 )
 
+# Check for optional agentic dependencies
+_AGENTIC_AVAILABLE = True
+_MISSING_PACKAGES = []
 
-# only actived when config.project has been initialized
+try:
+    import httpx
+except ImportError:
+    _AGENTIC_AVAILABLE = False
+    _MISSING_PACKAGES.append("httpx")
+
+try:
+    import urllib3
+except ImportError:
+    _AGENTIC_AVAILABLE = False
+    _MISSING_PACKAGES.append("urllib3")
+
+try:
+    from langchain_core.messages import HumanMessage
+except ImportError:
+    _AGENTIC_AVAILABLE = False
+    _MISSING_PACKAGES.append("langchain_core")
+
+
+def _is_agentic_dependencies_available():
+    """Check if required agentic dependencies are available"""
+    if not _AGENTIC_AVAILABLE:
+        logger.info(
+            f"🤖 Agentic processing disabled - missing packages: {', '.join(_MISSING_PACKAGES)}"
+        )
+        return False
+    return True
+
+
 @config.requires(
     agentic_enabled="agentic.enabled",
     on_failure_enabled="agentic.on_failure.enabled",
@@ -106,6 +134,10 @@ def agent_review_on_failure(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         function_name = func.__name__
+
+        # Check if agentic dependencies are available
+        if not _is_agentic_dependencies_available():
+            return func(*args, **kwargs)
 
         # Check if agentic processing is enabled
         if config.project is not None:
@@ -748,6 +780,10 @@ def run_on_failure_agent(
         Dictionary containing analysis results
     """
     try:
+        # Check if agentic dependencies are available
+        if not _is_agentic_dependencies_available():
+            return {"status": "disabled", "reason": "missing agentic dependencies", "analyses": []}
+
         # Check if agentic processing is enabled
         if config.project is not None:
             agentic_config = _get_agentic_config()

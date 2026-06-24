@@ -31,9 +31,7 @@ import warnings
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import urllib3
 import yaml
-from langchain_core.messages import HumanMessage
 
 from projects.core.agentic.analysis_utils import extract_structured_analysis
 from projects.core.agentic.config_review.queries import (
@@ -43,6 +41,33 @@ from projects.core.agentic.config_review.queries import (
 from projects.core.agentic.config_review.report import generate_config_html_report
 from projects.core.agentic.models import create_llm_client, load_model_config
 from projects.core.library import vault
+
+# Check for optional agentic dependencies
+_AGENTIC_AVAILABLE = True
+_MISSING_PACKAGES = []
+
+try:
+    import urllib3
+except ImportError:
+    _AGENTIC_AVAILABLE = False
+    _MISSING_PACKAGES.append("urllib3")
+
+try:
+    from langchain_core.messages import HumanMessage
+except ImportError:
+    _AGENTIC_AVAILABLE = False
+    _MISSING_PACKAGES.append("langchain_core")
+
+
+def _is_agentic_dependencies_available():
+    """Check if required agentic dependencies are available"""
+    if not _AGENTIC_AVAILABLE:
+        logger.info(
+            f"🤖 Agentic processing disabled - missing packages: {', '.join(_MISSING_PACKAGES)}"
+        )
+        return False
+    return True
+
 
 MODEL_KEY = "qwen-3-6-35b"
 
@@ -493,6 +518,9 @@ def trigger_config_review_for_ci(base_artifact_dir: Path, async_mode: bool = Fal
         base_artifact_dir: Path to the base artifact directory
         async_mode: If True, run the analysis in a background thread
     """
+    # Check if agentic dependencies are available
+    if not _is_agentic_dependencies_available():
+        return
 
     def _run_config_review():
         try:
@@ -543,6 +571,10 @@ def run_config_review_agent(base_artifact_dir: str | Path, verbose: bool = False
         Dictionary containing analysis results
     """
     try:
+        # Check if agentic dependencies are available
+        if not _is_agentic_dependencies_available():
+            return {"status": "disabled", "reason": "missing agentic dependencies", "analysis": {}}
+
         logger.info("🤖 Config Review Agent starting...")
 
         # Process the test review

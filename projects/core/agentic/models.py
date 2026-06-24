@@ -8,11 +8,25 @@ functions that can be used across different agentic workflows.
 import logging
 import warnings
 
-import httpx
-import urllib3
 import yaml
 
 from projects.core.library import vault
+
+# Check for optional agentic dependencies
+_AGENTIC_AVAILABLE = True
+_MISSING_PACKAGES = []
+
+try:
+    import httpx
+except ImportError:
+    _AGENTIC_AVAILABLE = False
+    _MISSING_PACKAGES.append("httpx")
+
+try:
+    import urllib3
+except ImportError:
+    _AGENTIC_AVAILABLE = False
+    _MISSING_PACKAGES.append("urllib3")
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +44,12 @@ def load_model_config(vault_name: str, content_name: str) -> dict:
 
 def create_llm_client(model_config: dict):
     """Create a LangChain LLM client from vault configuration"""
+    # Check if required dependencies are available
+    if not _AGENTIC_AVAILABLE:
+        raise ImportError(
+            f"Required packages missing for agentic processing: {', '.join(_MISSING_PACKAGES)}"
+        )
+
     model_api = model_config.get("model_api")
     model_id = model_config.get("model_id")
     user_key = model_config.get("user_key")
@@ -63,7 +83,13 @@ def create_llm_client(model_config: dict):
             base_url = f"{model_api}/v1"
 
         logger.info(f"Using base_url: {base_url}")
-        from langchain_openai import ChatOpenAI
+
+        try:
+            from langchain_openai import ChatOpenAI
+        except ImportError:
+            raise ImportError(
+                "langchain_openai package is required for agentic processing. Install with: pip install langchain_openai"
+            ) from None
 
         llm = ChatOpenAI(
             model=model_id,
