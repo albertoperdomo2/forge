@@ -45,18 +45,12 @@ def test_deployment_presets_resolve_deployments() -> None:
 def test_release_deployment_profiles_have_expected_shape() -> None:
     _init_project_config()
 
-    approximate = core_config.project.get_config(
-        "deployments['approximate-prefix-cache']",
-        print=False,
-    )
-    precise = core_config.project.get_config(
-        "deployments['precise-prefix-cache']",
-        print=False,
-    )
-    distributed = core_config.project.get_config(
-        "deployments['distributed-default']",
-        print=False,
-    )
+    core_config.project.set_config("runtime.deployment_profile", "approximate-prefix-cache")
+    approximate = runtime_config.get_deployment_profile()
+    core_config.project.set_config("runtime.deployment_profile", "precise-prefix-cache")
+    precise = runtime_config.get_deployment_profile()
+    core_config.project.set_config("runtime.deployment_profile", "distributed-default")
+    distributed = runtime_config.get_deployment_profile()
 
     for profile in (approximate, precise, distributed):
         assert profile["replicas"] == 4
@@ -191,23 +185,11 @@ def test_ci_init_uses_framework_project_args_preset_and_keeps_var_overrides() ->
     assert runtime_config.get_benchmark_keys() == ["multi-turn"]
 
 
-def test_ci_init_applies_default_preset_only_as_fallback() -> None:
-    variable_overrides_path = env.ARTIFACT_DIR / "000__ci_metadata" / "variable_overrides.yaml"
-    variable_overrides_path.parent.mkdir(parents=True, exist_ok=True)
-    variable_overrides_path.write_text(
-        yaml.safe_dump(
-            {
-                "runtime.default_preset": "smoke-default-scheduler",
-            },
-            sort_keys=True,
-        ),
-        encoding="utf-8",
-    )
-
+def test_ci_init_uses_project_default_preset_when_no_explicit_preset_is_provided() -> None:
     llmd_ci.init()
 
     assert runtime_config.get_model_name() == "Qwen/Qwen3-0.6B"
-    assert runtime_config.get_deployment_profile_name() == "distributed-default"
+    assert runtime_config.get_deployment_profile_name() == "approximate-prefix-cache"
     assert runtime_config.get_benchmark_keys() == []
 
 

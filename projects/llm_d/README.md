@@ -26,9 +26,10 @@ Main entrypoints:
 
 Profile model:
 
-- deployments are defined in
-  [`orchestration/config.d/deployments.yml`](./orchestration/config.d/deployments.yml)
-  and own deployment shape directly
+- deployment profiles are defined in
+  [`orchestration/config.d/deployments.yaml`](./orchestration/config.d/deployments.yaml)
+  and reference scheduler/router manifest fragments under
+  [`orchestration/manifests/deployments`](./orchestration/manifests/deployments)
 - benchmark profiles are represented as named entries under
   [`orchestration/config.d/workloads.yaml`](./orchestration/config.d/workloads.yaml)
 
@@ -43,6 +44,7 @@ selection.
 
 Model and deployment selection:
 
+- local default behavior comes from `project.args: [smoke]`
 - select a deployment preset on the `/test` line when you want preset defaults
 - select one or more literal Hugging Face model names with `/var runtime.model_name: ...`
 - select one or more deployment profiles with `/var runtime.deployment_profile: ...`
@@ -69,8 +71,7 @@ Matrix example:
 
 Benchmark adaptation notes:
 
-- deployments now own deployment shape, including scheduler behavior, replicas,
-  tensor parallelism, optional image overrides, and optional CPU/memory resources
+- deployment profiles resolve from lightweight config plus manifest fragments
 - benchmark workloads are adapted to the existing GuideLLM execution model
 - rate-dependent benchmarks (args containing `{rate}` / `{N*rate}` / `{rate*N}`) expand into one GuideLLM run per rate
 - plain multi-rate benchmarks (no `{rate}` expressions) stay a single GuideLLM invocation

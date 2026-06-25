@@ -10,6 +10,8 @@ from itertools import product
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from projects.core.dsl.utils import slugify_identifier, truncate_k8s_name
 from projects.core.library import config, env, run
 
@@ -108,6 +110,11 @@ def _deep_merge(base: Any, override: Any) -> Any:
         else:
             merged[key] = copy.deepcopy(value)
     return merged
+
+
+def _load_yaml(path: Path) -> Any:
+    with path.open(encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
 
 
 def get_config_dir() -> Path:
@@ -279,7 +286,17 @@ def get_deployment_profile_name() -> str:
 
 def get_deployment_profile() -> dict[str, Any]:
     profile_name = get_deployment_profile_name()
-    return copy.deepcopy(config.project.get_config(f"deployments['{profile_name}']"))
+    deployment_config = copy.deepcopy(config.project.get_config("deployments"))
+    profile = copy.deepcopy(deployment_config[profile_name])
+    defaults = copy.deepcopy(deployment_config.get("defaults", {}))
+
+    scheduler_manifest = profile.pop("scheduler_manifest", None)
+    resolved_profile = _deep_merge(defaults, profile)
+    if scheduler_manifest:
+        scheduler_data = _load_yaml(get_config_dir() / scheduler_manifest)
+        resolved_profile = _deep_merge(resolved_profile, scheduler_data)
+
+    return resolved_profile
 
 
 def get_smoke_request() -> dict[str, Any]:

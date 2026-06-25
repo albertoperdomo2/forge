@@ -29,30 +29,6 @@ def init():
     env.init()
     run.init()
     config.init(Path(__file__).parent)
-    config.project.save_config_overrides()
-
-    explicit_presets = config.project.get_config("project.args", [], print=False) or []
-    if explicit_presets:
-        logger.info(
-            "Using %d preset(s) from project.args via framework preset handling",
-            len(explicit_presets),
-        )
-        return
-
-    preset_name = config.project.get_config("runtime.default_preset", None)
-    if not preset_name:
-        return
-
-    logger.info("Applying fallback runtime.default_preset: %s", preset_name)
-    config.project.apply_preset(preset_name)
-
-    overrides = config.project.get_config("overrides", {}, print=False) or {}
-    if not overrides:
-        return
-
-    logger.info("Reapplying %d config override(s) after preset expansion", len(overrides))
-    for key, value in overrides.items():
-        config.project.set_config(key, value, print=False)
 
 
 def list_vaults() -> list[str]:
