@@ -1,5 +1,3 @@
-default_preset: smoke
-selected_preset: smoke
 job_name: null
 namespace_override: null
 

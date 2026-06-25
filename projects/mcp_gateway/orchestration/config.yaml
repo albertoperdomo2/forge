@@ -2,7 +2,7 @@ vaults:
   all: []
   all-optional:
   - psap-forge-notifications
-  - psap-forge-mcp-gw-mlflow
+  - psap-forge-mlflow-export
   prepare: []
   test: []
 
@@ -48,7 +48,7 @@ caliper:
         enabled: true
         secrets:
           vault:
-            name: psap-forge-mcp-gw-mlflow
+            name: psap-forge-mlflow-export
             mlflow_secret: mlflow-secret.yaml
             aws_secret: null
         config:

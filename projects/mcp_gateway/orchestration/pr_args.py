@@ -60,10 +60,8 @@ def parse_project_directives(comment_text: str) -> tuple[dict[str, Any], list[st
                         "mcp_gateway accepts at most one preset in "
                         "'/test fournos mcp_gateway PRESET'"
                     )
-                preset = args[0]
-                config_overrides["runtime.default_preset"] = preset
                 parsed_directives.append(line)
-                logger.info("Parsed mcp_gateway preset: %s", preset)
+                logger.info("Parsed mcp_gateway preset: %s", args[0])
             continue
 
         # Parse /version directive

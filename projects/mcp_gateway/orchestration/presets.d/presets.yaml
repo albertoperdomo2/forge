@@ -1,7 +1,6 @@
 __multiple: true
 
 smoke:
-  runtime.selected_preset: smoke
   runtime.mock_server: perf-mock-server
   experiment.servers: [1]
   experiment.concurrency: [4]
@@ -11,7 +10,6 @@ smoke:
   experiment.tools_per_server: 10
 
 baseline:
-  runtime.selected_preset: baseline
   runtime.mock_server: perf-mock-server
   experiment.servers: [1]
   experiment.concurrency: [16, 64, 128, 256]
@@ -21,7 +19,6 @@ baseline:
   experiment.tools_per_server: 10
 
 scale-out:
-  runtime.selected_preset: scale-out
   runtime.mock_server: perf-mock-server
   experiment.servers: [1, 10, 25, 50, 100]
   experiment.concurrency: [50, 200, 500]
@@ -31,7 +28,6 @@ scale-out:
   experiment.tools_per_server: 10
 
 demo:
-  runtime.selected_preset: demo
   runtime.mock_server: perf-mock-server
   experiment.servers: [150]
   experiment.concurrency: [500]
@@ -41,7 +37,6 @@ demo:
   experiment.tools_per_server: 10
 
 matrix-demo-1:
-  runtime.selected_preset: matrix-demo-1
   runtime.mock_server: perf-mock-server
   experiment.servers: [1,2]
   experiment.concurrency: [16,32]
