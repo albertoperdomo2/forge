@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-import pytest
-
 from projects.llm_d.orchestration import pr_args
 
 
-def test_parse_project_directives_extracts_positional_preset() -> None:
+def test_parse_project_directives_does_not_override_framework_test_preset_handling() -> None:
     overrides, directives = pr_args.parse_project_directives("/test fournos llm_d smoke")
 
-    assert overrides == {
-        "runtime.default_preset": "smoke",
-        "ci_job.args": [],
-    }
-    assert directives == ["/test fournos llm_d smoke"]
+    assert overrides == {}
+    assert directives == []
 
 
 def test_parse_project_directives_ignores_test_without_preset() -> None:
@@ -27,8 +22,3 @@ def test_parse_project_directives_ignores_other_projects() -> None:
 
     assert overrides == {}
     assert directives == []
-
-
-def test_parse_project_directives_rejects_multiple_presets() -> None:
-    with pytest.raises(ValueError, match="at most one preset"):
-        pr_args.parse_project_directives("/test fournos llm_d smoke benchmark-short")

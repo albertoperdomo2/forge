@@ -168,14 +168,14 @@ def test_release_preset_expands_benchmark_list_and_merges_workload_args() -> Non
     assert benchmark_configs["multi-turn"]["args"]["request_type"] == "text_completions"
 
 
-def test_ci_init_applies_default_preset_before_runtime_resolution() -> None:
+def test_ci_init_uses_framework_project_args_preset_and_keeps_var_overrides() -> None:
     variable_overrides_path = env.ARTIFACT_DIR / "000__ci_metadata" / "variable_overrides.yaml"
     variable_overrides_path.parent.mkdir(parents=True, exist_ok=True)
     variable_overrides_path.write_text(
         yaml.safe_dump(
             {
+                "project.args": ["gpt-oss-120b-inference-scheduling-release"],
                 "runtime.benchmark_key": "multi-turn",
-                "runtime.default_preset": "gpt-oss-120b-inference-scheduling-release",
             },
             sort_keys=True,
         ),
@@ -187,6 +187,26 @@ def test_ci_init_applies_default_preset_before_runtime_resolution() -> None:
     assert runtime_config.get_model_name() == "openai/gpt-oss-120b"
     assert runtime_config.get_deployment_profile_name() == "distributed-default"
     assert runtime_config.get_benchmark_keys() == ["multi-turn"]
+
+
+def test_ci_init_applies_default_preset_only_as_fallback() -> None:
+    variable_overrides_path = env.ARTIFACT_DIR / "000__ci_metadata" / "variable_overrides.yaml"
+    variable_overrides_path.parent.mkdir(parents=True, exist_ok=True)
+    variable_overrides_path.write_text(
+        yaml.safe_dump(
+            {
+                "runtime.default_preset": "smoke-default-scheduler",
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    llmd_ci.init()
+
+    assert runtime_config.get_model_name() == "Qwen/Qwen3-0.6B"
+    assert runtime_config.get_deployment_profile_name() == "distributed-default"
+    assert runtime_config.get_benchmark_keys() == []
 
 
 def test_model_and_deployment_profile_accept_yaml_list_strings() -> None:
