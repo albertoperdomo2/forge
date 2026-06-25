@@ -66,10 +66,16 @@ def _has_rate_expressions(guidellm_args: list[str]) -> bool:
 
 
 def expand_guidellm_runs(guidellm_args: list[str]) -> list[GuideLLMRun]:
+    has_rate_expressions = _has_rate_expressions(guidellm_args)
     rate_arg = next((arg for arg in guidellm_args if arg.startswith("--rate=")), None)
     if not rate_arg:
+        if has_rate_expressions:
+            raise ValueError(
+                "Rate-based expressions require a '--rate=' argument. "
+                "Found '{rate}'-style placeholders without any rate values."
+            )
         return [GuideLLMRun(rate=None, label="default", args=list(guidellm_args))]
-    if not _has_rate_expressions(guidellm_args):
+    if not has_rate_expressions:
         return [GuideLLMRun(rate=None, label="default", args=list(guidellm_args))]
 
     rate_values = [value.strip() for value in rate_arg.split("=", 1)[1].split(",") if value.strip()]

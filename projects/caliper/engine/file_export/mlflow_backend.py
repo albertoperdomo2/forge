@@ -448,7 +448,7 @@ def _log_metrics_and_params_from_tree(artifact_root: Path) -> None:
         mf = run_dir / "metrics.json"
         if mf.is_file():
             for k, v in _load_json_file(mf).items():
-                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                if isinstance(v, int | float) and not isinstance(v, bool):
                     mlflow.log_metric(str(k), float(v))
 
         pf = run_dir / "parameters.json"
@@ -556,7 +556,7 @@ def log_multi_run_artifacts(
                     mf = run_dir / metrics_file
                     if mf.is_file():
                         for k, v in _load_json_file(mf).items():
-                            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                            if isinstance(v, int | float) and not isinstance(v, bool):
                                 mlflow.log_metric(str(k), float(v))
 
                     pf = run_dir / parameters_file

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from projects.guidellm.toolbox.run_guidellm_benchmark import build_guidellm_args
 from projects.guidellm.toolbox.run_guidellm_benchmark.utils import (
     expand_guidellm_runs,
@@ -80,6 +82,30 @@ def test_expand_guidellm_runs_keeps_plain_multi_rate_benchmark_as_single_run() -
         "--data=prompt_tokens=1000,output_tokens=1000",
         "--max-seconds=600",
     ]
+
+
+def test_expand_guidellm_runs_rejects_rate_expressions_without_rate_arg() -> None:
+    with pytest.raises(ValueError, match="require a '--rate=' argument"):
+        expand_guidellm_runs(
+            [
+                "--backend-type=openai_http",
+                "--rate-type=concurrent",
+                "--data=prompt_tokens=128,prefix_count={2*rate}",
+                "--max-requests={10*rate}",
+            ]
+        )
+
+
+def test_expand_guidellm_runs_rejects_empty_rate_arg_when_rate_expressions_are_used() -> None:
+    with pytest.raises(ValueError, match="must include at least one non-empty value"):
+        expand_guidellm_runs(
+            [
+                "--backend-type=openai_http",
+                "--rate-type=concurrent",
+                "--rate=",
+                "--max-requests={rate}",
+            ]
+        )
 
 
 def test_render_guidellm_job_from_parts_uses_shell_for_multi_run_benchmarks() -> None:
