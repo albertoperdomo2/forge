@@ -73,7 +73,15 @@ def test(ctx):
 @click.pass_context
 @ci_lib.safe_ci_command
 def pre_cleanup(ctx):
-    """Cleanup phase - Clean up resources and finalize."""
+    """Pre-cleanup phase - no-op to avoid cleaning up running resources."""
+    return 0
+
+
+@main.command()
+@click.pass_context
+@ci_lib.safe_ci_command
+def post_cleanup(ctx):
+    """Post-cleanup phase - Clean up resources after test."""
     return prepare_rhaiis.cleanup()
 
 
