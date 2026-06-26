@@ -585,7 +585,13 @@ def analyze_single_failure_multi_query(
                     base_artifact_dir, failure_dir_name
                 )
 
+                # Calculate relative path to artifacts directory
+                relative_artifacts_path = Path(failure_data["failure_dir"]).relative_to(
+                    base_artifact_dir
+                )
+
                 with open(failure_review_path, "w", encoding="utf-8") as f:
+                    f.write(f"# {relative_artifacts_path}\n\n")
                     f.write(failure_review_content.strip() + "\n")
 
                 logger.info(f"📝 FAILURE_REVIEW generated: {failure_review_path}")
@@ -646,7 +652,13 @@ def analyze_single_failure_multi_query(
                     base_artifact_dir, failure_dir_name
                 )
 
+                # Calculate relative path to artifacts directory
+                relative_artifacts_path = Path(failure_data["failure_dir"]).relative_to(
+                    base_artifact_dir
+                )
+
                 with open(failure_review_path, "w", encoding="utf-8") as f:
+                    f.write(f"# {relative_artifacts_path}\n\n")
                     f.write(partial_summary.strip() + "\n")
 
                 logger.info(
