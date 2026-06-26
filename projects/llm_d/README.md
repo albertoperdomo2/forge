@@ -19,7 +19,61 @@ Main entrypoints:
 
 - CI phase wrapper: [`orchestration/ci.py`](./orchestration/ci.py)
 - CLI wrapper: [`orchestration/cli.py`](./orchestration/cli.py)
-- Shared runtime/config loader: [`orchestration/llmd_runtime.py`](./orchestration/llmd_runtime.py)
-- Toolbox prepare command: [`toolbox/prepare/main.py`](./toolbox/prepare/main.py)
-- Toolbox test command: [`toolbox/test/main.py`](./toolbox/test/main.py)
-- Toolbox cleanup command: [`toolbox/cleanup/main.py`](./toolbox/cleanup/main.py)
+- Shared runtime/config loader: [`orchestration/runtime_config.py`](./orchestration/runtime_config.py)
+- Prepare flow: [`orchestration/prepare_sequence.py`](./orchestration/prepare_sequence.py)
+- Test flow: [`orchestration/test_phase.py`](./orchestration/test_phase.py)
+- Cleanup flow: [`orchestration/cleanup_phase.py`](./orchestration/cleanup_phase.py)
+
+Profile model:
+
+- deployment profiles are defined in
+  [`orchestration/config.d/deployments.yaml`](./orchestration/config.d/deployments.yaml)
+  and reference scheduler/router manifest fragments under
+  [`orchestration/manifests/deployments`](./orchestration/manifests/deployments)
+- benchmark profiles are represented as named entries under
+  [`orchestration/config.d/workloads.yaml`](./orchestration/config.d/workloads.yaml)
+
+Current deployment presets:
+
+- `deployment-approximate-prefix-cache`
+- `deployment-precise-prefix-cache`
+- `deployment-distributed-default`
+
+Existing smoke presets extend those deployment presets and keep the model and smoke request
+selection.
+
+Model and deployment selection:
+
+- local default behavior comes from `project.args: [smoke]`
+- select a deployment preset on the `/test` line when you want preset defaults
+- select one or more literal Hugging Face model names with `/var runtime.model_name: ...`
+- select one or more deployment profiles with `/var runtime.deployment_profile: ...`
+- select a benchmark workload with `/var runtime.benchmark_key: ...`
+
+Example:
+
+```text
+/test fournos llm_d deployment-precise-prefix-cache
+/cluster athena-fire
+/var runtime.model_name: meta-llama/Llama-3.1-8B-Instruct
+/var runtime.benchmark_key: heavy-heterogeneous
+```
+
+Matrix example:
+
+```text
+/test fournos llm_d smoke
+/cluster athena-fire
+/var runtime.model_name: [openai/gpt-oss-120b, Qwen/Qwen3-0.6B]
+/var runtime.deployment_profile: [distributed-default, precise-prefix-cache]
+/var runtime.benchmark_key: multi-turn
+```
+
+Benchmark adaptation notes:
+
+- deployment profiles resolve from lightweight config plus manifest fragments
+- benchmark workloads are adapted to the existing GuideLLM execution model
+- rate-dependent benchmarks (args containing `{rate}` / `{N*rate}` / `{rate*N}`) expand into one GuideLLM run per rate
+- plain multi-rate benchmarks (no `{rate}` expressions) stay a single GuideLLM invocation
+- expressions such as `{2*rate}` and `{10*rate}` are resolved in those expanded runs
+- Features such as pre-warmup and env passthrough are not modeled yet

@@ -1,30 +1,60 @@
 __multiple: true
 
-smoke:
-  runtime.selected_preset: smoke
-  runtime.model_key: qwen3-0-6b
-  runtime.scheduler_profile_key: approximate
+deployment-approximate-prefix-cache:
+  runtime.selected_preset: deployment-approximate-prefix-cache
+  runtime.deployment_profile: approximate-prefix-cache
+
+deployment-precise-prefix-cache:
+  runtime.selected_preset: deployment-precise-prefix-cache
+  runtime.deployment_profile: precise-prefix-cache
+
+deployment-distributed-default:
+  runtime.selected_preset: deployment-distributed-default
+  runtime.deployment_profile: distributed-default
+
+smoke-base:
+  runtime.model_name: Qwen/Qwen3-0.6B
   runtime.smoke_request_key: default
   runtime.benchmark_key: null
 
+smoke:
+  extends:
+    - smoke-base
+    - deployment-approximate-prefix-cache
+  runtime.selected_preset: smoke
+
 smoke-precise:
   extends:
-    - smoke
+    - smoke-base
+    - deployment-precise-prefix-cache
   runtime.selected_preset: smoke-precise
-  runtime.scheduler_profile_key: precise
 
 smoke-default-scheduler:
   extends:
-    - smoke
+    - smoke-base
+    - deployment-distributed-default
   runtime.selected_preset: smoke-default-scheduler
-  runtime.scheduler_profile_key: default
 
 benchmark-short:
+  extends:
+    - deployment-approximate-prefix-cache
   runtime.selected_preset: benchmark-short
-  runtime.model_key: llama-3-1-8b-instruct-fp8
-  runtime.scheduler_profile_key: approximate
+  runtime.model_name: meta-llama/Llama-3.1-8B-Instruct
   runtime.smoke_request_key: default
   runtime.benchmark_key: short
+
+gpt-oss-120b-inference-scheduling-release:
+  runtime.selected_preset: gpt-oss-120b-inference-scheduling-release
+  runtime.model_name: openai/gpt-oss-120b
+  runtime.deployment_profile: distributed-default
+  runtime.smoke_request_key: default
+  runtime.benchmark_key:
+    - concurrent-1k-1k
+    - heavy-heterogeneous
+    - multi-turn
+  model_cache.pvc.size: 300Gi
+  workloads.args:
+    request_type: text_completions
 
 cks:
   extends:

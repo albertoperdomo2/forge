@@ -76,8 +76,10 @@ def pre_cleanup(ctx) -> int:
     # no vault needed
     from projects.llm_d.orchestration import runtime_config
 
-    namespace = runtime_config.get_namespace()
-    return cleanup_toolbox_run(namespace=namespace)
+    for run_spec in runtime_config.get_run_specs():
+        with runtime_config.activate_run_spec(run_spec):
+            cleanup_toolbox_run(namespace=run_spec.namespace)
+    return 0
 
 
 main.add_command(create_fournos_resolve_entrypoint(vault_list_func=vault.phase_vault_list_all))

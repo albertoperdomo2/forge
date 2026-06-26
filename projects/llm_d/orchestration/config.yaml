@@ -24,6 +24,7 @@ caliper:
             mlflow_secret: mlflow-secret.yaml
         config:
           experiment: forge-llm_d
+          workspace: forge-llmd
           run_name:
           description: >
             Caliper export from FORGE

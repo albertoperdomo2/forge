@@ -1,2 +1,3 @@
 name: llm_d
-args: []
+args:
+  - smoke

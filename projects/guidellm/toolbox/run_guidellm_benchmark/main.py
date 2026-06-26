@@ -7,13 +7,14 @@ import subprocess
 from pathlib import Path
 
 from projects.core.dsl import entrypoint, execute_tasks, retry, task
-from projects.core.dsl.utils import write_text
+from projects.core.dsl.utils import write_json, write_text
 from projects.core.dsl.utils.k8s import (
     oc,
     oc_apply,
     oc_get_json,
 )
 from projects.guidellm.toolbox.run_guidellm_benchmark.utils import (
+    expand_guidellm_runs,
     render_guidellm_copy_pod_from_parts,
     render_guidellm_job_from_parts,
     render_guidellm_pvc_from_parts,
@@ -28,8 +29,7 @@ def run(
     endpoint_url: str,
     name: str = "guidellm-benchmark",
     namespace: str = "",
-    image: str = "ghcr.io/vllm-project/guidellm",
-    version: str = "v0.6.0",
+    image: str = "ghcr.io/vllm-project/guidellm:v0.6.0",
     timeout: int = 900,
     pvc_size: str = "1Gi",
     guidellm_args: list[str] | None = None,
@@ -41,8 +41,7 @@ def run(
         endpoint_url: Endpoint URL for the LLM inference service to benchmark
         name: Name of the benchmark job
         namespace: Namespace to run the benchmark job in (empty string auto-detects current namespace)
-        image: Container image for the benchmark
-        version: Version tag for the benchmark image
+        image: Full container image reference for the benchmark
         timeout: Timeout in seconds to wait for job completion
         pvc_size: Size of the PersistentVolumeClaim for storing results
         guidellm_args: List of additional guidellm arguments (e.g., ["--rate=10", "--max-seconds=30"])
@@ -58,6 +57,7 @@ def validate_parameters(args, ctx):
 
     # Ensure guidellm_args is a list
     ctx.guidellm_args = args.guidellm_args or []
+    ctx.guidellm_runs = expand_guidellm_runs(ctx.guidellm_args)
 
     # Auto-detect namespace if empty
     if not args.namespace:
@@ -70,7 +70,7 @@ def validate_parameters(args, ctx):
         ctx.target_namespace = args.namespace
 
     ctx.benchmark_name = args.name
-    ctx.full_image = f"{args.image}:{args.version}"
+    ctx.image = args.image
 
     return f"Validated parameters for benchmark {ctx.benchmark_name} in namespace {ctx.target_namespace}"
 
@@ -136,7 +136,7 @@ def create_guidellm_resources_task(args, ctx):
         render_guidellm_job_from_parts(
             namespace=ctx.target_namespace,
             name=ctx.benchmark_name,
-            image=ctx.full_image,
+            image=ctx.image,
             endpoint_url=args.endpoint_url,
             guidellm_args=ctx.guidellm_args,
         ),
@@ -287,24 +287,48 @@ def wait_copy_pod_ready(args, ctx):
 def extract_results(args, ctx):
     """Extract GuideLLM results from copy pod"""
 
-    result = oc(
-        "exec",
-        "-n",
-        ctx.target_namespace,
-        f"{ctx.benchmark_name}-copy",
-        "--",
-        "cat",
-        "/results/benchmarks.json",
-        check=False,
-        log_stdout=False,
-    )
-    if result.returncode != 0 or not result.stdout:
-        raise RuntimeError(f"No results found for {ctx.benchmark_name}")
+    results_dir = args.artifact_dir / "artifacts" / "results"
+    extracted_files: list[dict[str, str | None]] = []
+    for run in ctx.guidellm_runs:
+        if run.rate is None:
+            remote_path = "/results/benchmarks.json"
+            local_path = results_dir / "benchmarks.json"
+        else:
+            remote_path = f"/results/benchmarks-{run.label}.json"
+            local_path = results_dir / f"benchmarks-{run.label}.json"
 
-    write_text(
-        args.artifact_dir / "artifacts" / "results" / "benchmarks.json",
-        result.stdout,
+        result = oc(
+            "exec",
+            "-n",
+            ctx.target_namespace,
+            f"{ctx.benchmark_name}-copy",
+            "--",
+            "cat",
+            remote_path,
+            check=False,
+            log_stdout=False,
+        )
+        if result.returncode != 0 or not result.stdout:
+            raise RuntimeError(f"No results found for {ctx.benchmark_name} run {run.label}")
+
+        write_text(local_path, result.stdout)
+        extracted_files.append(
+            {
+                "label": run.label,
+                "rate": run.rate,
+                "remote_path": remote_path,
+                "local_path": str(local_path.relative_to(args.artifact_dir)),
+            }
+        )
+
+    write_json(
+        results_dir / "index.json",
+        {
+            "benchmark_name": ctx.benchmark_name,
+            "runs": extracted_files,
+        },
     )
+
     return f"Extracted results for {ctx.benchmark_name}"
 
 

@@ -1,6 +1,7 @@
 import logging
 
-from projects.llm_d.orchestration import prepare_phase
+from projects.core.library import env
+from projects.llm_d.orchestration import prepare_phase, runtime_config
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +19,13 @@ def run_prepare_sequence() -> int:
     prepare_phase.wait_for_datasciencecluster_ready()
     prepare_phase.ensure_required_crds()
     prepare_phase.ensure_gateway()
-    prepare_phase.ensure_test_namespace()
-    prepare_phase.cleanup_previous_run()
-    prepare_phase.prepare_model_cache()
-    prepare_phase.verify_gpu_nodes()
-    prepare_phase.capture_prepare_state()
+    for run_spec in runtime_config.get_run_specs():
+        with runtime_config.activate_run_spec(run_spec):
+            with env.NextArtifactDir(f"prepare_{run_spec.artifact_dirname}"):
+                prepare_phase.ensure_test_namespace()
+                prepare_phase.cleanup_previous_run()
+                prepare_phase.prepare_model_cache()
+                prepare_phase.verify_gpu_nodes()
+                prepare_phase.capture_prepare_state()
     logger.info("Prepare sequence completed successfully - all phases executed without errors")
     return 0
