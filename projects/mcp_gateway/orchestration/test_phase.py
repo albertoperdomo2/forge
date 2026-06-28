@@ -11,6 +11,7 @@ post-processing.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -18,11 +19,10 @@ from typing import Any
 from projects.agentic_tools.locust.toolbox.run_distributed import main as run_locust
 from projects.agentic_tools.locust.toolbox.run_distributed.main import LocustResults
 from projects.agentic_tools.mcp.toolbox.deploy_mock_servers import main as deploy_mock_servers
-from projects.agentic_tools.mcp.toolbox.deploy_mock_servers.main import MOCK_MCP_LABEL
 from projects.caliper.prometheus_metrics.capture import capture_metrics
 from projects.caliper.prometheus_metrics.config import MetricsCaptureConfig
 from projects.core.dsl.utils import write_json
-from projects.core.library import env
+from projects.core.library import config, env
 from projects.core.library.postprocess import run_and_postprocess, write_test_labels
 from projects.mcp_gateway.orchestration.runtime_config import cfg
 from projects.mcp_gateway.toolbox.apply_infrastructure import main as apply_infra
@@ -95,18 +95,26 @@ def do_test() -> int:
 
                 all_summaries.append(job_name)
 
-    write_json(
-        env.ARTIFACT_DIR / "test_summary.json",
-        {
-            "preset": preset,
-            "version": version,
-            "servers": servers,
-            "concurrency": concurrency,
-            "targets": targets,
-            "tools_per_server": tools_per_server,
-            "run_names": all_summaries,
-        },
+    summary: dict[str, Any] = {
+        "preset": preset,
+        "version": version,
+        "servers": servers,
+        "concurrency": concurrency,
+        "targets": targets,
+        "tools_per_server": tools_per_server,
+        "run_names": all_summaries,
+    }
+
+    configured_version = config.project.get_config(
+        "infrastructure.mcp_gateway_version", None, print=False, warn=False
     )
+    if configured_version and re.fullmatch(r"[0-9a-f]{40}", configured_version):
+        summary["nightly"] = {
+            "commit_sha": configured_version,
+            "image_tag": f"sha-{configured_version}",
+        }
+
+    write_json(env.ARTIFACT_DIR / "test_summary.json", summary)
 
     return 0
 
@@ -246,13 +254,14 @@ def _cleanup_servers(*, namespace: str, num_servers: int, mock_server: str) -> N
     deploy_mock_servers.cleanup_servers(namespace=namespace)
 
     api_group = cfg.get_api_group()
+    scale_out_label = "experiment=scale-out"
     run_oc(
         "delete",
         f"mcpserverregistrations.{api_group},httproute",
         "-n",
         namespace,
         "-l",
-        MOCK_MCP_LABEL,
+        scale_out_label,
         "--wait=false",
         "--ignore-not-found=true",
         check=False,
@@ -263,7 +272,7 @@ def _cleanup_servers(*, namespace: str, num_servers: int, mock_server: str) -> N
         "-n",
         "istio-system",
         "-l",
-        MOCK_MCP_LABEL,
+        scale_out_label,
         "--wait=false",
         "--ignore-not-found=true",
         check=False,
