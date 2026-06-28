@@ -473,10 +473,12 @@ def log_multi_run_artifacts(
     upload_workers: int = 10,
     run_metadata: dict[str, Any] | None = None,
     workspace: str | None = None,
+    child_run_names: dict[Path, str] | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     """Create a parent MLflow run with all artifacts and nested child runs per test directory.
 
     All artifacts are uploaded to both the parent run and each child run.
+    If ``child_run_names`` is provided, those names are used instead of ``run_dir.name``.
     """
     try:
         import mlflow
@@ -548,7 +550,11 @@ def log_multi_run_artifacts(
                 logger.info("Parent run: %s", parent_url)
 
             for run_dir in sorted(run_dirs):
-                child_name = run_dir.name
+                child_name = (
+                    child_run_names.get(run_dir, run_dir.name)
+                    if child_run_names
+                    else run_dir.name
+                )
 
                 with mlflow.start_run(run_name=child_name, nested=True):
                     child_rid = mlflow.active_run().info.run_id

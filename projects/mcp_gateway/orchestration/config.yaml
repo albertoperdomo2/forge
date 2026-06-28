@@ -53,10 +53,15 @@ caliper:
         config:
           run_name:
           experiment: mcp-gateway-cpt
-          workspace: ashtarkb
+          workspace: mcp-gw-cpt
           description: >
             MCP Gateway performance test results
           source_script: mcp_gateway project
           tags: {}
           parameters: {}
           metrics: {}
+          run_naming:
+            prefix: "forge-mcp-gateway"
+            single_run: "{prefix}-s{num_servers}-u{users}-v{mcp_gateway_version}-{timestamp}"
+            parent_run: "{prefix}-{preset}-{mcp_gateway_version}-{timestamp}"
+            child_run: "{prefix}-s{num_servers}-u{users}-v{mcp_gateway_version}-{timestamp}"
