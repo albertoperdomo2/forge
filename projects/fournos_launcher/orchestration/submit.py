@@ -15,7 +15,7 @@ from projects.core.dsl.utils.k8s import sanitize_k8s_name
 from projects.core.library import ci as ci_lib
 from projects.core.library import config, env, run, vault
 from projects.core.library.run_parallel import Parallel
-from projects.core.notifications.send import get_ci_link, send_notification
+from projects.core.notifications.send import get_ocpci_link, send_notification
 from projects.fournos_launcher.orchestration import job_management, pr_args
 from projects.fournos_launcher.toolbox.cleanup_fjob.main import (
     run as cleanup_fjob,
@@ -117,22 +117,22 @@ def send_github_notification(
                 pr_config_content = f"Error reading configuration: {e}"
 
         # Get various CI links
-        ocpci_results_link = get_ci_link("", is_raw_file=False, is_dir=True)
-        execution_logs_link = get_ci_link("run.log", is_raw_file=True)
+        ocpci_results_link = get_ocpci_link("", is_raw_file=False, is_dir=True)
+        execution_logs_link = get_ocpci_link("run.log", is_raw_file=True)
 
         # Collect individual task log files
         task_log_links = []
         for log_file in artifact_dir.glob("**/task_logs/*"):
             if log_file.is_file():
                 rel_path = log_file.relative_to(artifact_dir)
-                ci_link = get_ci_link(str(rel_path), is_raw_file=True)
+                ci_link = get_ocpci_link(str(rel_path), is_raw_file=True)
                 task_log_links.append(f"  - [{log_file.name}]({ci_link})")
 
         # Format task logs section
         if task_log_links:
             task_logs_section = "* Task logs:\n" + "\n".join(task_log_links)
         else:
-            task_logs_dir_link = get_ci_link("task_logs", is_raw_file=False, is_dir=True)
+            task_logs_dir_link = get_ocpci_link("task_logs", is_raw_file=False, is_dir=True)
             task_logs_section = f"* [Task logs]({task_logs_dir_link})"
 
         # Calculate duration if start_time is provided
