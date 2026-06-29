@@ -142,7 +142,7 @@ def send_notification_to_github(pem_file, client_id, message, pr_number, dry_run
 
 def get_github_notification_message(finish_reason: str, status: str, pr_number: int):
     def get_link(name, path, is_raw_file=False, base=None, is_dir=False):
-        return f"[{name}]({get_ci_link(path, is_raw_file, base, is_dir)})"
+        return f"[{name}]({get_ocpci_link(path, is_raw_file, base, is_dir)})"
 
     def get_italics(text):
         return f"*{text}*"
@@ -400,7 +400,7 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 
 def get_slack_thread_message(finish_reason, status):
     def get_link(name, path, is_raw_file=False, base=None, is_dir=False):
-        return f"<{get_ci_link(path, is_raw_file, base, is_dir)}|{name}>"
+        return f"<{get_ocpci_link(path, is_raw_file, base, is_dir)}|{name}>"
 
     def get_italics(text):
         return f"_{text}_"
@@ -605,7 +605,7 @@ def get_slack_secrets(secret_dir, secret_env_key):
     return token_file.read_text()
 
 
-def get_ci_link(path, is_raw_file=False, base=None, is_dir=False):
+def get_ocpci_link(path, is_raw_file=False, base=None, is_dir=False):
     if base is None:
         base, suffix = get_ci_base_link(is_raw_file, is_dir)
     else:
@@ -689,7 +689,7 @@ def send_cpt_notification_to_slack(secret_dir, secret_env_key, title, summary, d
 
 def get_slack_cpt_message(summary):
     def get_link(name, path, is_raw_file=False, base=None, is_dir=False):
-        return f"<{get_ci_link(path, is_raw_file, base, is_dir)}|{name}>"
+        return f"<{get_ocpci_link(path, is_raw_file, base, is_dir)}|{name}>"
 
     def get_italics(text):
         return f"_{text}_"
