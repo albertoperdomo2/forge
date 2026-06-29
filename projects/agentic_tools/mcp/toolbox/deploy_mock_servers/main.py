@@ -48,9 +48,8 @@ def run(
 @task
 def generate_and_apply_manifests(args, ctx):
     """Generate YAML manifests for all servers and apply them."""
-    merged_labels = {"forge.openshift.io/component": "mock-mcp"}
-    if args.labels:
-        merged_labels.update(args.labels)
+    merged_labels = dict(args.labels) if args.labels else {}
+    merged_labels["forge.openshift.io/component"] = "mock-mcp"
 
     ctx.names = [f"{args.name_prefix}-{i}" for i in range(1, args.count + 1)]
 

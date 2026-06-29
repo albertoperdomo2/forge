@@ -22,7 +22,6 @@ import os
 import re
 
 from projects.agentic_tools.mcp.toolbox.deploy_mock_servers import main as deploy_mock_servers
-from projects.agentic_tools.mcp.toolbox.deploy_mock_servers.main import MOCK_MCP_LABEL
 from projects.core.dsl.utils.k8s import oc, oc_get_json, oc_resource_exists
 from projects.core.library import config
 from projects.core.orchestration.utils.k8s import ensure_namespace
@@ -71,6 +70,9 @@ def run() -> int:
         except PreflightError as exc:
             logger.error("  FAIL: %s: %s", name, exc)
             failed.append((name, str(exc)))
+        except Exception as exc:
+            logger.error("  FAIL: %s (unexpected): %s", name, exc)
+            failed.append((name, f"unexpected error: {exc}"))
 
     logger.info("")
     logger.info("=" * 60)
@@ -260,31 +262,55 @@ def check_gateway_connectivity() -> None:
 
 
 def _cleanup_probe(*, namespace: str, api_group: str) -> None:
-    """Remove all probe resources created by the connectivity check."""
-    deploy_mock_servers.cleanup_servers(namespace=namespace)
+    """Remove only the probe resources created by the connectivity check.
 
-    for resource_type in (
-        f"mcpserverregistrations.{api_group}",
-        "httproute",
-    ):
+    Deletes by known resource names derived from _PREFLIGHT_NAME_PREFIX
+    rather than the broad MOCK_MCP_LABEL selector, to avoid accidentally
+    removing test-phase resources sharing the same label.
+    """
+    probe_name = f"{_PREFLIGHT_NAME_PREFIX}-1"
+
+    for resource_type in ("deployment", "service"):
         oc(
             "delete",
             resource_type,
+            probe_name,
             "-n",
             namespace,
-            "-l",
-            MOCK_MCP_LABEL,
             "--ignore-not-found=true",
             "--wait=false",
             check=False,
         )
+
+    for resource_type in (f"mcpserverregistrations.{api_group}",):
+        oc(
+            "delete",
+            resource_type,
+            probe_name,
+            "-n",
+            namespace,
+            "--ignore-not-found=true",
+            "--wait=false",
+            check=False,
+        )
+
+    oc(
+        "delete",
+        "httproute",
+        f"{probe_name}-route",
+        "-n",
+        namespace,
+        "--ignore-not-found=true",
+        "--wait=false",
+        check=False,
+    )
+
     oc(
         "delete",
         "destinationrule",
+        f"{probe_name}-mtls-disable",
         "-n",
         "istio-system",
-        "-l",
-        MOCK_MCP_LABEL,
         "--ignore-not-found=true",
         "--wait=false",
         check=False,

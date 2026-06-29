@@ -11,6 +11,7 @@ post-processing.
 from __future__ import annotations
 
 import logging
+import os
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -107,7 +108,7 @@ def do_test() -> int:
 
     configured_version = config.project.get_config(
         "infrastructure.mcp_gateway_version", None, print=False, warn=False
-    )
+    ) or os.environ.get("MCP_GATEWAY_VERSION")
     if configured_version and re.fullmatch(r"[0-9a-f]{40}", configured_version):
         summary["nightly"] = {
             "commit_sha": configured_version,

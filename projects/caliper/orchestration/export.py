@@ -54,7 +54,8 @@ def _read_test_labels(run_dir: Path) -> dict[str, str]:
         return {}
     try:
         data = yaml.safe_load(marker.read_text(encoding="utf-8"))
-        return data.get("labels", {}) if isinstance(data, dict) else {}
+        labels = data.get("labels", {}) if isinstance(data, dict) else {}
+        return labels if isinstance(labels, dict) else {}
     except (OSError, yaml.YAMLError):
         return {}
 
