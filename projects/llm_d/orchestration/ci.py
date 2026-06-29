@@ -54,7 +54,7 @@ def main(ctx):
 
 @main.command()
 @click.pass_context
-@ci_lib.safe_ci_command
+@ci_lib.safe_ci_entrypoint
 @agent_review_on_failure
 def prepare(ctx) -> int:
     """Prepare phase - Set up environment and dependencies."""
@@ -63,7 +63,7 @@ def prepare(ctx) -> int:
 
 @main.command()
 @click.pass_context
-@ci_lib.safe_ci_command
+@ci_lib.safe_ci_entrypoint
 @agent_review_on_failure
 def preflight(ctx) -> int:
     """Preflight check phase - Validate required CRDs exist before testing."""
@@ -72,7 +72,7 @@ def preflight(ctx) -> int:
 
 @main.command()
 @click.pass_context
-@ci_lib.safe_ci_command
+@ci_lib.safe_ci_entrypoint
 @agent_review_on_failure
 def test(ctx) -> int:
     """Test phase - Execute the main testing logic."""
@@ -84,7 +84,7 @@ def test(ctx) -> int:
 
 @main.command()
 @click.pass_context
-@ci_lib.safe_ci_command
+@ci_lib.safe_ci_entrypoint
 @agent_review_on_failure
 def pre_cleanup(ctx) -> int:
     """Cleanup phase - Clean up resources and finalize."""
@@ -98,7 +98,7 @@ def pre_cleanup(ctx) -> int:
 
 @main.command()
 @click.pass_context
-@ci_lib.safe_ci_command
+@ci_lib.safe_ci_entrypoint
 @agent_review_on_failure
 def post_cleanup(ctx) -> int:
     """Cleanup phase - Clean up resources and finalize."""

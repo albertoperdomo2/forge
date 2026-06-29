@@ -50,7 +50,7 @@ def main(ctx):
 
 @main.command()
 @click.pass_context
-@ci_lib.safe_ci_command
+@ci_lib.safe_ci_entrypoint
 @agent_review_on_failure
 def prepare(ctx):
     """Prepare phase - Set up environment and dependencies."""
@@ -59,7 +59,7 @@ def prepare(ctx):
 
 @main.command()
 @click.pass_context
-@ci_lib.safe_ci_command
+@ci_lib.safe_ci_entrypoint
 def test(ctx):
     """Test phase - Execute the main testing logic."""
 
@@ -71,7 +71,7 @@ def test(ctx):
 
 @main.command()
 @click.pass_context
-@ci_lib.safe_ci_command
+@ci_lib.safe_ci_entrypoint
 @agent_review_on_failure
 def pre_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
@@ -80,7 +80,7 @@ def pre_cleanup(ctx):
 
 @main.command()
 @click.pass_context
-@ci_lib.safe_ci_command
+@ci_lib.safe_ci_entrypoint
 @agent_review_on_failure
 def post_cleanup(ctx):
     """Cleanup phase - Clean up resources and finalize."""
@@ -89,7 +89,7 @@ def post_cleanup(ctx):
 
 @main.command()
 @click.pass_context
-@ci_lib.safe_ci_command
+@ci_lib.safe_ci_entrypoint
 def preflight(ctx) -> int:
     """Preflight check phase - Validate that the cluster if ready for testing."""
 
