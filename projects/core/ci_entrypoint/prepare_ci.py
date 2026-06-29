@@ -573,7 +573,19 @@ def format_duration(duration_seconds: int) -> str:
     hours = duration_seconds // 3600
     minutes = (duration_seconds % 3600) // 60
     seconds = duration_seconds % 60
-    return f"after {hours:02d} hours {minutes:02d} minutes {seconds:02d} seconds"
+
+    parts = []
+    if hours > 0:
+        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+    if minutes > 0:
+        parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+    if seconds > 0:
+        parts.append(f"{seconds} second{'s' if seconds != 1 else ''}")
+
+    if not parts:
+        return "0 seconds"
+
+    return ", ".join(parts)
 
 
 def postchecks(
@@ -633,6 +645,38 @@ def postchecks(
         end_time = time.time()
         duration_seconds = int(end_time - start_time)
         duration_str = f" {format_duration(duration_seconds)}"
+
+        # Generate timing file in CI metadata directory
+        try:
+            metadata_dir = artifact_path / CI_METADATA_DIRNAME
+            metadata_dir.mkdir(parents=True, exist_ok=True)
+
+            timing_data = {
+                "start_time": {
+                    "timestamp": start_time,
+                    "iso": datetime.fromtimestamp(start_time).isoformat(),
+                    "human": datetime.fromtimestamp(start_time).strftime("%Y-%m-%d %H:%M:%S"),
+                },
+                "end_time": {
+                    "timestamp": end_time,
+                    "iso": datetime.fromtimestamp(end_time).isoformat(),
+                    "human": datetime.fromtimestamp(end_time).strftime("%Y-%m-%d %H:%M:%S"),
+                },
+                "duration": {
+                    "seconds": duration_seconds,
+                    "formatted": format_duration(duration_seconds),
+                },
+            }
+
+            timing_file = metadata_dir / "test_duration.yaml"
+            with open(timing_file, "w", encoding="utf-8") as f:
+                yaml.dump(timing_data, f, default_flow_style=False, sort_keys=False)
+
+            logger.info(f"Generated timing file: {timing_file}")
+
+        except Exception as e:
+            logger.warning(f"Failed to generate timing file: {e}")
+
     else:
         duration_str = " (duration unknown)"
 
