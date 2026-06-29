@@ -5,7 +5,20 @@ from __future__ import annotations
 import json
 import logging
 
-from projects.core.dsl import always, entrypoint, execute_tasks, retry, shell, task, template
+import yaml
+
+from projects.core.dsl import (
+    always,
+    entrypoint,
+    execute_tasks,
+    on_failure,
+    retry,
+    shell,
+    task,
+    template,
+)
+
+from .on_failure_helpers import handle_installplan_failure
 
 logger = logging.getLogger("DSL")
 
@@ -78,6 +91,55 @@ def validate_parameters(args, ctx):
     return (
         f"Validated deployment parameters for {ctx.display_name} "
         f"from {args.source_name}/{args.source_namespace} (install_mode: {args.install_mode})"
+    )
+
+
+@task
+def check_existing_csv(args, ctx):
+    """Check if a CSV for this operator already exists and is succeeded"""
+
+    result = shell.run(
+        "oc get csv "
+        f"-n {args.target_namespace} "
+        f"-l operators.coreos.com/{args.package_name}.{args.target_namespace} "
+        "--no-headers",
+        check=False,
+    )
+
+    if not result.success or not result.stdout.strip():
+        ctx.existing_csv = False
+        ctx.csv_already_succeeded = False
+        return f"No existing CSV found for {args.package_name}"
+
+    csv_lines = [line for line in result.stdout.strip().split("\n") if line.strip()]
+    if not csv_lines:
+        ctx.existing_csv = False
+        ctx.csv_already_succeeded = False
+        return f"No existing CSV found for {args.package_name}"
+
+    csv_info = csv_lines[0].split()
+    if len(csv_info) < 2:
+        ctx.existing_csv = False
+        ctx.csv_already_succeeded = False
+        return f"Invalid CSV format for {args.package_name}"
+
+    csv_name = csv_info[0]
+    csv_phase = csv_info[-1]  # Phase is the last column
+
+    if csv_phase != "Succeeded":
+        logger.info(f"Found existing CSV in non-succeeded state: {csv_name} in phase {csv_phase}")
+        ctx.existing_csv = False  # Treat as if it doesn't exist so we can redeploy
+        ctx.csv_already_succeeded = False
+        return f"Found existing CSV {csv_name} in {csv_phase} state - will continue with deployment"
+
+    logger.info(f"Found existing succeeded CSV: {csv_name} in phase {csv_phase}")
+    ctx.existing_csv = True
+    ctx.csv_already_succeeded = True
+
+    from projects.core.dsl import EarlyReturn
+
+    return EarlyReturn(
+        f"Operator {args.package_name} is already deployed (CSV: {csv_name}, Phase: {csv_phase})"
     )
 
 
@@ -372,7 +434,80 @@ def apply_subscription(args, ctx):
     return f"Applied Subscription for {ctx.display_name}"
 
 
-@retry(attempts=6, delay=10)
+@on_failure(handle_installplan_failure)
+@retry(attempts=30, delay=10)
+@task
+def wait_for_installplan(args, ctx):
+    """Wait for InstallPlan and approve if manual approval is required"""
+
+    # Get the subscription to check for install plan reference
+    result = shell.run(
+        f"oc get subscription {args.package_name} -n {args.target_namespace} -o yaml",
+        stdout_dest=args.artifact_dir / "artifacts" / f"{args.package_name}-subscription.yaml",
+        check=False,
+        log_stdout=False,
+    )
+
+    if not result.success:
+        return (False, f"Failed to get subscription {args.package_name}")
+
+    subscription_data = yaml.safe_load(result.stdout)
+
+    # Check for ResolutionFailed condition in any position
+    conditions = subscription_data.get("status", {}).get("conditions", [])
+    for condition in conditions:
+        condition_type = condition.get("type", "")
+        if condition_type == "ResolutionFailed":
+            condition_message = condition.get("message", "No message provided")
+            condition_reason = condition.get("reason", "No reason provided")
+            raise ValueError(
+                f"Subscription {args.package_name} has ResolutionFailed condition: "
+                f"Reason: {condition_reason}, Message: {condition_message}"
+            )
+
+    install_plan_ref = subscription_data.get("status", {}).get("installPlanRef", {})
+
+    if not install_plan_ref or not install_plan_ref.get("name"):
+        return (False, "No InstallPlan reference found in subscription status")
+
+    install_plan_name = install_plan_ref["name"]
+
+    # Get the install plan to check its approval mode
+    result = shell.run(
+        f"oc get installplan {install_plan_name} -n {args.target_namespace} -o yaml",
+        stdout_dest=args.artifact_dir / "artifacts" / f"{install_plan_name}-installplan.yaml",
+        check=False,
+        log_stdout=False,
+    )
+
+    if not result.success:
+        return (False, f"Failed to get InstallPlan {install_plan_name}")
+
+    install_plan_data = yaml.safe_load(result.stdout)
+    approval_mode = install_plan_data.get("spec", {}).get("approval", "")
+    approved = install_plan_data.get("spec", {}).get("approved", False)
+
+    if approval_mode.lower() == "automatic":
+        return f"InstallPlan {install_plan_name} has automatic approval"
+
+    elif approval_mode.lower() == "manual":
+        if approved:
+            return f"InstallPlan {install_plan_name} already approved"
+        else:
+            # Approve the manual install plan
+            shell.run(
+                f"oc patch installplan {install_plan_name} -n {args.target_namespace} "
+                '--type merge -p \'{"spec":{"approved":true}}\''
+            )
+            return f"Approved manual InstallPlan {install_plan_name}"
+    else:
+        return (
+            False,
+            f"Unknown approval mode '{approval_mode}' for InstallPlan {install_plan_name}",
+        )
+
+
+@retry(attempts=30, delay=10)
 @task
 def wait_for_csv_to_appear(args, ctx):
     """Wait for the CSV to appear after subscription creation"""
@@ -494,20 +629,23 @@ def capture_csv(args, ctx):
 
     csv_name = getattr(ctx, "csv_name", "")
     if not csv_name:
+        # First check if any CSV exists to avoid array index out of bounds
         result = shell.run(
             "oc get csv "
             f"-n {args.target_namespace} "
             f"-l operators.coreos.com/{args.package_name}.{args.target_namespace} "
-            "-o jsonpath='{.items[0].metadata.name}'",
+            "--no-headers -ocustom-columns=NAME:.metadata.name",
             check=False,
-            log_stdout=False,
         )
         if not result.success:
             return "No CSV found to capture (command failed)"
 
         csv_name = result.stdout.strip()
-        if not csv_name or csv_name == "''":
-            return "No CSV found to capture (empty result)"
+        if not csv_name:
+            return "No CSV found to capture (no matching CSV)"
+
+        # If multiple CSVs, take the first one
+        csv_name = csv_name.split("\n")[0].strip()
 
     shell.run(
         f"oc get csv {csv_name} -n {args.target_namespace} -o yaml",

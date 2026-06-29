@@ -10,6 +10,7 @@ from pathlib import Path
 
 import click
 
+from projects.core.agentic.config_review import trigger_config_review_for_ci
 from projects.core.agentic.on_failure import agent_review_on_failure
 from projects.core.ci_entrypoint.fournos_resolve import create_fournos_resolve_entrypoint
 from projects.core.library import ci as ci_lib
@@ -17,6 +18,7 @@ from projects.core.library import config, env, run, vault
 from projects.core.library.export import caliper_export_entrypoint
 from projects.core.library.replot import caliper_replot_entrypoint
 from projects.llm_d.orchestration.cleanup_phase import run as cleanup_toolbox_run
+from projects.llm_d.orchestration.preflight_phase import run as preflight_toolbox_run
 from projects.llm_d.orchestration.prepare_sequence import run_prepare_sequence
 from projects.llm_d.orchestration.test_phase import run as test_toolbox_run
 
@@ -64,11 +66,8 @@ def prepare(ctx) -> int:
 @ci_lib.safe_ci_command
 @agent_review_on_failure
 def preflight(ctx) -> int:
-    """Preflight check phase - Validate that the cluster if ready for testing."""
-
-    logger.warning("Nothing so far for the preflight check")
-
-    return 0
+    """Preflight check phase - Validate required CRDs exist before testing."""
+    return preflight_toolbox_run()
 
 
 @main.command()
@@ -77,6 +76,9 @@ def preflight(ctx) -> int:
 @agent_review_on_failure
 def test(ctx) -> int:
     """Test phase - Execute the main testing logic."""
+    # Trigger config review analysis asynchronously (don't block test execution)
+    trigger_config_review_for_ci(env.BASE_ARTIFACT_DIR, async_mode=True)
+
     return test_toolbox_run()
 
 
@@ -86,13 +88,25 @@ def test(ctx) -> int:
 @agent_review_on_failure
 def pre_cleanup(ctx) -> int:
     """Cleanup phase - Clean up resources and finalize."""
-    # Cleanup doesn't typically need vaults, but initialize resolve-only for consistency
-    # no vault needed
     from projects.llm_d.orchestration import runtime_config
 
     for run_spec in runtime_config.get_run_specs():
         with runtime_config.activate_run_spec(run_spec):
-            cleanup_toolbox_run(namespace=run_spec.namespace)
+            cleanup_toolbox_run(namespace=run_spec.namespace, cleanup_subscriptions=True)
+    return 0
+
+
+@main.command()
+@click.pass_context
+@ci_lib.safe_ci_command
+@agent_review_on_failure
+def post_cleanup(ctx) -> int:
+    """Cleanup phase - Clean up resources and finalize."""
+    from projects.llm_d.orchestration import runtime_config
+
+    for run_spec in runtime_config.get_run_specs():
+        with runtime_config.activate_run_spec(run_spec):
+            cleanup_toolbox_run(namespace=run_spec.namespace, cleanup_subscriptions=True)
     return 0
 
 
