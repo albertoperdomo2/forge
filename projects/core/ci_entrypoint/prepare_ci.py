@@ -22,6 +22,7 @@ import yaml
 
 import projects.core.ci_entrypoint.fournos as fournos
 import projects.core.ci_entrypoint.github.pr_args as github_pr_args
+from projects.core.library import ci as ci_lib
 
 IS_LIGHTWEIGHT_IMAGE = os.environ.get("FORGE_LIGHT_IMAGE")
 
@@ -519,6 +520,77 @@ def validate_prerequisites():
         raise RuntimeError("oc not found. Can't continue.")
 
 
+def wait_for_step_completion():
+    """
+    Wait for a dependent step to complete if PSAP_FORGE_WAIT_FOR_STEP is configured.
+
+    Waits for the specified step's test_duration.yaml file to appear, indicating
+    that the step has completed.
+    """
+    wait_for_step = os.environ.get("PSAP_FORGE_WAIT_FOR_STEP")
+    if not wait_for_step:
+        return
+
+    # Exit early if explicitly disabled
+    if wait_for_step.lower() in ("false", "no", "0", "disabled", "off"):
+        logger.info(f"Step waiting disabled (PSAP_FORGE_WAIT_FOR_STEP={wait_for_step})")
+        return
+
+    artifact_dir = os.environ.get("ARTIFACT_DIR")
+    if not artifact_dir:
+        logger.warning("PSAP_FORGE_WAIT_FOR_STEP set but ARTIFACT_DIR not available, skipping wait")
+        return
+
+    # Construct path to the completion indicator file
+    completion_file = (
+        Path(artifact_dir) / wait_for_step / CI_METADATA_DIRNAME / "test_duration.yaml"
+    )
+
+    logger.info(f"Waiting for step '{wait_for_step}' to complete...")
+    logger.info(f"Monitoring file: {completion_file}")
+
+    step_dir = completion_file.parent.parent  # Remove /000__ci_metadata/test_duration.yaml
+
+    def _wait_for_path(path_to_check, timeout_seconds, description, wait_action):
+        """Helper function to wait for a path to exist with timeout handling."""
+        wait_start = time.time()
+
+        while not path_to_check.exists():
+            elapsed = time.time() - wait_start
+            if elapsed >= timeout_seconds:
+                logger.error(f"❌ Timeout: {description} did not appear within {timeout_seconds}s")
+                # Create failure notification
+                failure_message = (
+                    f"Step sync failed: {description} did not appear within {timeout_seconds}s\n"
+                    f"Waited for step: {wait_for_step}\n"
+                    f"Expected file: {completion_file}"
+                )
+                ci_lib.add_notification_file(
+                    "STEP_SYNC_FAILED", failure_message, base_ci_dir=os.environ["ARTIFACT_DIR"]
+                )
+                return False
+            logger.info(f"⏳ {wait_action} ({elapsed:.0f}s/{timeout_seconds}s)...")
+            time.sleep(10)
+        return True
+
+    # First wait for the step directory to appear (1 minute timeout)
+    if not _wait_for_path(
+        step_dir,
+        60,
+        f"Step directory {step_dir}",
+        f"Waiting for {wait_for_step} directory to appear",
+    ):
+        return
+
+    # Then wait for the completion file to appear (10 minutes timeout)
+    if not _wait_for_path(
+        completion_file, 600, "Completion file", f"Waiting for {wait_for_step} to finish"
+    ):
+        return
+
+    logger.info(f"✅ Step '{wait_for_step}' completed, proceeding with current step")
+
+
 def prepare(
     verbose: bool = False,
     project: str = "",
@@ -560,6 +632,9 @@ def prepare(
 
         # Parse and save PR arguments if in PR context
         parse_and_save_pr_arguments()
+
+        # Wait for dependent step completion if configured
+        wait_for_step_completion()
 
         logger.info("CI preparation completed successfully")
 
