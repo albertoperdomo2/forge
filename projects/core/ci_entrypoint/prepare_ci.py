@@ -8,6 +8,7 @@ including parsing GitHub PR arguments and setting up the execution environment.
 
 import logging
 import os
+import pathlib
 import shutil
 import subprocess
 import sys
@@ -543,7 +544,7 @@ def wait_for_step_completion():
 
     # Construct path to the completion indicator file
     completion_file = (
-        Path(artifact_dir) / wait_for_step / CI_METADATA_DIRNAME / "test_duration.yaml"
+        Path(artifact_dir).parent / wait_for_step / CI_METADATA_DIRNAME / "test_duration.yaml"
     )
 
     logger.info(f"Waiting for step '{wait_for_step}' to complete...")
@@ -591,6 +592,97 @@ def wait_for_step_completion():
     logger.info(f"✅ Step '{wait_for_step}' completed, proceeding with current step")
 
 
+def generate_duration_and_timing_file(start_time: float | None, artifact_path: Path) -> str:
+    """Generate duration string and timing file.
+
+    Args:
+        start_time: Unix timestamp when execution started (None if unknown)
+        artifact_path: Path to artifact directory
+
+    Returns:
+        Duration string for status message
+    """
+    if not start_time:
+        return " (duration unknown)"
+
+    end_time = time.time()
+    duration_seconds = int(end_time - start_time)
+    duration_str = f" {format_duration(duration_seconds)}"
+
+    # Generate timing file in CI metadata directory
+    try:
+        metadata_dir = artifact_path / CI_METADATA_DIRNAME
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+
+        timing_data = {
+            "start_time": {
+                "timestamp": start_time,
+                "iso": datetime.fromtimestamp(start_time).isoformat(),
+                "human": datetime.fromtimestamp(start_time).strftime("%Y-%m-%d %H:%M:%S"),
+            },
+            "end_time": {
+                "timestamp": end_time,
+                "iso": datetime.fromtimestamp(end_time).isoformat(),
+                "human": datetime.fromtimestamp(end_time).strftime("%Y-%m-%d %H:%M:%S"),
+            },
+            "duration": {
+                "seconds": duration_seconds,
+                "formatted": format_duration(duration_seconds),
+            },
+        }
+
+        timing_file = metadata_dir / "test_duration.yaml"
+        with open(timing_file, "w", encoding="utf-8") as f:
+            yaml.dump(timing_data, f, default_flow_style=False, sort_keys=False)
+
+        logger.info(f"Generated timing file: {timing_file}")
+
+    except Exception as e:
+        logger.warning(f"Failed to generate timing file: {e}")
+
+    return duration_str
+
+
+def record_test_start_time(start_time: float | None = None):
+    """Record test start time to test_duration.yaml file.
+
+    Args:
+        start_time: Unix timestamp when execution started. If None, uses current time.
+    """
+    try:
+        artifact_dir = os.environ.get("ARTIFACT_DIR")
+        if not artifact_dir:
+            logger.warning("ARTIFACT_DIR not set, cannot record start time")
+            return
+
+        artifact_path = pathlib.Path(artifact_dir)
+        metadata_dir = artifact_path / CI_METADATA_DIRNAME
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+
+        timing_file = metadata_dir / "test_duration.yaml"
+
+        # Use provided start_time or current time
+        start_timestamp = start_time if start_time is not None else time.time()
+        logger.info(f"Recording start time: {start_timestamp}")
+
+        # Use same format as final timing function
+        timing_data = {
+            "start_time": {
+                "timestamp": start_timestamp,
+                "iso": datetime.fromtimestamp(start_timestamp).isoformat(),
+                "human": datetime.fromtimestamp(start_timestamp).strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        }
+
+        with open(timing_file, "w", encoding="utf-8") as f:
+            yaml.dump(timing_data, f, default_flow_style=False, sort_keys=False)
+
+        logger.info(f"Recorded test start time: {timing_file}")
+
+    except Exception as e:
+        logger.warning(f"Failed to record test start time: {e}")
+
+
 def prepare(
     verbose: bool = False,
     project: str = "",
@@ -623,6 +715,9 @@ def prepare(
 
         # Set up environment variables
         setup_environment_variables()
+
+        # Record test start time
+        record_test_start_time()
 
         # Perform prechecks
         system_prechecks()
@@ -714,46 +809,8 @@ def postchecks(
         # placeholder for future exist status (eg, performance regression, flake, ...)
         logger.warning(f"postchecks: unhandled finish reason: {finish_reason}")
 
-    # Normal exit handling
-    duration_str = ""
-    if start_time:
-        end_time = time.time()
-        duration_seconds = int(end_time - start_time)
-        duration_str = f" {format_duration(duration_seconds)}"
-
-        # Generate timing file in CI metadata directory
-        try:
-            metadata_dir = artifact_path / CI_METADATA_DIRNAME
-            metadata_dir.mkdir(parents=True, exist_ok=True)
-
-            timing_data = {
-                "start_time": {
-                    "timestamp": start_time,
-                    "iso": datetime.fromtimestamp(start_time).isoformat(),
-                    "human": datetime.fromtimestamp(start_time).strftime("%Y-%m-%d %H:%M:%S"),
-                },
-                "end_time": {
-                    "timestamp": end_time,
-                    "iso": datetime.fromtimestamp(end_time).isoformat(),
-                    "human": datetime.fromtimestamp(end_time).strftime("%Y-%m-%d %H:%M:%S"),
-                },
-                "duration": {
-                    "seconds": duration_seconds,
-                    "formatted": format_duration(duration_seconds),
-                },
-            }
-
-            timing_file = metadata_dir / "test_duration.yaml"
-            with open(timing_file, "w", encoding="utf-8") as f:
-                yaml.dump(timing_data, f, default_flow_style=False, sort_keys=False)
-
-            logger.info(f"Generated timing file: {timing_file}")
-
-        except Exception as e:
-            logger.warning(f"Failed to generate timing file: {e}")
-
-    else:
-        duration_str = " (duration unknown)"
+    # Generate duration string and timing file
+    duration_str = generate_duration_and_timing_file(start_time, artifact_path)
 
     # Check if there were failures
     failures_file = artifact_path / "FAILURES"
