@@ -8,6 +8,7 @@ import yaml
 
 import projects.core.notifications.github.api as github_api
 import projects.core.notifications.slack.api as slack_api
+from projects.core.library import ci as ci_lib
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +47,21 @@ def get_secrets():
     return secret_dir, secret_env_key
 
 
-def send_job_completion_notification(
-    finish_reason, status, github=True, slack=False, dry_run=False
-):
-    pr_number = get_pr_number()
+def send_notification(message, github=True, slack=False, dry_run=False, pr_number=None):
+    """Send a generic notification message to GitHub and/or Slack.
+
+    Args:
+        message: The notification message content
+        github: Whether to send to GitHub (default True)
+        slack: Whether to send to Slack (default False)
+        dry_run: Whether to only log the message without sending (default False)
+        pr_number: Optional PR number, auto-detected if None
+
+    Returns:
+        bool: False if any notification failed, True if all succeeded
+    """
+    if pr_number is None:
+        pr_number = get_pr_number()
 
     if not github_api:
         logger.info("Github API not available, don't send notification to github")
@@ -64,35 +76,30 @@ def send_job_completion_notification(
         return True
 
     failed = False
-    if github and not send_job_completion_notification_to_github(
+    if github and not send_notification_to_github(
         *get_github_secrets(secret_dir, secret_env_key),
-        finish_reason,
-        status,
+        message,
         pr_number,
         dry_run,
     ):
         failed = True
 
-    if slack and not send_job_completion_notification_to_slack(
+    if slack and not send_notification_to_slack(
         get_slack_secrets(secret_dir, secret_env_key),
-        finish_reason,
-        status,
+        message,
         pr_number,
         dry_run,
     ):
         failed = True
 
-    return failed
+    return not failed
 
 
 ###
 
 
-def send_job_completion_notification_to_github(
-    pem_file, client_id, finish_reason, status, pr_number, dry_run
-):
-    message = get_github_notification_message(finish_reason, status, pr_number)
-
+def send_notification_to_github(pem_file, client_id, message, pr_number, dry_run):
+    """Send a generic notification message to GitHub."""
     org, repo = get_org_repo()
 
     abort = False
@@ -111,12 +118,12 @@ def send_job_completion_notification_to_github(
 
     if abort:
         logger.error("github: Aborting due to previous error(s).")
-        return
+        return False
 
     user_token = github_api.get_user_token(pem_file, client_id, org, repo)
     if not user_token:
         logger.error("github: Couldn't fetch the user token. Is the app installed in the repo?")
-        return
+        return False
 
     if dry_run:
         logger.info(f"Github notification:\n{message}")
@@ -136,7 +143,7 @@ def send_job_completion_notification_to_github(
 
 def get_github_notification_message(finish_reason: str, status: str, pr_number: int):
     def get_link(name, path, is_raw_file=False, base=None, is_dir=False):
-        return f"[{name}]({get_ci_link(path, is_raw_file, base, is_dir)})"
+        return f"[{name}]({get_ocpci_link(path, is_raw_file, base, is_dir)})"
 
     def get_italics(text):
         return f"*{text}*"
@@ -167,7 +174,7 @@ def _get_notification_content(artifact_dir: pathlib.Path, get_link, get_bold) ->
     Returns:
         Formatted notification content string
     """
-    notifications_dir = artifact_dir / "000__ci_metadata" / "notifications"
+    notifications_dir = ci_lib.get_ci_metadata_dir() / "notifications"
     failures_file = artifact_dir / "FAILURES"
 
     # Guard: Check if notifications directory exists
@@ -348,11 +355,7 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
         except Exception as e:
             logger.warning("Failed to read NOTIFICATION.html: %s", e)
 
-    if (
-        var_over := pathlib.Path(os.environ.get("ARTIFACT_DIR", ""))
-        / "000__ci_metadata"
-        / "pr_config.txt"
-    ).exists():
+    if (var_over := ci_lib.get_ci_metadata_dir() / "pr_config.txt").exists():
         with open(var_over) as f:
             message += f"""
 {get_bold("Test configuration")}:
@@ -360,11 +363,7 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 {f.read().strip()}
 ```
 """
-    elif (
-        var_over := pathlib.Path(os.environ.get("ARTIFACT_DIR", ""))
-        / "000__ci_metadata"
-        / "variable_overrides.yaml"
-    ).exists():
+    elif (var_over := ci_lib.get_ci_metadata_dir() / "variable_overrides.yaml").exists():
         with open(var_over) as f:
             message += f"""
 {get_bold("Test configuration")}:
@@ -394,7 +393,7 @@ def get_common_message(finish_reason: str, status: str, get_link, get_italics, g
 
 def get_slack_thread_message(finish_reason, status):
     def get_link(name, path, is_raw_file=False, base=None, is_dir=False):
-        return f"<{get_ci_link(path, is_raw_file, base, is_dir)}|{name}>"
+        return f"<{get_ocpci_link(path, is_raw_file, base, is_dir)}|{name}>"
 
     def get_italics(text):
         return f"_{text}_"
@@ -445,15 +444,15 @@ Link to the <{pr_data["html_url"]}|PR>.
     return message
 
 
-def send_job_completion_notification_to_slack(
+def send_notification_to_slack(
     token,
-    reason,
-    status,
+    message,
     pr_number,
     dry_run,
 ):
+    """Send a generic notification message to Slack."""
     if not token:
-        return
+        return False
 
     client = slack_api.init_client(token)
     if not client:
@@ -461,7 +460,7 @@ def send_job_completion_notification_to_slack(
 
     org, repo = get_org_repo()
     is_periodic = False
-    pr_data = None  # Initialize pr_data to avoid UnboundLocalError
+    pr_data = None
     pr_created_at = None
 
     if pr_number:
@@ -491,22 +490,18 @@ def send_job_completion_notification_to_slack(
         else:
             channel_msg_ts, ok = slack_api.send_message(client, message=channel_message)
             if not ok:
-                return True
+                return False
 
     if dry_run:
         logger.info(f"Slack channel notification:\n{channel_message}")
-
-    thread_message = get_slack_thread_message(reason, status)
-
-    if dry_run:
-        logger.info(f"Slack thread notification:\n{thread_message}")
+        logger.info(f"Slack thread notification:\n{message}")
         logger.info("***")
         logger.info("***")
         logger.info("***\n")
 
         return True
 
-    _, ok = slack_api.send_message(client, message=thread_message, main_ts=channel_msg_ts)
+    _, ok = slack_api.send_message(client, message=message, main_ts=channel_msg_ts)
 
     return ok
 
@@ -603,7 +598,7 @@ def get_slack_secrets(secret_dir, secret_env_key):
     return token_file.read_text()
 
 
-def get_ci_link(path, is_raw_file=False, base=None, is_dir=False):
+def get_ocpci_link(path, is_raw_file=False, base=None, is_dir=False):
     if base is None:
         base, suffix = get_ci_base_link(is_raw_file, is_dir)
     else:
@@ -687,7 +682,7 @@ def send_cpt_notification_to_slack(secret_dir, secret_env_key, title, summary, d
 
 def get_slack_cpt_message(summary):
     def get_link(name, path, is_raw_file=False, base=None, is_dir=False):
-        return f"<{get_ci_link(path, is_raw_file, base, is_dir)}|{name}>"
+        return f"<{get_ocpci_link(path, is_raw_file, base, is_dir)}|{name}>"
 
     def get_italics(text):
         return f"_{text}_"

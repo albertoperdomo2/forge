@@ -3,6 +3,7 @@ vaults:
   all-optional:
   - psap-forge-notifications
   - psap-forge-mlflow-export
+  - psap-models-corp-rh
   prepare: []
   prepare-optional: []
   test: []
