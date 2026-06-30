@@ -473,10 +473,14 @@ def log_multi_run_artifacts(
     upload_workers: int = 10,
     run_metadata: dict[str, Any] | None = None,
     workspace: str | None = None,
+    child_run_names: dict[Path, str] | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     """Create a parent MLflow run with all artifacts and nested child runs per test directory.
 
-    All artifacts are uploaded to both the parent run and each child run.
+    The parent run receives every artifact.  Each child run receives only the
+    files that live under its own ``run_dir`` subtree, so artifacts are never
+    duplicated across children.
+    If ``child_run_names`` is provided, those names are used instead of ``run_dir.name``.
     """
     try:
         import mlflow
@@ -519,6 +523,7 @@ def log_multi_run_artifacts(
             )
 
         parent_meta: dict[str, Any] | None = None
+        child_runs_meta: list[dict[str, Any]] = []
         client = mlflow.tracking.MlflowClient()
 
         start_kw: dict[str, Any] = {}
@@ -548,7 +553,14 @@ def log_multi_run_artifacts(
                 logger.info("Parent run: %s", parent_url)
 
             for run_dir in sorted(run_dirs):
-                child_name = run_dir.name
+                child_name = (
+                    child_run_names.get(run_dir, run_dir.name) if child_run_names else run_dir.name
+                )
+
+                resolved_run_dir = run_dir.resolve()
+                child_files = [
+                    p for p in file_paths if p.resolve().is_relative_to(resolved_run_dir)
+                ]
 
                 with mlflow.start_run(run_name=child_name, nested=True):
                     child_rid = mlflow.active_run().info.run_id
@@ -567,17 +579,34 @@ def log_multi_run_artifacts(
                     _upload_mlflow_files_parallel(
                         client=client,
                         run_id=child_rid,
-                        file_paths=file_paths,
+                        file_paths=child_files,
                         artifact_root=artifact_root,
                         upload_workers=upload_workers,
                         verbose=verbose,
                     )
 
+                    if verbose:
+                        logger.info(
+                            "  Child run %s: %d artifact(s) (of %d total)",
+                            child_name,
+                            len(child_files),
+                            len(file_paths),
+                        )
                     child_url, _ = _mlflow_ui_links(tu, eid, child_rid, workspace=workspace)
                     if child_url:
                         logger.info("  Child run %s: %s", child_name, child_url)
 
+                    child_entry: dict[str, Any] = {
+                        "run_id": child_rid,
+                        "run_name": child_name,
+                    }
+                    if child_url:
+                        child_entry["run_url"] = child_url
+                    child_runs_meta.append(child_entry)
+
             parent_meta = _capture_mlflow_run_metadata(tu, workspace=workspace)
+            if child_runs_meta:
+                parent_meta["child_runs"] = child_runs_meta
 
         if verbose:
             logger.info("MLflow multi-run upload finished (%s)", mlflow.get_tracking_uri())

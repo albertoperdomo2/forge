@@ -198,7 +198,7 @@ def _register_phase_command(
     """Register a lazily-imported phase function as a click command."""
 
     @click.pass_context
-    @ci_lib.safe_ci_command
+    @ci_lib.safe_ci_entrypoint
     @functools.wraps(_import_function)
     def command(ctx, _spec=spec):
         fn = _import_function(_spec.func)

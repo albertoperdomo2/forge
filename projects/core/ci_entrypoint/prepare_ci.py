@@ -644,7 +644,12 @@ def generate_duration_and_timing_file(start_time: float | None, artifact_path: P
 
 
 def record_test_start_time(start_time: float | None = None):
-    """Record test start time to test_duration.yaml file.
+    """Record test start time to test_start.yaml file.
+
+    Writes to test_start.yaml (not test_duration.yaml) so the wait mechanism
+    in wait_for_step_completion() — which polls for test_duration.yaml — is not
+    triggered prematurely. test_duration.yaml is only created at step completion
+    by generate_duration_and_timing_file().
 
     Args:
         start_time: Unix timestamp when execution started. If None, uses current time.
@@ -659,13 +664,12 @@ def record_test_start_time(start_time: float | None = None):
         metadata_dir = artifact_path / CI_METADATA_DIRNAME
         metadata_dir.mkdir(parents=True, exist_ok=True)
 
-        timing_file = metadata_dir / "test_duration.yaml"
+        timing_file = metadata_dir / "test_start.yaml"
 
         # Use provided start_time or current time
         start_timestamp = start_time if start_time is not None else time.time()
         logger.info(f"Recording start time: {start_timestamp}")
 
-        # Use same format as final timing function
         timing_data = {
             "start_time": {
                 "timestamp": start_timestamp,
