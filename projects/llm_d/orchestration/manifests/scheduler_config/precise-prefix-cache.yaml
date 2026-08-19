@@ -5,7 +5,7 @@ plugins:
     parameters:
       modelName: __MODEL_NAME__
       vllm:
-        url: "https://__INFERENCE_SERVICE_NAME__-inference-pool:8000"
+        url: "https://__INFERENCE_SERVICE_NAME__-kserve-workload-svc:8000"
   - type: endpoint-notification-source
   - type: precise-prefix-cache-producer
     parameters:
