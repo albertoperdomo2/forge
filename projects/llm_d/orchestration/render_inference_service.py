@@ -134,6 +134,7 @@ def render_inference_service_from_parts(
         {
             "__INFERENCE_SERVICE_NAME__": rendered_service_name,
             "__MODEL_NAME__": model_name.removeprefix("hf://"),
+            "__NAMESPACE__": namespace,
         },
     )
     manifest["metadata"]["annotations"].update(deployment_profile.get("annotations", {}))
