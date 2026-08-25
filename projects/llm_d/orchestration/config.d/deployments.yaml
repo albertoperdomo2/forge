@@ -66,6 +66,17 @@ profiles:
         - name: PYTHONHASHSEED
           value: "42"
 
+  upstream-optimized-baseline:
+    scheduler_manifest: manifests/deployments/upstream-optimized-baseline.yaml
+
+  release-upstream-optimized-baseline:
+    scheduler_manifest: manifests/deployments/upstream-optimized-baseline.yaml
+    replicas: 4
+    tensor_parallelism: 2
+    vllm_extra:
+      args:
+        max_model_len: 40960
+
   release-distributed-default:
     scheduler: {}
     replicas: 4

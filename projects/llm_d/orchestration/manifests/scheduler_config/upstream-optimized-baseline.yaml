@@ -1,0 +1,12 @@
+apiVersion: inference.networking.x-k8s.io/v1alpha1
+kind: EndpointPickerConfig
+plugins:
+  - type: approx-prefix-cache-producer
+  - type: inflight-load-producer
+  - type: prefix-cache-affinity-filter
+  - type: token-load-scorer
+schedulingProfiles:
+  - name: default
+    plugins:
+      - pluginRef: prefix-cache-affinity-filter
+      - pluginRef: token-load-scorer
