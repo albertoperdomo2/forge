@@ -198,7 +198,7 @@ def render_inference_service_from_parts(
         deployment_profile,
         {
             "__INFERENCE_SERVICE_NAME__": rendered_service_name,
-            "__MODEL_NAME__": model_name.removeprefix("hf://"),
+            "__MODEL_NAME__": model_slug,
             "__NAMESPACE__": namespace,
         },
     )
