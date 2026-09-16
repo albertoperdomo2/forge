@@ -128,6 +128,15 @@ def build_guidellm_args(benchmark: dict[str, object]) -> list[str]:
     return guidellm_args
 
 
+def _format_shell_command(parts: list[str]) -> str:
+    """Format a shell command with backslash line continuations for readability."""
+    quoted = [shlex.quote(p) for p in parts]
+    if len(quoted) <= 2:
+        return " ".join(quoted)
+    # Keep binary + subcommand on the first line, then one flag per line.
+    return " ".join(quoted[:2]) + " \\\n    " + " \\\n    ".join(quoted[2:])
+
+
 def _build_config_heredoc(config_content: str) -> str:
     """Build a shell heredoc that writes a GuideLLM config YAML to a file."""
     return f"cat > {_CONFIG_FILE_PATH} <<'__CONFIG_EOF__'\n{config_content}__CONFIG_EOF__"
@@ -153,7 +162,7 @@ def _build_multi_run_script(
             f"--backend=target={endpoint_url}",
             *run_args,
         ]
-        lines.append(shlex.join(command))
+        lines.append(_format_shell_command(command))
         output_path = shlex.quote(f"/results/benchmarks-{run.label}.json")
         lines.append(
             f"test -f /results/benchmarks.json && mv /results/benchmarks.json {output_path}"
@@ -314,10 +323,16 @@ def render_guidellm_shared_volume_job_from_parts(
     # Build the main container script.
     # Config file mode always uses a shell script to write the file first.
     if not config_content and len(runs) == 1 and runs[0].rate is None:
+        command_parts = [
+            "/opt/app-root/bin/guidellm",
+            "run",
+            f"--backend=target={endpoint_url}",
+            *runs[0].args,
+        ]
         main_script_lines = [
             "set -euo pipefail",
             "mkdir -p /results",
-            f"/opt/app-root/bin/guidellm run --backend=target={endpoint_url} {' '.join(runs[0].args)}",
+            _format_shell_command(command_parts),
         ]
         main_script = "\n".join(main_script_lines)
     else:
