@@ -128,6 +128,34 @@ def build_guidellm_args(benchmark: dict[str, object]) -> list[str]:
     return guidellm_args
 
 
+def _consolidate_backend_args(
+    guidellm_args: list[str],
+    endpoint_url: str,
+) -> list[str]:
+    """Merge separate ``--backend=key=val`` args into a single ``--backend`` flag.
+
+    GuideLLM v0.7.3 expects all backend properties in one comma-separated value
+    with a mandatory ``kind`` key (e.g. ``--backend=kind=openai_http,target=URL``).
+    """
+    backend_parts: list[str] = [f"target={endpoint_url}"]
+    other_args: list[str] = []
+    has_kind = False
+
+    for arg in guidellm_args:
+        if arg.startswith("--backend="):
+            part = arg[len("--backend=") :]
+            if "kind=" in part:
+                has_kind = True
+            backend_parts.append(part)
+        else:
+            other_args.append(arg)
+
+    if not has_kind:
+        backend_parts.insert(0, "kind=openai_http")
+
+    return [f"--backend={','.join(backend_parts)}"] + other_args
+
+
 def _format_shell_command(parts: list[str]) -> str:
     """Format a shell command with backslash line continuations for readability."""
     quoted = [shlex.quote(p) for p in parts]
@@ -156,11 +184,11 @@ def _build_multi_run_script(
         run_args = list(run.args)
         if config_content:
             run_args.append(f"--config={_CONFIG_FILE_PATH}")
+        consolidated = _consolidate_backend_args(run_args, endpoint_url)
         command = [
             "/opt/app-root/bin/guidellm",
             "run",
-            f"--backend=target={endpoint_url}",
-            *run_args,
+            *consolidated,
         ]
         lines.append(_format_shell_command(command))
         output_path = shlex.quote(f"/results/benchmarks-{run.label}.json")
@@ -260,11 +288,11 @@ def render_guidellm_job_from_parts(
     # Config file mode requires a shell script to write the file first.
     # Plain single runs can invoke guidellm directly.
     if not config_content and len(runs) == 1 and runs[0].rate is None:
+        consolidated = _consolidate_backend_args(runs[0].args, endpoint_url)
         container["command"] = ["/opt/app-root/bin/guidellm"]
         container["args"] = [
             "run",
-            f"--backend=target={endpoint_url}",
-            *runs[0].args,
+            *consolidated,
         ]
         return manifest
 
@@ -323,11 +351,11 @@ def render_guidellm_shared_volume_job_from_parts(
     # Build the main container script.
     # Config file mode always uses a shell script to write the file first.
     if not config_content and len(runs) == 1 and runs[0].rate is None:
+        consolidated = _consolidate_backend_args(runs[0].args, endpoint_url)
         command_parts = [
             "/opt/app-root/bin/guidellm",
             "run",
-            f"--backend=target={endpoint_url}",
-            *runs[0].args,
+            *consolidated,
         ]
         main_script_lines = [
             "set -euo pipefail",

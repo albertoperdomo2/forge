@@ -125,6 +125,7 @@ def test_render_guidellm_job_from_parts_uses_shell_for_multi_run_benchmarks() ->
     assert container["command"] == ["/bin/sh", "-lc"]
     script = container["args"][0]
     assert "--rate=" not in script
+    assert "kind=openai_http,target=https://example.test/llm-d" in script
     assert "prefix_count=64" in script
     assert "prefix_count=128" in script
     assert "max-requests=320" in script
@@ -153,7 +154,7 @@ def test_render_guidellm_job_from_parts_keeps_plain_rates_as_single_guidellm_run
     assert container["command"] == ["/opt/app-root/bin/guidellm"]
     assert container["args"] == [
         "run",
-        "--backend=target=https://example.test/llm-d",
+        "--backend=kind=openai_http,target=https://example.test/llm-d",
         "--backend-type=openai_http",
         "--rate-type=concurrent",
         "--rate=300,200,100",
