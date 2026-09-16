@@ -96,7 +96,6 @@ def expand_guidellm_runs(guidellm_args: list[str]) -> list[GuideLLMRun]:
         run_args: list[str] = []
         for arg in guidellm_args:
             if arg.startswith("--rate="):
-                run_args.append(f"--rate={rate}")
                 continue
             run_args.append(_substitute_rate_expressions(arg, rate))
 
@@ -126,9 +125,6 @@ def build_guidellm_args(benchmark: dict[str, object]) -> list[str]:
     if "rate" in benchmark and "rate" not in benchmark_args:
         guidellm_args.append(f"--rate={benchmark['rate']}")
 
-    if not any(arg.startswith("--outputs=") for arg in guidellm_args):
-        guidellm_args.append(f"--outputs={benchmark.get('outputs', 'json')}")
-
     return guidellm_args
 
 
@@ -154,7 +150,7 @@ def _build_multi_run_script(
         command = [
             "/opt/app-root/bin/guidellm",
             "run",
-            f"--target={endpoint_url}",
+            f"--backend=target={endpoint_url}",
             *run_args,
         ]
         lines.append(shlex.join(command))
@@ -258,7 +254,7 @@ def render_guidellm_job_from_parts(
         container["command"] = ["/opt/app-root/bin/guidellm"]
         container["args"] = [
             "run",
-            f"--target={endpoint_url}",
+            f"--backend=target={endpoint_url}",
             *runs[0].args,
         ]
         return manifest
@@ -321,7 +317,7 @@ def render_guidellm_shared_volume_job_from_parts(
         main_script_lines = [
             "set -euo pipefail",
             "mkdir -p /results",
-            f"/opt/app-root/bin/guidellm run --target={endpoint_url} {' '.join(runs[0].args)}",
+            f"/opt/app-root/bin/guidellm run --backend=target={endpoint_url} {' '.join(runs[0].args)}",
         ]
         main_script = "\n".join(main_script_lines)
     else:
