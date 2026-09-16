@@ -153,7 +153,6 @@ def _build_multi_run_script(
             run_args.append(f"--config={_CONFIG_FILE_PATH}")
         command = [
             "/opt/app-root/bin/guidellm",
-            "benchmark",
             "run",
             f"--target={endpoint_url}",
             *run_args,
@@ -258,7 +257,6 @@ def render_guidellm_job_from_parts(
     if not config_content and len(runs) == 1 and runs[0].rate is None:
         container["command"] = ["/opt/app-root/bin/guidellm"]
         container["args"] = [
-            "benchmark",
             "run",
             f"--target={endpoint_url}",
             *runs[0].args,
@@ -323,7 +321,7 @@ def render_guidellm_shared_volume_job_from_parts(
         main_script_lines = [
             "set -euo pipefail",
             "mkdir -p /results",
-            f"/opt/app-root/bin/guidellm benchmark run --target={endpoint_url} {' '.join(runs[0].args)}",
+            f"/opt/app-root/bin/guidellm run --target={endpoint_url} {' '.join(runs[0].args)}",
         ]
         main_script = "\n".join(main_script_lines)
     else:
