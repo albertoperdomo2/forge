@@ -179,8 +179,10 @@ def _build_multi_run_script(
     lines = ["set -euo pipefail", "mkdir -p /results"]
     if config_content:
         lines.append(_build_config_heredoc(config_content))
+    multi_run = len(runs) > 1 or any(r.rate is not None for r in runs)
     for run in runs:
-        lines.append("rm -f /results/benchmarks.json")
+        if multi_run:
+            lines.append("rm -f /results/benchmarks.json")
         run_args = list(run.args)
         if config_content:
             run_args.append(f"--config={_CONFIG_FILE_PATH}")
@@ -191,10 +193,11 @@ def _build_multi_run_script(
             *consolidated,
         ]
         lines.append(_format_shell_command(command))
-        output_path = shlex.quote(f"/results/benchmarks-{run.label}.json")
-        lines.append(
-            f"test -f /results/benchmarks.json && mv /results/benchmarks.json {output_path}"
-        )
+        if multi_run:
+            output_path = shlex.quote(f"/results/benchmarks-{run.label}.json")
+            lines.append(
+                f"test -f /results/benchmarks.json && mv /results/benchmarks.json {output_path}"
+            )
 
     return "\n".join(lines)
 
