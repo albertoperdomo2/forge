@@ -135,7 +135,7 @@ def test_benchmark_resolution_applies_workload_defaults_and_per_benchmark_overri
     assert multi_turn["timeout_seconds"] == 7200
 
 
-def test_guidellm_benchmark_uses_served_model_name(
+def test_guidellm_benchmark_uses_hf_model_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _init_project_config()
@@ -164,9 +164,9 @@ def test_guidellm_benchmark_uses_served_model_name(
     assert captured["config_path"] == mock_config_path
     guidellm_args = captured["guidellm_args"]
     assert isinstance(guidellm_args, list)
-    # Must use the served model name (slugified), not the HuggingFace name,
-    # because vLLM returns 404 for model names that don't match --served-model-name.
-    assert "--backend=model=openai-gpt-oss-120b" in guidellm_args
+    # Must use the HuggingFace model name so GuideLLM can resolve the tokenizer.
+    # The vLLM deployment uses the same name via spec.model.name.
+    assert "--backend=model=openai/gpt-oss-120b" in guidellm_args
 
 
 def test_release_preset_expands_benchmark_list_and_merges_workload_args() -> None:
@@ -790,7 +790,7 @@ def test_render_uses_sanitized_model_name_and_profile_resources() -> None:
 
     assert manifest["spec"]["replicas"] == 4
     assert manifest["spec"]["model"]["uri"] == "hf://openai/gpt-oss-120b"
-    assert manifest["spec"]["model"]["name"] == "openai-gpt-oss-120b"
+    assert manifest["spec"]["model"]["name"] == "openai/gpt-oss-120b"
     assert manifest["spec"]["template"]["containers"][0]["resources"] == {
         "requests": {"nvidia.com/gpu": "2"},
         "limits": {"nvidia.com/gpu": "2"},

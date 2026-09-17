@@ -841,7 +841,7 @@ def run_guidellm_benchmark(*, endpoint_url: str) -> None:
 
         guidellm_args = build_guidellm_args(benchmark)
         if not any(arg.startswith("--backend") and "model=" in arg for arg in guidellm_args):
-            guidellm_args.append(f"--backend=model={runtime_config.get_served_model_name()}")
+            guidellm_args.append(f"--backend=model={runtime_config.get_model_name()}")
 
         # Get fs_group from workload config
         fs_group = None
